@@ -292,9 +292,29 @@ class KITTIEvalMetrics(Metric):
             num_unlabeled_samples = total_num_samples
             r = num_unlabeled_samples / num_labeled_samples
             pr_cls = {}
-            for cls in raw_metrics_classwise['tps'].keys():
+            threshold = [0.7,0.5,0.5]
+            thresholded_pl = {'Car':0, 'Pedestrian':0, 'Cyclist':0}
+            classes = ['Car', 'Pedestrian', 'Cyclist']
+            
+            # for cls in raw_metrics_classwise['tps'].keys():
+            #     num_labeled_cls = self.dataset.class_counter[cls]
+            #     num_unlabeled_cls_tp = raw_metrics_classwise['tps'][cls]
+            #     pr_cls[cls] = num_unlabeled_cls_tp / (r * num_labeled_cls)
+            # kitti_eval_metrics['PR'] = pr_cls
+                        
+            for items in self.detections:
+                scores=items[:,8]
+                labels=items[:,7].tolist()
+                for idx,label in enumerate(labels):
+                    if int(label) == 0:
+                        continue
+                    thresholded_pl[classes[int(label-1)]] += int(scores[idx]>=threshold[int(label-1)])
+
+            for cls in classes:
+                if thresholded_pl[cls] == 0:
+                    continue
                 num_labeled_cls = self.dataset.class_counter[cls]
-                num_unlabeled_cls_tp = raw_metrics_classwise['tps'][cls]
+                num_unlabeled_cls_tp = thresholded_pl[cls]
                 pr_cls[cls] = num_unlabeled_cls_tp / (r * num_labeled_cls)
             kitti_eval_metrics['PR'] = pr_cls
 
