@@ -28,7 +28,7 @@ class PredQualityMetrics(Metric):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.reset_state_interval = kwargs.get('reset_state_interval', 32)
-        # self.reset_state_interval = 2
+        self.reset_state_interval = 2
         self.tag = kwargs.get('tag', None)
         self.dataset = kwargs.get('dataset', None)
         self.cls_bg_thresh = kwargs.get('cls_bg_thresh',  0.25)
@@ -308,8 +308,6 @@ class KITTIEvalMetrics(Metric):
                 labels=items[:,7].tolist()
 
                 for idx,label in enumerate(labels):
-                    if int(label) == 0:
-                        continue
                     thresholded_pl[classes[int(label)]] += int(scores[idx]>=threshold[int(label)])
 
             for cls in classes:
