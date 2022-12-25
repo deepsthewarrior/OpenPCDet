@@ -98,7 +98,7 @@ def _max_score_replacement(batch_dict_a, batch_dict_b, unlabeled_inds, score_key
         batch_dict_a[key][unlabeled_inds] = batch_dict_cat[key][unlabeled_inds, ..., max_inds]
 
 # TODO(farzad) refactor this with global registry, accessible in different places, not via passing through batch_dict
-class MetricRegistry(object):
+class MetricRegistry(object):  # we create 2 classes for kitti eval and predquality  metrics 
     def __init__(self, **kwargs):
         self._tag_metrics = {}
         self.dataset = kwargs.get('dataset', None)
@@ -154,9 +154,16 @@ class PVRCNN_SSL(Detector3DTemplate):
             labeled_inds = torch.nonzero(labeled_mask).squeeze(1).long()
             unlabeled_inds = torch.nonzero(1-labeled_mask).squeeze(1).long()
             batch_dict['unlabeled_inds'] = unlabeled_inds
+            batch_dict['labeled_inds'] = labeled_inds
+            ori_unlabeled_boxes = batch_dict['gt_boxes'][unlabeled_inds, ...]
+            ori_labeled_boxes = batch_dict['gt_boxes'][labeled_inds, ...]
+            batch_dict['ori_unlabeled_boxes'] = ori_unlabeled_boxes
+            batch_dict['ori_labeled_boxes'] = ori_labeled_boxes
+            batch_dict['pl_labels_PR'] = []
+            batch_dict['pl_scores_PR'] = []
             batch_dict_ema = {}
-            keys = list(batch_dict.keys())
-            for k in keys:
+            keys = list(batch_dict.keys()) 
+            for k in keys: # gets data from the dataloader, prepares the keys for batch dict for teacher as well(batch_dict_ema)
                 if k + '_ema' in keys:
                     continue
                 if k.endswith('_ema'):
@@ -223,11 +230,12 @@ class PVRCNN_SSL(Detector3DTemplate):
                             batch_dict_ema = cur_module(batch_dict_ema)
                 pred_dicts_ens, recall_dicts_ema = self.pv_rcnn_ema.post_processing(batch_dict_ema, no_recall_dict=True,
                                                                                     override_thresh=0.0,
-                                                                                    no_nms_for_unlabeled=self.no_nms)
+                                                                                    no_nms_for_unlabeled=self.no_nms, pr_calc=True)
             
             # Used for calc stats before and after filtering
             ori_unlabeled_boxes = batch_dict['gt_boxes'][unlabeled_inds, ...]
-            
+            ori_labeled_boxes = batch_dict['gt_boxes'][labeled_inds, ...]
+
             ''' 
             Recording PL vs GT statistics BEFORE filtering 
             TODO (shashank) : Needs to be refactored (can also be made into a single function call)
@@ -259,7 +267,7 @@ class PVRCNN_SSL(Detector3DTemplate):
             self._fill_with_pseudo_labels(batch_dict, pseudo_boxes, unlabeled_inds, labeled_inds)
 
             # apply student's augs on teacher's pseudo-labels (filtered) only (not points)
-            batch_dict = self.apply_augmentation(batch_dict, batch_dict, unlabeled_inds, key='gt_boxes')
+            batch_dict = self.apply_augmentation(batch_dict, batch_dict, unlabeled_inds, key='gt_boxes') #gt_boxes is the pl here
 
             # if self.model_cfg.ROI_HEAD.get('ENABLE_VIS', False):
             #     for i, uind in enumerate(unlabeled_inds):
@@ -282,6 +290,12 @@ class PVRCNN_SSL(Detector3DTemplate):
 
             batch_dict['metric_registry'] = self.metric_registry
             batch_dict['ori_unlabeled_boxes'] = ori_unlabeled_boxes
+            batch_dict['ori_labeled_boxes'] = ori_labeled_boxes
+            for ind in unlabeled_inds:
+                batch_dict['pl_labels_PR'].append(pred_dicts_ens[ind]['pl_labels_PR'])
+                batch_dict['pl_scores_PR'].append(pred_dicts_ens[ind]['pl_scores_PR'])
+
+            #student
             for cur_module in self.pv_rcnn.module_list:
                 if cur_module.model_cfg['NAME'] == 'PVRCNNHead' and self.model_cfg['ROI_HEAD'].get('ENABLE_RCNN_CONSISTENCY', False):
                     # Pass teacher's proposal to the student.
@@ -300,8 +314,8 @@ class PVRCNN_SSL(Detector3DTemplate):
                                                                          override_thresh=0.0, no_nms_for_unlabeled=True)
                     boxes, labels, scores, sem_scores, boxes_var, scores_var = self._unpack_predictions(pred_dicts, unlabeled_inds)
                     pseudo_boxes = [torch.cat([box, label.unsqueeze(-1)], dim=-1) for box, label in zip(boxes, labels)]
-                    self._fill_with_pseudo_labels(batch_dict, pseudo_boxes, unlabeled_inds, labeled_inds)
-                    batch_dict = self.apply_augmentation(batch_dict, batch_dict, unlabeled_inds, key='gt_boxes')
+                    self._fill_with_pseudo_labels(batch_dict, pseudo_boxes, unlabeled_inds, labeled_inds) #
+                    batch_dict = self.apply_augmentation(batch_dict, batch_dict, unlabeled_inds, key='gt_boxes') #strong augmentation
                     batch_dict['pred_scores_ema'] = torch.zeros_like(batch_dict['roi_scores_ema'])
                     for i, ui in enumerate(unlabeled_inds):
                         batch_dict['pred_scores_ema'][ui] = scores[i]
@@ -327,7 +341,8 @@ class PVRCNN_SSL(Detector3DTemplate):
 
             # For metrics calculation
             self.pv_rcnn.roi_head.forward_ret_dict['unlabeled_inds'] = unlabeled_inds
-            self.pv_rcnn.roi_head.forward_ret_dict['pl_boxes'] = batch_dict['gt_boxes']
+            self.pv_rcnn.roi_head.forward_ret_dict['labeled_inds'] = labeled_inds
+            self.pv_rcnn.roi_head.forward_ret_dict['pl_boxes'] = batch_dict['gt_boxes'] #watch out
             self.pv_rcnn.roi_head.forward_ret_dict['pl_scores'] = pseudo_scores
 
             disp_dict = {}
@@ -385,15 +400,21 @@ class PVRCNN_SSL(Detector3DTemplate):
             for cur_module in self.pv_rcnn.module_list:
                 batch_dict = cur_module(batch_dict)
 
+            labeled_mask = batch_dict['labeled_mask'].view(-1)
+            labeled_inds = torch.nonzero(labeled_mask).squeeze(1).long()
+
             pred_dicts, recall_dicts = self.pv_rcnn.post_processing(batch_dict)
 
             pseudo_boxes_list = [torch.cat([pred_dict['pred_boxes'], pred_dict['pred_labels'].unsqueeze(-1)], dim=-1)
                                  for pred_dict in pred_dicts]
             pseudo_scores = [pred_dict['pred_scores'] for pred_dict in pred_dicts]
             gt_boxes = [gt_box for gt_box in batch_dict['gt_boxes']]
+            ori_labeled_boxes = batch_dict['gt_boxes'][labeled_inds, ...] 
+
             metric_inputs = {'preds': pseudo_boxes_list,
                              'pred_scores': pseudo_scores,
-                             'ground_truths': gt_boxes}
+                             'ground_truths': gt_boxes,
+                             'labeled_ground_truths' : ori_labeled_boxes}
 
             self.metric_registry.get('test').update(**metric_inputs)
 
@@ -517,7 +538,7 @@ class PVRCNN_SSL(Detector3DTemplate):
             conf_thresh = torch.tensor(self.thresh, device=pseudo_label.device).unsqueeze(
                 0).repeat(len(pseudo_label), 1).gather(dim=1, index=(pseudo_label - 1).unsqueeze(-1))
 
-            valid_inds = pseudo_score > conf_thresh.squeeze()
+            valid_inds = pseudo_score > conf_thresh.squeeze() # car 0.5, pedes 0.25, cyc 0.25
 
             valid_inds = valid_inds * (pseudo_sem_score > self.sem_thresh[0])
 
@@ -558,7 +579,8 @@ class PVRCNN_SSL(Detector3DTemplate):
             # pseudo_label = pseudo_label[valid_inds]
             # pseudo_score = pseudo_score[valid_inds]
 
-            pseudo_boxes.append(torch.cat([pseudo_box, pseudo_label.view(-1, 1).float()], dim=1))
+            
+            pseudo_boxes.append(torch.cat([pseudo_box, pseudo_label.view(-1,1).float()], dim=1))
             pseudo_sem_scores.append(pseudo_sem_score)
             pseudo_scores.append(pseudo_score)
             pseudo_scores_var.append(pseudo_score_var)

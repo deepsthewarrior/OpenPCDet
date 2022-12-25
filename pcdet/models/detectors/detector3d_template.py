@@ -175,7 +175,7 @@ class Detector3DTemplate(nn.Module):
     def forward(self, **kwargs):
         raise NotImplementedError
 
-    def post_processing(self, batch_dict, no_recall_dict=False, override_thresh=None, no_nms_for_unlabeled=False):
+    def post_processing(self, batch_dict, no_recall_dict=False, override_thresh=None, no_nms_for_unlabeled=False, pr_calc=False):
         """
         Args:
             batch_dict:
@@ -197,6 +197,7 @@ class Detector3DTemplate(nn.Module):
         recall_dict = {}
         pred_dicts = []
         for index in range(batch_size):
+            record_dict={}
             if batch_dict.get('batch_index', None) is not None:
                 assert batch_dict['batch_box_preds'].shape.__len__() == 2
                 batch_mask = (batch_dict['batch_index'] == index)
@@ -208,19 +209,22 @@ class Detector3DTemplate(nn.Module):
             src_box_preds = box_preds
 
             if not isinstance(batch_dict['batch_cls_preds'], list):
-                cls_preds = batch_dict['batch_cls_preds'][batch_mask]
-
+                cls_preds = batch_dict['batch_cls_preds'][batch_mask]        
                 src_cls_preds = cls_preds
                 assert cls_preds.shape[1] in [1, self.num_class]  # 1 for pvrcnn
 
                 if not batch_dict['cls_preds_normalized']:
                     cls_preds = torch.sigmoid(cls_preds)
+
+                
             else:
                 cls_preds = [x[batch_mask] for x in batch_dict['batch_cls_preds']]
                 src_cls_preds = cls_preds
                 if not batch_dict['cls_preds_normalized']:
                     cls_preds = [torch.sigmoid(x) for x in cls_preds]
-
+                    
+            if pr_calc:
+                record_dict['pl_scores_PR'],record_dict['pl_labels_PR'] = torch.max(cls_preds, dim=-1)
             if post_process_cfg.NMS_CONFIG.MULTI_CLASSES_NMS:
                 if not isinstance(cls_preds, list):
                     cls_preds = [cls_preds]
@@ -248,6 +252,7 @@ class Detector3DTemplate(nn.Module):
                 final_labels = torch.cat(pred_labels, dim=0)
                 final_boxes = torch.cat(pred_boxes, dim=0)
             else:
+                # record_dict['pl_scores_PR'],record_dict['pl_labels_PR'] = torch.max(cls_preds, dim=-1) 
                 cls_preds, label_preds = torch.max(cls_preds, dim=-1)
                 if batch_dict.get('has_class_labels', False):
                     label_key = 'roi_labels' if 'roi_labels' in batch_dict else 'batch_pred_labels'
@@ -277,7 +282,7 @@ class Detector3DTemplate(nn.Module):
                 if post_process_cfg.OUTPUT_RAW_SCORE:
                     max_cls_preds, _ = torch.max(src_cls_preds, dim=-1)
                     selected_scores = max_cls_preds[selected]
-
+                    
                 final_scores = selected_scores
                 final_labels = label_preds[selected]
                 final_boxes = box_preds[selected]
@@ -295,12 +300,14 @@ class Detector3DTemplate(nn.Module):
                     recall_dict=recall_dict, batch_index=index, data_dict=batch_dict,
                     thresh_list=post_process_cfg.RECALL_THRESH_LIST
                 )
+            if pr_calc:
+                record_dict['pl_labels_PR'] = label_preds 
 
-            record_dict = {
+            record_dict.update({
                 'pred_boxes': final_boxes,
                 'pred_scores': final_scores,
                 'pred_labels': final_labels,
-            }
+            })
             if self.training:
                 record_dict['pred_sem_scores'] = final_sem_scores
                 if 'batch_box_preds_var' in batch_dict.keys():

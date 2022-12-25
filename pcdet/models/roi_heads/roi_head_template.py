@@ -150,7 +150,7 @@ class RoIHeadTemplate(nn.Module):
             batch_roi_scores[labeled_inds, :num_rois] = targets_dict['roi_scores'][labeled_inds]
             targets_dict['roi_scores'] = batch_roi_scores
 
-            batch_rcnn_cls_labels = -1 * targets_dict['rcnn_cls_labels'].new_ones(batch_size, num_rois_ema)
+            batch_rcnn_cls_labels = -1 * targets_dict['rcnn_cls_labels'].new_ones(batch_size, num_rois_ema) #reshape targets_dict['rcnn_cls_labels'](teacher's rcnn scores) and fill with ones
             batch_rcnn_cls_labels[labeled_inds, :num_rois] = targets_dict['rcnn_cls_labels'][labeled_inds]
             targets_dict['rcnn_cls_labels'] = batch_rcnn_cls_labels
 
@@ -168,11 +168,11 @@ class RoIHeadTemplate(nn.Module):
         targets_dict['roi_scores'][unlabeled_inds, :num_rois_ema] = batch_dict['roi_scores_ema'][unlabeled_inds]
         targets_dict['roi_labels'][unlabeled_inds, :num_rois_ema] = batch_dict['roi_labels_ema'][unlabeled_inds]
         targets_dict['gt_of_rois'][unlabeled_inds, :num_rois_ema] = batch_dict['gt_boxes'][unlabeled_inds]
-        targets_dict['rcnn_cls_labels'][unlabeled_inds, :num_rois_ema] = batch_dict['pred_scores_ema'][unlabeled_inds]
+        targets_dict['rcnn_cls_labels'][unlabeled_inds, :num_rois_ema] = batch_dict['pred_scores_ema'][unlabeled_inds] # pred_scores_ema = rcnn scores of teacher for the dim[1] 1..num_of_rois
         # TODO(farzad) fixed FG threshold.
-        targets_dict['reg_valid_mask'][unlabeled_inds, :num_rois_ema] = torch.ge(batch_dict['pred_scores_ema'][unlabeled_inds], 0.7).long()
-        targets_dict['rcnn_cls_labels'][unlabeled_inds, num_rois_ema:] = -1
-        targets_dict['reg_valid_mask'][unlabeled_inds, num_rois_ema:] = 0
+        targets_dict['reg_valid_mask'][unlabeled_inds, :num_rois_ema] = torch.ge(batch_dict['pred_scores_ema'][unlabeled_inds], 0.7).long() #mask for regression values based on rcnn scores from teacher > 0.7
+        targets_dict['rcnn_cls_labels'][unlabeled_inds, num_rois_ema:] = -1 #fill the rest with 1s #need clarity on end dimension
+        targets_dict['reg_valid_mask'][unlabeled_inds, num_rois_ema:] = 0 #fill the rest with 0s #need clarity on end dimension
         targets_dict['gt_iou_of_rois'][unlabeled_inds, :num_rois_ema] = 0
 
         if 'pred_scores_ema_var' in batch_dict.keys():
@@ -196,8 +196,10 @@ class RoIHeadTemplate(nn.Module):
         sample_targets, sample_target_scores = [], []
         sample_pls, sample_pl_scores = [], []
         sample_gts = []
+        sample_labeled_gts = targets_dict['ori_labeled_boxes']
+        
         for i, uind in enumerate(unlabeled_inds):
-            mask = (targets_dict['reg_valid_mask'][uind] > 0) if mask_type == 'reg' else (
+            mask = (targets_dict['reg_valid_mask'][uind] > 0) if mask_type == 'reg' else (  #gets the mask for unlabeled indices, labelled indices = 0
                         targets_dict['rcnn_cls_labels'][uind] >= 0)
 
             # (Proposals) ROI info
@@ -210,8 +212,8 @@ class RoIHeadTemplate(nn.Module):
 
             # Target info
             target_labeled_boxes = targets_dict['gt_of_rois_src'][uind][mask].detach().clone()
-            target_scores = targets_dict['rcnn_cls_labels'][uind][mask].detach().clone()
-            sample_targets.append(target_labeled_boxes)
+            target_scores = targets_dict['rcnn_cls_labels'][uind][mask].detach().clone() # take rcnn cls labels (hardfg, softfg, bg) for unlabelled from teacher, as pseudo label for student
+            sample_targets.append(target_labeled_boxes) 
             sample_target_scores.append(target_scores)
 
             # Pred info
@@ -225,6 +227,7 @@ class RoIHeadTemplate(nn.Module):
             gt_labeled_boxes = targets_dict['ori_unlabeled_boxes'][i]
             sample_gts.append(gt_labeled_boxes)
 
+           
             # (Pseudo labels) PL info
             pl_labeled_boxes = targets_dict['pl_boxes'][uind]
             pl_scores = targets_dict['pl_scores'][i]
@@ -256,7 +259,7 @@ class RoIHeadTemplate(nn.Module):
                       filename=f'vis_{vis_type}_{uind}.png')
 
         metric_inputs = {'preds': sample_preds, 'pred_scores': sample_pred_scores, 'rois': sample_rois, 'roi_scores': sample_roi_scores,
-                         'ground_truths': sample_gts, 'targets': sample_targets, 'target_scores': sample_target_scores}
+                         'ground_truths': sample_gts, 'labeled_ground_truths': sample_labeled_gts, 'targets':  sample_targets, 'target_scores': sample_target_scores}
         metrics.update(**metric_inputs)
 
         if update_roi_pl:
@@ -268,8 +271,8 @@ class RoIHeadTemplate(nn.Module):
             tag = f'rcnn_pred_pl_metrics_{mask_type}'
             metrics_pred_pl = metric_registry.get(tag)
             metric_inputs_pred_pl = {'preds': sample_preds, 'pred_scores': sample_pred_scores, 'rois': sample_rois,
-                                    'roi_scores': sample_roi_scores, 'ground_truths': sample_pls,
-                                    'targets': sample_targets, 'target_scores': sample_target_scores}
+                                    'roi_scores': sample_roi_scores, 'ground_truths': sample_pls, 'labeled_ground_truths': sample_labeled_gts,
+                                    'targets': sample_targets, 'target_scores': sample_target_scores, 'pl_info':[targets_dict['pl_scores_PR'],targets_dict['pl_labels_PR']], 'pr_pl': True}
             metrics_pred_pl.update(**metric_inputs_pred_pl)
 
     def assign_targets(self, batch_dict):
@@ -281,7 +284,7 @@ class RoIHeadTemplate(nn.Module):
 
         # Adding points temporarily to the targets_dict for visualization inside update_metrics
         targets_dict['points'] = batch_dict['points']
-
+        targets_dict['ori_labeled_boxes'] = batch_dict['ori_labeled_boxes']
         rois = targets_dict['rois']  # (B, N, 7 + C)
         gt_of_rois = targets_dict['gt_of_rois']  # (B, N, 7 + C + 1)
         targets_dict['gt_of_rois_src'] = gt_of_rois.clone().detach()
@@ -466,7 +469,7 @@ class RoIHeadTemplate(nn.Module):
         rcnn_cls_labels[ignore_mask] = -1
         self.forward_ret_dict['rcnn_cls_labels'][unlabeled_inds] = rcnn_cls_labels
 
-    def get_loss(self, tb_dict=None, scalar=True):
+    def get_loss(self, tb_dict=None, scalar=True): 
         tb_dict = {} if tb_dict is None else tb_dict
 
         if self.model_cfg.ENABLE_RCNN_CONSISTENCY:

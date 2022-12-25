@@ -41,38 +41,38 @@ class PredQualityMetrics(Metric):
             self.add_state(metric_name, default=[], dist_reduce_fx='cat')
 
     def update(self, preds: [torch.Tensor], ground_truths: [torch.Tensor], pred_scores: [torch.Tensor],
-               rois=None, roi_scores=None, targets=None, target_scores=None) -> None:
+               rois=None, roi_scores=None, targets=None, target_scores=None) -> None: # vists the kitti eval update before this.
         assert isinstance(preds, list) and isinstance(ground_truths, list) and isinstance(pred_scores, list)
         assert all([pred.dim() == 2 for pred in preds]) and all([pred.dim() == 2 for pred in ground_truths]) and all([pred.dim() == 1 for pred in pred_scores])
         assert all([pred.shape[-1] == 8 for pred in preds]) and all([gt.shape[-1] == 8 for gt in ground_truths])
         if roi_scores is not None:
             assert len(pred_scores) == len(roi_scores)
 
-        roi_scores = [score.clone().detach() for score in roi_scores] if roi_scores is not None else None
+        roi_scores = [score.clone().detach() for score in roi_scores] if roi_scores is not None else None #roi_scores[0].shape [128,1]
         preds = [pred_box.clone().detach() for pred_box in preds]
         pred_scores = [ps_score.clone().detach() for ps_score in pred_scores]
         target_scores = [target_score.clone().detach() for target_score in target_scores] if target_scores is not None else None
         ground_truths = [gt_box.clone().detach() for gt_box in ground_truths]
 
-        sample_tensor = preds[0] if len(preds) else ground_truths[0]
+        sample_tensor = preds[0] if len(preds) else ground_truths[0] #if preds are present fill it with pls otherwise gts. Why? It is only used to fill the shape of the metrics, (no cheating happening xD)
         num_classes = len(self.dataset.class_names)
         for i in range(len(preds)):
-            valid_preds_mask = torch.logical_not(torch.all(preds[i] == 0, dim=-1))
-            valid_pred_boxes = preds[i][valid_preds_mask]
+            valid_preds_mask = torch.logical_not(torch.all(preds[i] == 0, dim=-1)) #remove bgs in the preds
+            valid_pred_boxes = preds[i][valid_preds_mask] #
 
             if pred_scores[i].ndim == 1:
-                pred_scores[i] = pred_scores[i].unsqueeze(dim=-1)
+                pred_scores[i] = pred_scores[i].unsqueeze(dim=-1) #just changing the dimensions
             if roi_scores is not None and roi_scores[i].ndim == 1:
                 roi_scores[i] = roi_scores[i].unsqueeze(dim=-1)
             if target_scores is not None and target_scores[i].ndim == 1:
                 target_scores[i] = target_scores[i].unsqueeze(dim=-1)
 
-            valid_pred_scores = pred_scores[i][valid_preds_mask.nonzero().view(-1)]
-            valid_roi_scores = roi_scores[i][valid_preds_mask.nonzero().view(-1)] if roi_scores else None
+            valid_pred_scores = pred_scores[i][valid_preds_mask.nonzero().view(-1)] #masking 
+            valid_roi_scores = roi_scores[i][valid_preds_mask.nonzero().view(-1)] if roi_scores else None #why is this masked based on the valid pred_scores
             valid_target_scores = target_scores[i][valid_preds_mask.nonzero().view(-1)] if target_scores else None
 
-            valid_gts_mask = torch.logical_not(torch.all(ground_truths[i] == 0, dim=-1))
-            valid_gt_boxes = ground_truths[i][valid_gts_mask]
+            valid_gts_mask = torch.logical_not(torch.all(ground_truths[i] == 0, dim=-1)) #0's came into picture to fill out the empty places i guess
+            valid_gt_boxes = ground_truths[i][valid_gts_mask] #
 
             # Starting class indices from zero
             valid_pred_boxes[:, -1] -= 1
@@ -83,7 +83,7 @@ class PredQualityMetrics(Metric):
 
             pred_labels = valid_pred_boxes[:, -2]
 
-            num_gts = valid_gts_mask.sum()
+            num_gts = valid_gts_mask.sum() 
             num_preds = valid_preds_mask.sum()
 
             classwise_metrics = {}
@@ -91,20 +91,20 @@ class PredQualityMetrics(Metric):
                 classwise_metrics[metric_name] = sample_tensor.new_zeros(num_classes + 1).fill_(float('nan'))
 
             for cind in range(num_classes):
-                pred_cls_mask = pred_labels == cind
+                pred_cls_mask = pred_labels == cind # get preds from pl, classwise
                 gt_cls_mask = valid_gt_boxes[:, -1] == cind
                 classwise_metrics['num_pred_boxes'][cind] = pred_cls_mask.sum()
                 classwise_metrics['num_gt_boxes'][cind] = gt_cls_mask.sum()
 
                 if num_gts > 0 and num_preds > 0:
-                    overlap = iou3d_nms_utils.boxes_iou3d_gpu(valid_pred_boxes[:, 0:7], valid_gt_boxes[:, 0:7])
-                    preds_iou_max, assigned_gt_inds = overlap.max(dim=1)
+                    overlap = iou3d_nms_utils.boxes_iou3d_gpu(valid_pred_boxes[:, 0:7], valid_gt_boxes[:, 0:7]) #iou between preds and gts
+                    preds_iou_max, assigned_gt_inds = overlap.max(dim=1) #find IOU for each pred with gt and assign its label to assigned_gt_inds, for each preds, we find how close is it to the gt
 
-                    assigned_gt_cls_mask = valid_gt_boxes[assigned_gt_inds, -1] == cind
+                    assigned_gt_cls_mask = valid_gt_boxes[assigned_gt_inds, -1] == cind # 
 
-                    tp_mask = (pred_cls_mask & assigned_gt_cls_mask)
-                    fp_mask = pred_cls_mask & (~assigned_gt_cls_mask)
-                    fn_mask = (~pred_cls_mask) & assigned_gt_cls_mask
+                    tp_mask = (pred_cls_mask & assigned_gt_cls_mask) # 
+                    fp_mask = pred_cls_mask & (~assigned_gt_cls_mask) #
+                    fn_mask = (~pred_cls_mask) & assigned_gt_cls_mask #
 
                     classwise_metrics['num_correctly_classified'][cind] = tp_mask.sum()
                     classwise_metrics['num_misclassified_fp'][cind] = fp_mask.sum()
@@ -115,18 +115,18 @@ class PredQualityMetrics(Metric):
 
                     # Using kitti test class-wise fg threshold instead of thresholds used during train.
                     classwise_fg_thresh = self.class_agnostic_fg_thresh if cind == num_classes else self.min_overlaps[cind]
-                    fg_mask = preds_iou_max > classwise_fg_thresh
+                    fg_mask = preds_iou_max > classwise_fg_thresh #IOU needs to be greater than the threshold
                     bg_mask = ~fg_mask  # bg_maks = preds_iou_max < self.cls_bg_thresh
-                    tp_fg_mask = fg_mask & tp_mask
-                    classwise_metrics['pred_fgs'][cind] = (tp_fg_mask).sum() / tp_mask.sum()
+                    tp_fg_mask = fg_mask & tp_mask #tp which are above fg threshold
+                    classwise_metrics['pred_fgs'][cind] = (tp_fg_mask).sum() / tp_mask.sum() #this is cool!! num of predicted tp (above our threshold) to original tp
 
-                    classwise_metrics['pred_ious'][cind] = (preds_iou_max * tp_fg_mask.float()).sum() / tp_fg_mask.sum()
+                    classwise_metrics['pred_ious'][cind] = (preds_iou_max * tp_fg_mask.float()).sum() / tp_fg_mask.sum() # how close is the predicted boxes to the gt? 
 
-                    cls_score_fg = (valid_pred_scores.squeeze() * tp_fg_mask.float()).sum() / (tp_fg_mask).sum()
-                    classwise_metrics['score_fgs'][cind] = cls_score_fg
+                    cls_score_fg = (valid_pred_scores.squeeze() * tp_fg_mask.float()).sum() / (tp_fg_mask).sum() #valid score/tp_fg_mask similar to pred_ious for classwise metrics
+                    classwise_metrics['score_fgs'][cind] = cls_score_fg # classwise
 
-                    tp_bg_mask = bg_mask & tp_mask
-                    cls_score_bg = (valid_pred_scores.squeeze() * tp_bg_mask.float()).sum() / torch.clamp(tp_bg_mask.float().sum(), min=1.0)
+                    tp_bg_mask = bg_mask & tp_mask  #tp which are below fg threshold
+                    cls_score_bg = (valid_pred_scores.squeeze() * tp_bg_mask.float()).sum() / torch.clamp(tp_bg_mask.float().sum(), min=1.0) #cant have bg=0, hence clamping to 1. why didnt we clamp for fg. line 125?
                     classwise_metrics['score_bgs'][cind] = cls_score_bg
 
                     # Using clamp with min=1 in the denominator makes the final results zero when there's no FG,
@@ -136,7 +136,7 @@ class PredQualityMetrics(Metric):
                         cls_sem_score_fg = (valid_roi_scores.squeeze() * tp_fg_mask.float()).sum() / (tp_fg_mask).sum()
                         classwise_metrics['sem_score_fgs'][cind] = cls_sem_score_fg
 
-                        cls_sem_score_bg = (valid_roi_scores.squeeze() * tp_bg_mask.float()).sum() / torch.clamp(tp_bg_mask.float().sum(), min=1.0)
+                        cls_sem_score_bg = (valid_roi_scores.squeeze() * tp_bg_mask.float()).sum() / torch.clamp(tp_bg_mask.float().sum(), min=1.0) #why clamping for bg and not fg
                         classwise_metrics['sem_score_bgs'][cind] = cls_sem_score_bg
 
                     if valid_target_scores is not None:
@@ -184,11 +184,12 @@ class KITTIEvalMetrics(Metric):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.reset_state_interval = kwargs.get('reset_state_interval', 256)
+        self.reset_state_interval = 2
         self.tag = kwargs.get('tag', None)
         self.dataset = kwargs.get('dataset', None)
         current_classes = self.dataset.class_names
         self.metric = 2  # evaluation only for 3D metric (2)
-        overlap_0_7 = np.array([[0.7, 0.5, 0.5, 0.7, 0.5, 0.7],
+        overlap_0_7 = np.array([[0.7, 0.5, 0.5, 0.7, 0.5, 0.7], #whats this?
                                 [0.7, 0.5, 0.5, 0.7, 0.5, 0.7],
                                 [0.7, 0.5, 0.5, 0.7, 0.5, 0.7]])
         self.min_overlaps = np.expand_dims(overlap_0_7, axis=0)  # [1, num_metrics, num_cls][1, 3, 6]
@@ -208,48 +209,63 @@ class KITTIEvalMetrics(Metric):
         self.add_state("detections", default=[])
         self.add_state("groundtruths", default=[])
         self.add_state("overlaps", default=[])
+        self.add_state("labeled_gts",default=[])
+        self.add_state("pl_infos",default=[])
+        self.pred_vs_pl = False
 
-    def update(self, preds: [torch.Tensor], pred_scores: [torch.Tensor], ground_truths: [torch.Tensor],
-               rois=None, roi_scores=None, targets=None, target_scores=None) -> None:
+    def update(self, preds: [torch.Tensor], pred_scores: [torch.Tensor], ground_truths: [torch.Tensor], labeled_ground_truths: [torch.Tensor], # once for train and once for test
+               rois=None, roi_scores=None, targets=None, target_scores=None, pl_info = None, pr_pl = False) -> None:
         assert all([pred.shape[-1] == 8 for pred in preds]) and all([tar.shape[-1] == 8 for tar in ground_truths])
         if roi_scores is not None:
             assert len(pred_scores) == len(roi_scores)
-        preds = [pred_box.clone().detach() for pred_box in preds]
-        ground_truths = [gt_box.clone().detach() for gt_box in ground_truths]
-        pred_scores = [ps_score.clone().detach() for ps_score in pred_scores]
-        roi_scores = [score.clone().detach() for score in roi_scores] if roi_scores is not None else None
+        preds = [pred_box.clone().detach() for pred_box in preds] #preds[0],[128,8]
+        ground_truths = [gt_box.clone().detach() for gt_box in ground_truths] # gt of unlabeled data
+        pred_scores = [ps_score.clone().detach() for ps_score in pred_scores] # rcnn predictions [128]
+        roi_scores = [score.clone().detach() for score in roi_scores] if roi_scores is not None else None # roi
+        labeled_ground_truths = torch.stack([labeled_ground_truths]).squeeze()
+        for i in range(labeled_ground_truths.shape[0]):
+            self.labeled_gts.append(labeled_ground_truths[i])
 
+            if pl_info is not None:
+                for idx,info in enumerate(pl_info[0]):
+                    self.pl_infos.append(torch.stack((info,pl_info[1][idx]),dim=1))
+                self.pred_vs_pl = True       
+
+        # self.labeled_gts.append(labeled_ground_truths) #check and change here #TODO: Deepika
+        
         for i in range(len(preds)):
-            valid_preds_mask = torch.logical_not(torch.all(preds[i] == 0, dim=-1))
-            valid_gts_mask = torch.logical_not(torch.all(ground_truths[i] == 0, dim=-1))
+            valid_preds_mask = torch.logical_not(torch.all(preds[i] == 0, dim=-1)) #dont care
+            valid_gts_mask = torch.logical_not(torch.all(ground_truths[i] == 0, dim=-1)) #gts containing dont care
             if pred_scores[i].ndim == 1:
                 pred_scores[i] = pred_scores[i].unsqueeze(dim=-1)
             if roi_scores is not None and roi_scores[i].ndim == 1:
                 roi_scores[i] = roi_scores[i].unsqueeze(dim=-1)
 
-            valid_pred_boxes = preds[i][valid_preds_mask]
-            valid_gt_boxes = ground_truths[i][valid_gts_mask]
-            valid_pred_scores = pred_scores[i][valid_preds_mask.nonzero().view(-1)]
+            valid_pred_boxes = preds[i][valid_preds_mask] #exclude out dont care
+            valid_gt_boxes = ground_truths[i][valid_gts_mask] # exclude dont care
+            valid_pred_scores = pred_scores[i][valid_preds_mask.nonzero().view(-1)] # get corresponding scores
             # valid_roi_scores = roi_scores[i][valid_preds_mask.nonzero().view(-1)] if roi_scores else None
 
             # Starting class indices from zero
-            valid_pred_boxes[:, -1] -= 1
-            valid_gt_boxes[:, -1] -= 1
+            valid_pred_boxes[:, -1] -= 1 #bringing car to zero and so on
+            valid_gt_boxes[:, -1] -= 1 #bringing car to zero and so on
 
             # Adding predicted scores as the last column
             valid_pred_boxes = torch.cat([valid_pred_boxes, valid_pred_scores], dim=-1)
 
-            num_gts = valid_gts_mask.sum()
-            num_preds = valid_preds_mask.sum()
-            overlap = valid_gts_mask.new_zeros((num_preds, num_gts))
+            num_gts = valid_gts_mask.sum() # get gts from 128 which are not dont care
+            num_preds = valid_preds_mask.sum() # get valid preds from 128 which are not dont care
+            overlap = valid_gts_mask.new_zeros((num_preds, num_gts)) #num_preds 128, num_gts 4 # overlap [128,4] gts could be of anyval, when I debugged it was 4 gts
             if num_gts > 0 and num_preds > 0:
-                overlap = iou3d_nms_utils.boxes_iou3d_gpu(valid_pred_boxes[:, 0:7], valid_gt_boxes[:, 0:7])
-
+                overlap = iou3d_nms_utils.boxes_iou3d_gpu(valid_pred_boxes[:, 0:7], valid_gt_boxes[:, 0:7]) #iou between gts and preds
+            
+            
+                                                                                            #calculates iou [128,4] (checks each proposal for the iou against each gt, hence the dim[128,4])
             # if cfg.MODEL.POST_PROCESSING.ENABLE_KITTI_EVAL:
-            self.detections.append(valid_pred_boxes)
-            self.groundtruths.append(valid_gt_boxes)
-            self.overlaps.append(overlap)
-
+            self.detections.append(valid_pred_boxes) # preds(is a list (list of tensors), batchsize 1 --> [[128,8]] for each image, we unpack each prediction and append)
+            self.groundtruths.append(valid_gt_boxes) #  each entry in the list is a tensor containing the gts [num of gts,8]
+            self.overlaps.append(overlap) # ious are appended for each batch [num of preds,num of gts] --> [128,4]
+             
     def compute(self):
         final_results = {}
         if (len(self.detections) >= self.reset_state_interval) and cfg.MODEL.POST_PROCESSING.ENABLE_KITTI_EVAL:
@@ -281,7 +297,7 @@ class KITTIEvalMetrics(Metric):
                     if not np.isnan(metric_value):
                         class_metrics_all[cls_name] = metric_value
                         if metric_name in ['tps', 'fps', 'fns']:
-                            class_metrics_batch[cls_name] = metric_value / total_num_samples
+                            class_metrics_batch[cls_name] = metric_value / total_num_samples #batch size?
                         elif metric_name in ['trans_err', 'orient_err', 'scale_err']:
                             class_metrics_batch[cls_name] = metric_value
                 raw_metrics_classwise[metric_name] = class_metrics_all
@@ -292,11 +308,12 @@ class KITTIEvalMetrics(Metric):
 
             # Get calculated PR
             num_labeled_samples = len(self.dataset.kitti_infos)
-            num_unlabeled_samples = total_num_samples
+            num_unlabeled_samples = total_num_samples            
             r = num_unlabeled_samples / num_labeled_samples
             pr_cls = {}
             threshold = [0.7,0.5,0.5]
             thresholded_pl = {'Car':0, 'Pedestrian':0, 'Cyclist':0}
+            gt_labeled_data = {'Car':0, 'Pedestrian':0, 'Cyclist':0}
             classes = ['Car', 'Pedestrian', 'Cyclist']
             
             # for cls in raw_metrics_classwise['tps'].keys():
@@ -304,20 +321,49 @@ class KITTIEvalMetrics(Metric):
             #     num_unlabeled_cls_tp = raw_metrics_classwise['tps'][cls]
             #     pr_cls[cls] = num_unlabeled_cls_tp / (r * num_labeled_cls)
             # kitti_eval_metrics['PR'] = pr_cls
-                        
-            for items in self.detections:
-                scores=items[:,8]
-                labels=items[:,7].tolist()
 
-                for idx,label in enumerate(labels):
-                    thresholded_pl[classes[int(label)]] += int(scores[idx]>=threshold[int(label)])
+            # for cls in raw_metrics_classwise['tps'].keys():
+            #     num_labeled_cls = self.dataset.class_counter[cls] 
+            #     num_unlabeled_cls_tp = raw_metrics_classwise['tps'][cls]
+            #     pr_cls[cls] = num_unlabeled_cls_tp / (r * num_labeled_cls)
+            # kitti_eval_metrics['PR'] = pr_cls
+            if self.pl_infos == []:
+
+                for items in self.groundtruths:
+                    labels=items[:,7].tolist()
+
+                    for idx,label in enumerate(labels):
+                        thresholded_pl[classes[int(label)]] += 1
+                
+            else:
+
+                for items in self.pl_infos:
+                    scores = items[:,0]
+                    labels = items[:,1]
+
+                    for idx, label in enumerate(labels):
+                        thresholded_pl[classes[int(label-1)]] += int(scores[idx]>=threshold[int(label-1)])
+
+
+
+
+            for vals in self.labeled_gts:
+                if vals.ndim ==1:
+                    gt_llabels = vals[7]
+                else:
+                    gt_llabels = vals[:,7].tolist()
+
+                for gt_llabel in gt_llabels:
+                   gt_labeled_data[classes[int(gt_llabel-1)]] += 1
+
+
 
             for cls in classes:
                 if thresholded_pl[cls] == 0:
                     continue
-                num_labeled_cls = self.dataset.class_counter[cls]
-                num_unlabeled_cls_tp = thresholded_pl[cls]
-                pr_cls[cls] = num_unlabeled_cls_tp / (r * num_labeled_cls)
+                num_labeled_cls = gt_labeled_data[cls] 
+                # num_unlabeled_cls_tp = thresholded_pl[cls]
+                pr_cls[cls] = thresholded_pl[cls] / num_labeled_cls
             kitti_eval_metrics['PR'] = pr_cls
 
             # Get calculated Precision

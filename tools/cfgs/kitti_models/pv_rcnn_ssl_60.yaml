@@ -161,7 +161,7 @@ MODEL:
         CLASS_AGNOSTIC: True
         ENABLE_VIS: False
         ENABLE_RELIABILITY: False
-        ENABLE_RCNN_CONSISTENCY: False
+        ENABLE_RCNN_CONSISTENCY: True
         ENABLE_EVAL: True
         SHARED_FC: [256, 256]
         CLS_FC: [256, 256]

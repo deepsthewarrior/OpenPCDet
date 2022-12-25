@@ -25,17 +25,17 @@ class KittiDatasetSSL(DatasetTemplate):
             dataset_cfg=dataset_cfg, class_names=class_names, training=training, root_path=root_path, logger=logger
         )
         self.split = self.dataset_cfg.DATA_SPLIT[self.mode]
-        self.root_split_path = self.root_path / ('training' if self.split != 'test' else 'testing')
+        self.root_split_path = self.root_path / ('training' if self.split != 'test' else 'testing') #split_01
         self.repeat = self.dataset_cfg.REPEAT
 
-        split_dir = self.root_path / 'ImageSets' / (self.split + '.txt')
+        split_dir = self.root_path / 'ImageSets' / (self.split + '.txt') #txt file describing ids
         # self.test = self.split == 'test' or self.split == 'val'
 
         if not self.training:
             self.sample_id_list = [x.strip() for x in open(split_dir).readlines()] if split_dir.exists() else None
         else:
             self.sample_id_list = [x.strip().split(' ')[0] for x in
-                               open(split_dir).readlines()] if split_dir.exists() else None
+                               open(split_dir).readlines()] if split_dir.exists() else None #sample ids?
             self.sample_index_list = [int(x.strip().split(' ')[1]) for x in
                                   open(split_dir).readlines()] if split_dir.exists() else None
 
@@ -43,23 +43,23 @@ class KittiDatasetSSL(DatasetTemplate):
         self.include_kitti_data(self.mode)
 
         if self.training:
-            all_train = len(self.kitti_infos)
-            self.unlabeled_index_list = list(set(list(range(all_train))) - set(self.sample_index_list))  # float()!!!
+            all_train = len(self.kitti_infos) #
+            self.unlabeled_index_list = list(set(list(range(all_train))) - set(self.sample_index_list))  # float()!!! #len=3712-37 = 3675
             # print(self.unlabeled_index_list)
             self.unlabeled_kitti_infos = []
 
             temp = []
-            for i in self.sample_index_list:
-                temp.append(self.kitti_infos[int(i)])
+            for i in self.sample_index_list: 
+                temp.append(self.kitti_infos[int(i)]) #len(self.sample_index_list) = 37
             if len(self.sample_index_list) < 3712: # not 100%
                 for i in self.unlabeled_index_list:
-                    self.unlabeled_kitti_infos.append(self.kitti_infos[int(i)])
+                    self.unlabeled_kitti_infos.append(self.kitti_infos[int(i)]) #len(3675)
             else:
                 self.unlabeled_index_list = list(range(len(self.sample_index_list)))
                 for i in self.sample_index_list:
                     self.unlabeled_kitti_infos.append(self.kitti_infos[int(i)])
                 print("full set", len(self.unlabeled_kitti_infos))
-            self.kitti_infos = temp
+            self.kitti_infos = temp #kitti_infos means the labelled data
             assert len(self.kitti_infos) == len(self.sample_id_list)
 
         self.class_counter = Counter()
@@ -76,14 +76,14 @@ class KittiDatasetSSL(DatasetTemplate):
         kitti_infos = []
 
         for info_path in self.dataset_cfg.INFO_PATH[mode]:
-            info_path = self.root_path / info_path
+            info_path = self.root_path / info_path #{'train': ['kitti_infos_train.pkl'], 'test': ['kitti_infos_val.pkl']}
             if not info_path.exists():
                 continue
-            with open(info_path, 'rb') as f:
-                infos = pickle.load(f)
+            with open(info_path, 'rb') as f: #3712
+                infos = pickle.load(f) 
                 kitti_infos.extend(infos)
 
-        self.kitti_infos.extend(kitti_infos)
+        self.kitti_infos.extend(kitti_infos) #'../data/kitti/kitti_infos_train.pkl
 
         # if self.logger is not None:
         #     self.logger.info('Total samples for KITTI dataset: %d' % (len(kitti_infos)))
@@ -372,7 +372,7 @@ class KittiDatasetSSL(DatasetTemplate):
         return ap_result_str, ap_dict
 
     def __len__(self):
-        if self._merge_all_iters_to_one_epoch:
+        if self._merge_all_iters_to_one_epoch: #kitti dataloader
             return len(self.kitti_infos) * self.total_epochs
 
         if self.training:

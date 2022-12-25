@@ -157,6 +157,10 @@ class PVRCNNHead(RoIHeadTemplate):
             # Temporarily add infos to targets_dict for metrics
             targets_dict['unlabeled_inds'] = batch_dict['unlabeled_inds']
             targets_dict['ori_unlabeled_boxes'] = batch_dict['ori_unlabeled_boxes']
+            targets_dict['ori_labeled_boxes'] = batch_dict['ori_labeled_boxes']                
+            targets_dict['pl_labels_PR'] = batch_dict['pl_labels_PR']
+            targets_dict['pl_scores_PR'] = batch_dict['pl_scores_PR']
+            
             # TODO(farzad) refactor this with global registry,
             #  accessible in different places, not via passing through batch_dict
             targets_dict['metric_registry'] = batch_dict['metric_registry']
@@ -180,12 +184,13 @@ class PVRCNNHead(RoIHeadTemplate):
             # note that the rpn batch_cls_preds and batch_box_preds are being overridden here by rcnn preds
             batch_dict['batch_cls_preds'] = batch_cls_preds
             batch_dict['batch_box_preds'] = batch_box_preds
+            # targets_dict['ori_labeled_boxes'] = batch_dict['ori_labeled_boxes']
             batch_dict['cls_preds_normalized'] = False
             # Temporarily add infos to targets_dict for metrics
             targets_dict['batch_box_preds'] = batch_box_preds
 
         if self.training or self.print_loss_when_eval:
-            targets_dict['rcnn_cls'] = rcnn_cls
+            targets_dict['rcnn_cls'] = rcnn_cls 
             targets_dict['rcnn_reg'] = rcnn_reg
 
             self.forward_ret_dict = targets_dict

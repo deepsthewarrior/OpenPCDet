@@ -74,8 +74,8 @@ def train_one_epoch(model, optimizer, train_loader, model_func, lr_scheduler, ac
         forward_timer = time.time()
         cur_forward_time = forward_timer - data_timer
 
-        loss.backward()
-        clip_grad_norm_(model.parameters(), optim_cfg.GRAD_NORM_CLIP)
+        loss.backward()  #backprop
+        clip_grad_norm_(model.parameters(), optim_cfg.GRAD_NORM_CLIP)  #clip the gradients
         optimizer.step()
 
         accumulated_iter += 1
