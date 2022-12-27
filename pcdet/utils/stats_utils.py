@@ -183,8 +183,8 @@ class KITTIEvalMetrics(Metric):
     full_state_update: bool = False
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.reset_state_interval = kwargs.get('reset_state_interval', 256)
-        self.reset_state_interval = 2
+        self.reset_state_interval = kwargs.get('reset_state_interval', 32)
+        self.reset_state_interval = 256
         self.tag = kwargs.get('tag', None)
         self.dataset = kwargs.get('dataset', None)
         current_classes = self.dataset.class_names
@@ -224,7 +224,7 @@ class KITTIEvalMetrics(Metric):
         roi_scores = [score.clone().detach() for score in roi_scores] if roi_scores is not None else None # roi
         labeled_ground_truths = torch.stack([labeled_ground_truths]).squeeze()
         for i in range(labeled_ground_truths.shape[0]):
-            self.labeled_gts.append(labeled_ground_truths[i])
+            self.labeled_gts.append(labeled_ground_truths[i]) #filter the 0's
 
             if pl_info is not None:
                 for idx,info in enumerate(pl_info[0]):
@@ -233,7 +233,7 @@ class KITTIEvalMetrics(Metric):
 
         # self.labeled_gts.append(labeled_ground_truths) #check and change here #TODO: Deepika
         
-        for i in range(len(preds)):
+        for i in range(len(preds)): #len(preds) predictions after post processing
             valid_preds_mask = torch.logical_not(torch.all(preds[i] == 0, dim=-1)) #dont care
             valid_gts_mask = torch.logical_not(torch.all(ground_truths[i] == 0, dim=-1)) #gts containing dont care
             if pred_scores[i].ndim == 1:
@@ -328,35 +328,33 @@ class KITTIEvalMetrics(Metric):
             #     pr_cls[cls] = num_unlabeled_cls_tp / (r * num_labeled_cls)
             # kitti_eval_metrics['PR'] = pr_cls
             if self.pl_infos == []:
-
+                
                 for items in self.groundtruths:
                     labels=items[:,7].tolist()
 
                     for idx,label in enumerate(labels):
-                        thresholded_pl[classes[int(label)]] += 1
-                
+                        thresholded_pl[classes[int(label)]] += 1                
             else:
-
                 for items in self.pl_infos:
                     scores = items[:,0]
                     labels = items[:,1]
-
+                    
                     for idx, label in enumerate(labels):
                         thresholded_pl[classes[int(label-1)]] += int(scores[idx]>=threshold[int(label-1)])
 
 
-
-
             for vals in self.labeled_gts:
                 if vals.ndim ==1:
-                    gt_llabels = vals[7]
+                    gt_llabels_ = [vals[7]]
                 else:
-                    gt_llabels = vals[:,7].tolist()
-
+                    gt_llabels_ = vals[:,7].tolist()
+                    #check for 0's
+                gt_llabels = [x - 1 for x in gt_llabels_]
                 for gt_llabel in gt_llabels:
-                   gt_labeled_data[classes[int(gt_llabel-1)]] += 1
-
-
+                    if gt_llabel != -1:
+                        gt_labeled_data[classes[int(gt_llabel)]] += 1 
+                    else:
+                        pass
 
             for cls in classes:
                 if thresholded_pl[cls] == 0:

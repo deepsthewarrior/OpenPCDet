@@ -382,7 +382,7 @@ class PVRCNN_SSL(Detector3DTemplate):
                     tb_dict_[key] = tb_dict[key]
 
             for key in self.metric_registry.tags():
-                metrics = self.compute_metrics(tag=key)
+                metrics = self.compute_metrics(tag=key) #gets me same self.l_gts and self.
                 tb_dict_.update(metrics)
 
             if dist.is_initialized():
