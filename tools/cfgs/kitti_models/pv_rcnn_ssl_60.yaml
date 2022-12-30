@@ -162,7 +162,7 @@ MODEL:
         ENABLE_VIS: False
         ENABLE_RELIABILITY: False
         ENABLE_RCNN_CONSISTENCY: False
-        ENABLE_SOFT_TEACHER: False
+        ENABLE_SOFT_TEACHER: True
         ENABLE_EVAL: True
         SHARED_FC: [256, 256]
         CLS_FC: [256, 256]

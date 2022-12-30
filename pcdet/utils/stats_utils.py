@@ -306,41 +306,49 @@ class KITTIEvalMetrics(Metric):
             ulb_lbl_ratio = num_ulb_samples / num_lbl_samples
             pred_labels, pred_scores = [], []
             for sample_dets in self.detections:
+                if sample_dets.shape[0] == 0:
+                    continue            
                 if len(sample_dets) == 0:
                     continue
                 pred_labels.append(sample_dets[:, -2])
                 pred_scores.append(sample_dets[:, -1])
-            pred_labels = torch.stack(pred_labels).to(torch.int64).view(-1)
-            pred_scores = torch.stack(pred_scores).view(-1)
-            classwise_thresh = pred_scores.new_tensor(self.min_overlaps[0, self.metric]).unsqueeze(0).repeat(
-                len(pred_labels), 1).gather(
-                dim=-1, index=pred_labels.unsqueeze(-1)).view(-1)
-            tp_mask = pred_scores >= classwise_thresh
-            pr_cls = {}
-            ulb_cls_counter = {}
-            # Because self.dataset.class_counter has other classes we only keep
-            # current classes in this dict to calculate the sum over all classes.
-            lbl_cls_counter = {}
-            for cls_id, cls_thresh in zip(self.current_classes, self.min_overlaps[0, self.metric]):
-                cls_name = self.class_to_name[cls_id]
-                num_lbl_cls = self.dataset.class_counter[cls_name]
-                cls_mask = pred_labels == cls_id
-                num_ulb_cls = (tp_mask & cls_mask).sum().item()
-                ulb_cls_counter[cls_name] = num_ulb_cls
-                lbl_cls_counter[cls_name] = num_lbl_cls
-                pr_cls[cls_name] = num_ulb_cls / (ulb_lbl_ratio * num_lbl_cls)
+            if pred_labels == []:
+                for c, cls_name in enumerate(['Car', 'Pedestrian', 'Cyclist']):
+                    kitti_eval_metrics['class_distribution'] = 0
+                    kitti_eval_metrics['kl_div'] = 0
+                    kitti_eval_metrics['PR'] = 0
+            else:
+                pred_labels = torch.cat(pred_labels).to(torch.int64).view(-1)
+                pred_scores = torch.cat(pred_scores).view(-1) 
+                classwise_thresh = pred_scores.new_tensor(self.min_overlaps[0, self.metric]).unsqueeze(0).repeat(
+                    len(pred_labels), 1).gather(
+                    dim=-1, index=pred_labels.unsqueeze(-1)).view(-1)
+                tp_mask = pred_scores >= classwise_thresh
+                pr_cls = {}
+                ulb_cls_counter = {}
+                # Because self.dataset.class_counter has other classes we only keep
+                # current classes in this dict to calculate the sum over all classes.
+                lbl_cls_counter = {}
+                for cls_id, cls_thresh in zip(self.current_classes, self.min_overlaps[0, self.metric]):
+                    cls_name = self.class_to_name[cls_id]
+                    num_lbl_cls = self.dataset.class_counter[cls_name]
+                    cls_mask = pred_labels == cls_id
+                    num_ulb_cls = (tp_mask & cls_mask).sum().item()
+                    ulb_cls_counter[cls_name] = num_ulb_cls
+                    lbl_cls_counter[cls_name] = num_lbl_cls
+                    pr_cls[cls_name] = num_ulb_cls / (ulb_lbl_ratio * num_lbl_cls)
 
-            cls_dist = {}
-            for c, cls_name in enumerate(['Car', 'Pedestrian', 'Cyclist']):
-                cls_dist[cls_name+'_lbl'] = lbl_cls_counter[cls_name] / sum(lbl_cls_counter.values())
-                cls_dist[cls_name+'_ulb'] = ulb_cls_counter[cls_name] / sum(ulb_cls_counter.values())
-            lbl_dist = torch.tensor(list(lbl_cls_counter.values())) / sum(lbl_cls_counter.values())
-            ulb_dist = torch.tensor(list(ulb_cls_counter.values())) / sum(ulb_cls_counter.values())
+                cls_dist = {}
+                for c, cls_name in enumerate(['Car', 'Pedestrian', 'Cyclist']):
+                    cls_dist[cls_name+'_lbl'] = lbl_cls_counter[cls_name] / sum(lbl_cls_counter.values()) if sum(lbl_cls_counter.values())!=0 else 0
+                    cls_dist[cls_name+'_ulb'] = ulb_cls_counter[cls_name] / sum(ulb_cls_counter.values()) if sum(ulb_cls_counter.values())!=0 else 0
+                lbl_dist = torch.tensor(list(lbl_cls_counter.values())) / sum(lbl_cls_counter.values()) if sum(lbl_cls_counter.values())!=0 else torch.tensor([0,0,0])
+                ulb_dist = torch.tensor(list(ulb_cls_counter.values())) / sum(ulb_cls_counter.values()) if sum(ulb_cls_counter.values())!=0 else torch.tensor([0,0,0])
 
-            kl_div = F.kl_div(ulb_dist.log().unsqueeze(0), lbl_dist.unsqueeze(0), reduction="batchmean").item()
-            kitti_eval_metrics['class_distribution'] = cls_dist
-            kitti_eval_metrics['kl_div'] = kl_div
-            kitti_eval_metrics['PR'] = pr_cls
+                kl_div = F.kl_div(ulb_dist.log().unsqueeze(0), lbl_dist.unsqueeze(0), reduction="batchmean").item()
+                kitti_eval_metrics['class_distribution'] = cls_dist
+                kitti_eval_metrics['kl_div'] = kl_div
+                kitti_eval_metrics['PR'] = pr_cls
 
             # Get calculated Precision
             for m, metric_name in enumerate(['mAP_3d', 'mAP_3d_R40']):

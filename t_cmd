@@ -1,0 +1,3410 @@
+[33mcommit dcda0e6d1406445e10f1763387c743954110f69f[m[33m ([m[1;36mHEAD -> [m[1;32msoft-teacher-reliable_metrics[m[33m, [m[1;31mupstream/soft-teacher-reliable_metrics[m[33m)[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Mon Nov 28 21:01:17 2022 +0100
+
+    DA-7 Refactoring metrics: ROI-TARGET-PRED.
+
+[33mcommit 5ecf31de68583ba5b6b9416c5d66049b98219462[m[33m ([m[1;31morigin/soft-teacher-reliable_metrics[m[33m, [m[1;31morigin/master[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;31morigin/DA-15-class-imbalance[m[33m, [m[1;32mmaster[m[33m, [m[1;32mDA-15-class-imbalance[m[33m)[m
+Author: danish87 <dani.shahzad87@gmail.com>
+Date:   Wed Nov 16 22:17:17 2022 +0100
+
+    DA-18 vis on headless server
+
+[33mcommit 2fe2011e35a4bbfb6211849648f5def3fdf084f4[m
+Author: danish87 <dani.shahzad87@gmail.com>
+Date:   Wed Nov 16 22:10:29 2022 +0100
+
+    DA-18 Added figure save-mode on headless server
+
+[33mcommit 0fcdbb9ee935439fe8275db6390a6270eaa78805[m
+Author: Shashank Agarwal <agarwal@kiew.kl.dfki.de>
+Date:   Wed Nov 16 12:54:54 2022 +0100
+
+    DA-18 Disable mayavi import on headless server
+
+[33mcommit 9173644af32cab4fc31df024a14e79f3c7bcc1b0[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Wed Nov 16 11:17:41 2022 +0100
+
+    Bugfix: using gt_of_rois_src instead of gt_of_rois in update_metrics due to transforming gt_of_rois to local coordinate.
+
+[33mcommit 58ede99152ecd4f98c88e5189b1dc6309eaa13d1[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Wed Nov 16 10:24:21 2022 +0100
+
+    Bugfix: removed the popping points from the targets_dict.
+
+[33mcommit 527388f5083de3348f5d4f1aeeb5612632724043[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Tue Nov 15 20:01:51 2022 +0100
+
+    Added pre-loss visualization.
+
+[33mcommit 0898fe4fc4a142061ddd6611273437807adf4c9f[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Tue Nov 15 19:16:14 2022 +0100
+
+    Removed extra use_consistency config.
+
+[33mcommit b9c63ba1bb9ef864cf8f4a40540f50146fe0f27a[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Tue Nov 15 17:28:18 2022 +0100
+
+    Bugfix: changes torch.nan to float('nan').
+
+[33mcommit 669e9df8357c90502f1d6f2fc0808e0037fedee0[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Tue Nov 15 17:17:53 2022 +0100
+
+    Bugfix: adds missing limit_period after applying augmentations.
+
+[33mcommit 77589fa3887354ecfa3c15fba799491e9ecfb1fd[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Tue Nov 15 16:49:49 2022 +0100
+
+    DA-18 Bugfix: fixes missing original_unlabeled_boxes.
+
+[33mcommit 32e490056d657e107b5ddf8591707a8ec4e718f1[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Tue Nov 15 16:38:45 2022 +0100
+
+    DA-18 Bugfix: visualization of both gt_boxes and pred_boxes.
+
+[33mcommit bca16bb876b15610d299b6a3a4cd6e14e0fc6dbf[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Tue Nov 15 13:04:17 2022 +0100
+
+    DA-18 Adds a simple visualization function to better debug the scene.
+
+[33mcommit 84856532bf2e2e3fcc17343afc1a692438d59f52[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Mon Nov 14 16:53:26 2022 +0100
+
+    DA-25 Pre-loss filtering and log metrics.
+    * Added filtering step before computing the final losses for cls and reg for rcnn in consistency mode.
+
+[33mcommit 3192d4d70ef3e576b979403ba5907d1ff4f7f316[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Wed Nov 9 20:33:00 2022 +0100
+
+    DA-22 Metrics separation.
+
+[33mcommit eb9ef6be859d67248038f25217ac5a057916aafd[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Mon Nov 7 15:25:36 2022 +0100
+
+    DA-22 Adding testset Eval during train and classwise metrics
+
+[33mcommit 2da99a09d6a454e37595f42f8d4082dbb9fff49b[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Fri Nov 4 11:38:56 2022 +0100
+
+    DA-15 Added GT pseudo-recall metric based on TPs.
+
+[33mcommit 6ef3d7d75e031c8c08c97731f664c0c109159406[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Thu Nov 3 17:32:24 2022 +0100
+
+    Bugfix: Separating per TP metrics from per sample ones.
+
+[33mcommit 8a04ba7aaf57e1174fc339a3c20d01b559e04a88[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Wed Nov 2 10:26:41 2022 +0100
+
+    * Added a simple class-agnostic sem threshold to filter proposals/PLs.
+    * Added mean FG/BG scores in metrics.
+    * Bugfix: missing mask for rois in update_metrics method.
+
+[33mcommit e3409409ff339a4fbbcc3125d327e51251559aa8[m
+Merge: ea99bee 1da19f0
+Author: Farzad Nozarian <fnozarian@users.noreply.github.com>
+Date:   Thu Oct 27 14:31:36 2022 +0200
+
+    Merge pull request #24 from danish87/soft-teacher-reliable_metrics_main
+    
+    DA-6 Skip Kitti Eval for dist training
+
+[33mcommit 1da19f045a138c1905454424314f24de3bc6ad5a[m
+Author: danish87 <dani.shahzad87@gmail.com>
+Date:   Thu Oct 27 14:21:18 2022 +0200
+
+    DA-6 Skip Kitti Eval for dist training
+
+[33mcommit ea99bee1214c7b5c50477462bbb6d1bb5abe8153[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Tue Oct 25 16:36:39 2022 +0200
+
+    DA-7 Added unlabeled proposal sampling.
+
+[33mcommit b28676af89f91355f56a302fe3dd4e1dc1c45bf8[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Mon Oct 24 12:35:56 2022 +0200
+
+    DA-16 Bugfix: removing redundant sigmoid for roi_scores in metrics.
+    roi_scores is already normalized when consistency is enabled. It should be normalized only when consistency is disabled.
+    
+    * Separating metrics based on reg_valid_mask and rcnn_cls_labels. Since the reg and cls losses are calculated based on these two, the metrics should reflect values based on these two masks.
+    
+    * Added metric registry.
+
+[33mcommit dad6b56ab59e5bbf52a0d22dbb3575007a94f31b[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Fri Oct 21 17:46:31 2022 +0200
+
+    [DA-16] Changed the default assignment of reg_valid_mask values in the consistency module.
+    (From roi sem score (roi_scores_ema) to roi obj score (pred_scores_ema))
+    
+    * Bugfixed: valid_preds_mask is now used in all prediction-related info, such as pred_scores or pred_sem_scores.
+    
+    *Bugfixed: removes clamping in sem_score_fg metric to avoid zero values when no FGs exist.
+    
+    * Added proposal metrics to analyze the consistency module.
+    
+    * Commented metrics for "before pseudo-label filtering".
+    
+    * Kitti-eval-related metrics are computed every two epochs now for better approximation.
+
+[33mcommit 253352f1319c115a6bd7ed79a38f2ea22d4145c6[m
+Author: shashankag14 <shashankag14@gmail.com>
+Date:   Thu Oct 13 17:11:58 2022 +0200
+
+    Bugfix: removed extra normalization of scores
+
+[33mcommit b3cefa5082b4069890ee13194b4e34e1def84b18[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Tue Oct 11 12:01:39 2022 +0200
+
+    Partial impl. for unlabeled rois/pls samplers.
+
+[33mcommit 3e03450a65add83a16fd24ad260bf146274cb67a[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Fri Oct 7 14:28:53 2022 +0200
+
+    Bugfix: missing pseudo-label augmentation!!!
+
+[33mcommit 4284289872485b6e1ec97babe90c6e7e7d0c8fcc[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Fri Oct 7 12:39:36 2022 +0200
+
+    Bugfix: normalized roi_score_ema.
+    Bugfix: simple fixed for reg_valid_mask with thresholding on roi scores.
+
+[33mcommit 0b62b1c84e1605bd26c9f63f557268bccd2b5778[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Wed Oct 5 18:04:48 2022 +0200
+
+    Bugfix: ignoring all-zero pseudo-labels (PL) created by filtering.
+    In case when filtering results in no PLs, all-zero PLs are used to fill gt of unlabeled samples. All these PLs are then considered as BGs (`batch_cls_labels == 0`) and cls loss is calculated for them (`cls_valid_mask` is true for them). To ignore them in cls loss we set `rcnn_cls_labels` to `-1`, making them invalid by `cls_valid_mask = (rcnn_cls_labels >= 0).float()`. Regression loss ignores them already as the `reg_valid_mask` is 0 for them.
+
+[33mcommit 9890d68c79fb6dac24d57650a1e7e6f40863358f[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Tue Oct 4 20:00:34 2022 +0200
+
+    Bugfix: tag for metric reset.
+
+[33mcommit b511a8ef96c610a6fb5f91c2495fbc9c5eea122a[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Tue Oct 4 12:09:50 2022 +0200
+
+    Class-wise thresholds from kitti eval for pred_fgs metrics.
+
+[33mcommit 1e85704679334868f15be4fc0787c0bc72169df0[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Mon Oct 3 20:27:38 2022 +0200
+
+    Bugfix: calling reset at the end of metrics computation.
+
+[33mcommit 455ea4f91d07201fce8b4ccd33ec6178cd1637d5[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Mon Oct 3 18:34:23 2022 +0200
+
+    Separates kitti compute from other stats.
+    Runs kiiti compute only at the end of epoch.
+
+[33mcommit 3e0fafe52ed925621e7f97a2abd41445f79ecf6c[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Mon Oct 3 12:44:55 2022 +0200
+
+    Moving to new metrics.
+    Bugfix sem_score_fg.
+    Makes category for tb metrics.
+    Cleanups KITTIEVAL.
+
+[33mcommit f99a6f7075e22b7bbde709c28eee8f4cf5d390f4[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Sat Oct 1 21:47:51 2022 +0200
+
+    Changed per-batch states from list to tensor.
+
+[33mcommit 60cc5d3387604de0864068d8f5b66f7406e23a71[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Sat Oct 1 21:20:09 2022 +0200
+
+    Bugfix thresh.
+
+[33mcommit 058fbedcc431514a4b2c858b44f1e8557c315d97[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Sat Oct 1 21:12:11 2022 +0200
+
+    Bugfix detailed_stats.
+
+[33mcommit 7dda91725c33547b74e242e07e3ef5f02a62e8dc[m
+Merge: 70bad66 60d3139
+Author: Farzad <fnozarian@gmail.com>
+Date:   Sat Oct 1 20:35:37 2022 +0200
+
+    Merge remote-tracking branch 'OpenPCDet-fnozarian/soft_teacher_reliable_tp_metrics' into soft-teacher-reliable_metrics
+    
+    # Conflicts:
+    #       pcdet/utils/stats_utils.py
+
+[33mcommit 70bad666b7eab55c14f9e50519ce1b7d800f5e9a[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Wed Sep 21 18:55:14 2022 +0200
+
+    Added dist testcase.
+
+[33mcommit 60d313916191f991d843b88ece09786a0e414bb0[m
+Author: farzaneh <frezaeix@gmail.com>
+Date:   Wed Sep 21 14:23:54 2022 +0200
+
+    added old statistics in update()
+
+[33mcommit b31fd18245be8a1c12ea8536d86206ae5a97cf83[m
+Author: farzaneh <frezaeix@gmail.com>
+Date:   Sun Sep 18 14:31:12 2022 +0200
+
+    old statistics are added to new cal
+
+[33mcommit 91d11a58997667c7acbbbf0737266077f4869968[m
+Author: farzaneh <frezaeix@gmail.com>
+Date:   Sat Sep 17 17:54:26 2022 +0200
+
+    metrics - calculate 'trans_err', 'orient_err', 'scale_err'
+
+[33mcommit 33e8e6b8e8e35f4489ca087133ba8c11f452daec[m[33m ([m[1;31mupstream/soft-teacher-reliable[m[33m)[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Fri Sep 16 17:07:35 2022 +0200
+
+    Ignoring NANs in tensorboard logging.
+
+[33mcommit 16539bb76e4cf81fd3041f63d9f3e3468370d921[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Fri Sep 16 16:29:50 2022 +0200
+
+    Bugfix: changes initialization of precision, recall, etc. from zero to nan and ignores nans in reduce operations (issue #17).
+
+[33mcommit 726e7a674ec4d0d57d1e2d1a4825e07b30376def[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Fri Sep 16 11:13:36 2022 +0200
+
+    Bugfix: class-wise max-recall.
+
+[33mcommit fe56e561e9a1fa7f558b4aceeadb37b0a11effee[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Thu Sep 15 19:17:24 2022 +0200
+
+    Bugfix: TP, FP, FN calculation and handling empty pred tensors.
+    * Used max over 41 rows of detailed_stats due to accumulation of stats.
+
+[33mcommit d274fe0b6b6b023b90c6094794145d596821f298[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Thu Sep 15 11:26:04 2022 +0200
+
+    Bugfix: calling forward instead of update for torchmetric.
+
+[33mcommit c5782fe114497ac9abe7dab156538bc59b22ca93[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Thu Sep 15 10:11:59 2022 +0200
+
+    Bugfix: merging bug; compute should be called after metric update.
+
+[33mcommit 47f0f4c325c76488e45254503d0dd91c0e519edc[m
+Merge: 9d671fc 874a4d9
+Author: Farzad <fnozarian@gmail.com>
+Date:   Wed Sep 14 19:39:23 2022 +0200
+
+    Merge remote-tracking branch 'OpenPCDet-fnozarian/soft-teacher-reliable' into soft-teacher-reliable
+    
+    # Conflicts:
+    #       pcdet/models/detectors/pv_rcnn_ssl.py
+
+[33mcommit 9d671fc9cf58a0a78206660a5cb597e70691ea2c[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Wed Sep 14 19:18:34 2022 +0200
+
+    Added kitti_eval torchmetrics.
+
+[33mcommit 874a4d9680425d34f654e357011d0f9e21573922[m
+Author: shashankag14 <shashankag14@gmail.com>
+Date:   Fri Sep 9 18:44:41 2022 +0200
+
+    Added statistics calc before PL filtering
+
+[33mcommit 494b51dc93dbcc25ba1d87c4cee77a8252a536e1[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Fri Sep 9 17:13:13 2022 +0200
+
+    Bugfix: fixed checking for rows with all zeros.
+
+[33mcommit a0471e09040fd21c3e7dfddd14250feab73f08a6[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Fri Sep 9 16:49:34 2022 +0200
+
+    Bugfix: fixed index out of rang for cls_name when FP.
+
+[33mcommit 7b211f3b306bec061d302c624a8fa0432777105d[m
+Merge: e217028 a2508b9
+Author: Farzad Nozarian <fnozarian@users.noreply.github.com>
+Date:   Fri Sep 9 15:55:53 2022 +0200
+
+    Merge pull request #11 from shashankag14/soft-teacher-reliable
+    
+    Bugfix: Mask correction and datatype changed in stats
+
+[33mcommit a2508b9e6b820ae57bfd589b99b6566428965ca8[m
+Author: shashankag14 <shashankag14@gmail.com>
+Date:   Fri Sep 9 15:50:48 2022 +0200
+
+    Bugfix: Mask correction and datatype changed in stats
+
+[33mcommit e217028c3cec8dbea7d70ac40c117042710c56cb[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Fri Sep 9 15:14:58 2022 +0200
+
+    Bugfix: correct checking for all-zero rows in pv_rcnn_ssl.py.
+    TB metrics grouping for classes.
+
+[33mcommit 8d87674937a8aba9882673cd439fe57c14ce7ac4[m
+Author: shashankag14 <shashankag14@gmail.com>
+Date:   Fri Sep 9 09:46:42 2022 +0200
+
+    Bugfix: Key correction in return statistics
+
+[33mcommit 97ddaa441a94ae5c62e09b0cbc597993a5a8483a[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Thu Sep 8 20:38:21 2022 +0200
+
+    Bugfix: correct checking for all-zero rows in augmentation functions.
+
+[33mcommit b2ee6ac15e78937dcd2649671f940a759170448d[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Wed Sep 7 16:30:25 2022 +0200
+
+    Partial implementation of statistics.
+
+[33mcommit 57f1bc9400f2ec30ff388b66ea0ea9a015896adb[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Tue Sep 6 14:15:26 2022 +0200
+
+    Bugfix: excluded all-zero rows from the augmentation.
+    Caused all-zero rows to be modified by augmentations and ignored in all-zero condition checks.
+
+[33mcommit 212018d4a0245ae58dc02dfcf0688962a8f8d2f5[m
+Merge: 35a8790 91349c7
+Author: Farzad Nozarian <fnozarian@users.noreply.github.com>
+Date:   Tue Sep 6 09:20:07 2022 +0200
+
+    Merge pull request #9 from shashankag14/soft-teacher-reliable
+    
+    Fix for zero predictions from teacher
+
+[33mcommit 91349c7b4608fe2e6347b7f11d3cab63888efa70[m
+Author: shashankag14 <shashankag14@gmail.com>
+Date:   Mon Sep 5 18:05:02 2022 +0200
+
+    Bugfix: Handle zero predictions from teacher
+
+[33mcommit 35a8790d71f8916c7a982bb2c2af0e9088b28767[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Wed Aug 31 15:38:09 2022 +0200
+
+    Overlap extraction comment bugfix.
+
+[33mcommit f95938381bb8b076c4043979dc95b741ea0748b7[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Wed Aug 31 13:46:33 2022 +0200
+
+    Added overlaps and class_diff mask.
+
+[33mcommit 79b3d215f5017062ee2f61c7b4ba2d4ddd60473f[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Wed Aug 31 10:41:10 2022 +0200
+
+    Bugfix empty pseudo-labels.
+
+[33mcommit 342daf42fd5d9b896c255414fdaad6594af41119[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Tue Aug 30 19:46:20 2022 +0200
+
+    Separate rcnn consistency and ps reliability.
+
+[33mcommit 4349f93194038cbaef8e92327224e6bc67208649[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Mon Aug 29 20:29:12 2022 +0200
+
+    Added usage of official KITTI eval for statistics.
+
+[33mcommit 1dac62e06abb2ee233cf15116d40bbf0bb2c50be[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Tue Aug 23 19:10:24 2022 +0200
+
+    Bugfix: box_var in box_reg_loss.
+
+[33mcommit 0783533178645338982d621834a4f30941f0d8fb[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Tue Aug 23 14:22:37 2022 +0200
+
+    Combined rois/targets of teacher with student with different sizes.
+
+[33mcommit a18b92de0c4b43097bee3fd5904d3e76f9d07f17[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Mon Aug 22 10:54:57 2022 +0200
+
+    Bugfix
+
+[33mcommit 1e167033b26a68a39acd781e11e9bb254bda2dc1[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Sat Aug 20 17:28:53 2022 +0200
+
+    Renaming some vars for better readability.
+
+[33mcommit 952c8858a3fb0d7b73ebec7b8ebf6fd3bbf9cc6b[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Fri Aug 19 19:26:01 2022 +0200
+
+    Separated no_nms for labeled/unlabeled indices.
+
+[33mcommit b4d75b88cc5bd173344621e1e623183ea46d7eec[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Fri Aug 19 14:01:18 2022 +0200
+
+    Bugfix: several bugs fixed for processing both labeled and unlabeled data in rcnn head.
+
+[33mcommit 53dc6e45321823c4a9610f13e4459601ef802dc3[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Wed Aug 17 19:35:49 2022 +0200
+
+    Bugfix: removed mean_post_nms option due to change of predictions' order after nms.
+
+[33mcommit b36b93d0e3a33f8908aa7e48fb234b2b7b175c0d[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Wed Aug 17 17:52:08 2022 +0200
+
+    Added flag for using reg var in rcnn reg loss.
+
+[33mcommit 4c28f2a57f72dc7875c08dbd04af643db712ee0f[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Wed Aug 17 13:22:18 2022 +0200
+
+    Added box reg var in rcnn reg loss.
+
+[33mcommit 4f0431700bb060630836c4f5f3bb46d20b047622[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Tue Aug 16 19:24:14 2022 +0200
+
+    Partial implementation of consistency loss.
+
+[33mcommit a77dcbc21b501070c16131f531663bedda2dfb35[m
+Author: shashankag14 <shashankag14@gmail.com>
+Date:   Tue Aug 9 17:02:43 2022 +0200
+
+    Added KLdiv loss and fixed teacher ensemble
+
+[33mcommit 4096b36988fd1e38ce88a81b2acb5355d14f3415[m
+Merge: 7990a01 94563e0
+Author: Shashank Agarwal <74488693+shashankag14@users.noreply.github.com>
+Date:   Tue Aug 9 16:46:37 2022 +0200
+
+    Merge pull request #7 from shashankag14/soft-teacher-reliable
+    
+    Removed softteacher, fixed weak augmentation
+
+[33mcommit 94563e01bc545c0dc0fdbc85586d2a7cea91b14f[m
+Author: shashankag14 <shashankag14@gmail.com>
+Date:   Mon Aug 8 19:37:26 2022 +0200
+
+    Removed softteacher, fixed weak augmentation
+
+[33mcommit 7990a0170befc813e327da501504ab30cf6a94a4[m
+Author: shashankag14 <shashankag14@gmail.com>
+Date:   Sun Jul 31 10:44:40 2022 +0200
+
+    Added weak augmentation for teacher ensemble
+
+[33mcommit 6cc475a4acfda51729726d468eea95bce4ef5f13[m
+Author: shashankag14 <shashankag14@gmail.com>
+Date:   Thu Jul 28 18:16:56 2022 +0200
+
+    Implemented teacher ensemble
+
+[33mcommit 98853c56c34f0cf480e0d1a7ce5c8924c3b9bece[m
+Author: shashankag14 <shashankag14@gmail.com>
+Date:   Mon Jul 25 20:45:17 2022 +0200
+
+    Added augmentations and updated batch_dicts
+
+[33mcommit e6f3306b6677285bff8ed28632fedff9ac8b1c7a[m
+Author: Danish Shahzad <dani.shahzad87@gmail.com>
+Date:   Mon Jul 25 14:00:49 2022 +0200
+
+    reliablity from soft-teacher
+
+[33mcommit 169035de91b0381706fa0db55b9298081161bd59[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Mon Jun 20 19:44:38 2022 +0200
+
+    Added UNLABELED_SUPERVISE_OBJ flag.
+
+[33mcommit 41cf2e7b0503f62a34dce8bb4f7a75fe5a098bc8[m
+Author: danish87 <dani.shahzad87@gmail.com>
+Date:   Sat Jun 18 15:29:49 2022 +0200
+
+    traverse all text files to find eval results
+
+[33mcommit 3d4bf13d8197bcb8813799a167dfb2a3008eb133[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Thu Jun 16 18:25:10 2022 +0200
+
+    Added tensorboard log support.
+
+[33mcommit 6f4bea6b22052777c22b0ecffc7b1ad95586c5d2[m
+Author: danish87 <dani.shahzad87@gmail.com>
+Date:   Thu Jun 16 03:16:43 2022 +0200
+
+    added mean mAP calc
+
+[33mcommit e44ba69475de428846545bb432dab3c860fb6a1a[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Wed Jun 15 22:00:33 2022 +0200
+
+    Added rev num. at the end of extra_tag.
+
+[33mcommit 0799899fa198f80a8f48d69f77f3d740d44637a1[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Wed Jun 15 21:42:33 2022 +0200
+
+    Bugfix: use mean op for all losses instead of sum.
+
+[33mcommit ebaa4279c713f410208472dfbe103e24046cf914[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Wed Jun 15 10:56:43 2022 +0200
+
+    Bugfix: disabling soft-teacher rcnn cls loss.
+
+[33mcommit 8dbc6be076cb9fbaf3f0c6a9f774d706641c8314[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Sun Jun 12 17:28:25 2022 +0200
+
+    Revert "Bugfix: LOCAL_RANK."
+    
+    This reverts commit f90105a92441f3317c4b2332af4e2aceb7f5ce7a.
+
+[33mcommit f90105a92441f3317c4b2332af4e2aceb7f5ce7a[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Sun Jun 12 15:21:54 2022 +0200
+
+    Bugfix: LOCAL_RANK.
+
+[33mcommit 818cd7cefcbba8f4a138a7badbc1a0a918f0e250[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Fri Jun 10 20:52:58 2022 +0200
+
+    Added flag for enabling soft-teacher.
+
+[33mcommit a4e8aaaa7f01a1dc45888398cf19b89839255e5c[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Thu Jun 9 15:15:51 2022 +0200
+
+    Bugfix: fixes sem_score_fg/bg calculation error when the sample has no predicted rois.
+
+[33mcommit b94c25cac4537ed2ca7a8bd589cfe1e650db04ff[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Wed Jun 8 18:35:54 2022 +0200
+
+    Bugfix: mean tb loss, acc and point_pos_num scalars.
+
+[33mcommit ad980324baf4a46078983f6211807f148e3ea257[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Wed Jun 8 13:33:00 2022 +0200
+
+    Bugfix: remove hardcoded batch_size in point_head_template.py
+
+[33mcommit 112d6b98ddf31c4ce89866294b02ae52459538bc[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Tue Jun 7 21:36:46 2022 +0200
+
+    Adding nan for samples w/o rois when calculating statistics.
+
+[33mcommit 45e1bcd9534994e479297d037f291dc063b489b7[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Mon Jun 6 17:04:45 2022 +0200
+
+    Bugfix: sem_score_fg/bg calculation.
+
+[33mcommit 0af8e720db58c1b1dd635ad4e16a139d6839074d[m
+Author: jihan.yang <jihanyang13@gmail.com>
+Date:   Mon May 30 16:57:52 2022 +0800
+
+    Re-organize fix random seed code; Make saved checkpoint compatible among different torch versions (#986)
+    
+    (cherry picked from commit 519b1564158c8727153812a60bbff5913b574fd3)
+
+[33mcommit 174516772f3ee38f8d819dbb5e116be3720e0bc4[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Sun Jun 5 18:12:34 2022 +0200
+
+    A temporary fix for batch_size (w/o labeled/unlabeled ratio).
+
+[33mcommit 326f90b998dfc775a179eb8ae8de5fbca474f09a[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Tue May 17 13:02:42 2022 +0200
+
+    Fixed slurm scripts to run in cluster.
+
+[33mcommit 2fe3ee0bd8df6a92c40172e48e2b52ef749b156b[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Sun Jun 5 12:50:26 2022 +0200
+
+    Return to the default roi-iou labeling.
+
+[33mcommit f941f0ac2b0bd14b9948e4ce1531ef61a4850d85[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Sat Jun 4 17:57:58 2022 +0200
+
+    Assigning rois with interval_mask=True to background.
+    Inverting teacher's scores of student's proposals.
+
+[33mcommit 868f4d42c581955b9eecb82583345852c85eb577[m[33m ([m[1;31mupstream/soft-teacher[m[33m)[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Fri Jun 3 16:11:38 2022 +0200
+
+    Bugfix: move gpu tensor to cpu in eval_with_train.
+
+[33mcommit d37953986a1440862ec148666d5fe93ee5b3b3ab[m
+Author: shashankag14 <shashankag14@gmail.com>
+Date:   Sat May 21 11:29:05 2022 +0200
+
+    Bugfix: missing spconv library
+
+[33mcommit 4521aa28cbfa467bbf99a157b49058ac95420375[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Wed Jun 1 16:52:32 2022 +0200
+
+    Partial impl (4) of passing std's proposals
+
+[33mcommit c292d098f19565be2dabe0f6cbb8d70ef2d64bee[m
+Merge: 1b1a6ff ad5cc9a
+Author: Farzad <fnozarian@gmail.com>
+Date:   Mon May 30 15:56:02 2022 +0200
+
+    Merge remote-tracking branch 'OpenPCDet-fnozarian/soft-teacher' into soft-teacher
+
+[33mcommit 1b1a6fff6b381cb66f73c1bf2f30f2056920a460[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Mon May 30 15:55:45 2022 +0200
+
+    Partial impl (3) of passing std's proposals
+
+[33mcommit ad5cc9ac2b102010eecf3fba1981f9df65b58d4d[m
+Author: danish87 <dani.shahzad87@gmail.com>
+Date:   Mon May 30 15:32:31 2022 +0200
+
+    reverse student augmentation
+
+[33mcommit 04a83cf7ca02478e00bc184ffb0c6da10acfef9c[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Fri May 27 19:04:37 2022 +0200
+
+    Partial impl (2) of passing std's proposals
+
+[33mcommit 4032ab005b0c4ba9300c9aa38e063ddfa0ce885c[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Thu May 26 14:33:03 2022 +0200
+
+    Partial impl of passing std's proposals
+
+[33mcommit 097490d3f3d317edcc3b598a960f551b82e98e89[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Thu May 26 14:31:39 2022 +0200
+
+    Cleanup and commenting.
+
+[33mcommit 42599a9d31d586a57921628c9e57c21a12d1342f[m
+Author: danish87 <danishahzad87@gmail.com>
+Date:   Fri May 20 02:09:07 2022 +0200
+
+    Consistency enforcement.
+
+[33mcommit ae07a8bc43d1588cbf6589757bec4aee4fa121a2[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Sun May 22 16:34:30 2022 +0200
+
+    Teacher-student correction.
+
+[33mcommit 338ceb82a6998386142cf6b5192f3e2ece684ec7[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Sun May 22 16:14:26 2022 +0200
+
+    Removed OpenPCDet submodule.
+
+[33mcommit 66fe7058e706d191b67afdf17f207b98e71db11a[m
+Author: danish87 <dani.shahzad87@gmail.com>
+Date:   Fri May 13 10:25:39 2022 +0200
+
+    updated classification label
+
+[33mcommit 2f968006054d7bb9eb0dcfc98989798d15fde065[m
+Author: danish87 <dani.shahzad87@gmail.com>
+Date:   Fri May 6 15:36:14 2022 +0200
+
+    compute_uncertainty_with_aug
+
+[33mcommit 41ebed6b058da5463f85324b50a81b5d5e581c25[m
+Author: danish87 <dani.shahzad87@gmail.com>
+Date:   Thu May 5 15:44:37 2022 +0200
+
+    added reliablity measure for unsupervised loss
+
+[33mcommit 0fa95f074e042cd908eca59f692cdb55ad94eb21[m
+Author: danish87 <dani.shahzad87@gmail.com>
+Date:   Thu May 5 15:42:47 2022 +0200
+
+    added reliablity for unspuervised learning
+
+[33mcommit e33d2bc05acc0363080c405c652f211f2dbf5fb6[m
+Author: danish87 <dani.shahzad87@gmail.com>
+Date:   Sun May 1 01:16:30 2022 +0200
+
+    partialy updated data augmentor
+
+[33mcommit b9547b2c9bcd099ee0b59034a27c6cf65d509143[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Fri May 20 17:03:35 2022 +0200
+
+    Filter gts based on MIN_POINTS_OF_GT.
+
+[33mcommit 94752ad7f4cffebaada7213b2017599b24101304[m
+Author: Farzad <fnozarian@gmail.com>
+Date:   Fri May 20 15:06:12 2022 +0200
+
+    Bugfix: using labeled samples in unlabeled sample list.
+
+[33mcommit 86485f6edcb688d2f0bcf0105a3bbc2cafe99080[m
+Merge: 0326cda ec8c7ce
+Author: Farzad <fnozarian@gmail.com>
+Date:   Fri May 20 13:05:51 2022 +0200
+
+    Merge remote-tracking branch 'OpenPCDet-fnozarian/3dioumatch' into 3dioumatch
+
+[33mcommit 0326cdac47442fbbb912a579a2527d6c8fbd0e4e[m
+Author: shashankag14 <shashankag14@gmail.com>
+Date:   Fri May 20 12:26:13 2022 +0200
+
+    Bugfix: removed extra line of forward ()
+
+[33mcommit ec8c7ced35c8aee83a360bcadde1c02b5c77d3cb[m
+Author: shashankag14 <shashankag14@gmail.com>
+Date:   Fri May 20 12:26:13 2022 +0200
+
+    Bugfix: removed extra line of forward ()
+
+[33mcommit 380f46cf3ee2dcf70a5664e4c4f1d7a2f1de1adc[m
+Merge: 9b72617 846cf3e
+Author: Farzad <fnozarian@gmail.com>
+Date:   Fri May 20 11:17:34 2022 +0200
+
+    Merge branch 'master' into 3dioumatch
+    
+    # Conflicts:
+    #       .gitignore
+    #       README.md
+    #       pcdet/datasets/augmentor/augmentor_utils.py
+    #       pcdet/datasets/augmentor/data_augmentor.py
+    #       pcdet/datasets/augmentor/database_sampler.py
+    #       pcdet/models/detectors/detector3d_template.py
+    #       pcdet/models/roi_heads/pvrcnn_head.py
+    #       pcdet/models/roi_heads/roi_head_template.py
+    #       tools/demo.py
+    #       tools/scripts/dist_train.sh
+    #       tools/train.py
+
+[33mcommit 9b726171af133ed53bb3d17d0b2a9e6c080acb4e[m
+Merge: a7cf536 27c7720
+Author: Farzad <fnozarian@gmail.com>
+Date:   Thu May 19 20:58:40 2022 +0200
+
+    Merge remote-tracking branch '3DIoUMatch-PVRCNN/main' into 3dioumatch
+    
+    # Conflicts:
+    #       .gitignore
+    #       README.md
+    #       pcdet/datasets/__init__.py
+    #       pcdet/datasets/augmentor/augmentor_utils.py
+    #       pcdet/datasets/augmentor/data_augmentor.py
+    #       pcdet/datasets/augmentor/database_sampler.py
+    #       pcdet/datasets/dataset.py
+    #       pcdet/datasets/kitti/kitti_dataset.py
+    #       pcdet/models/backbones_2d/base_bev_backbone.py
+    #       pcdet/models/dense_heads/anchor_head_single.py
+    #       pcdet/models/dense_heads/anchor_head_template.py
+    #       pcdet/models/dense_heads/point_head_simple.py
+    #       pcdet/models/dense_heads/point_head_template.py
+    #       pcdet/models/detectors/__init__.py
+    #       pcdet/models/detectors/detector3d_template.py
+    #       pcdet/models/detectors/pv_rcnn.py
+    #       pcdet/models/roi_heads/pvrcnn_head.py
+    #       pcdet/models/roi_heads/roi_head_template.py
+    #       pcdet/models/roi_heads/target_assigner/proposal_target_layer.py
+    #       pcdet/utils/object3d_kitti.py
+    #       tools/cfgs/dataset_configs/kitti_dataset.yaml
+    #       tools/cfgs/kitti_models/pv_rcnn.yaml
+    #       tools/demo.py
+    #       tools/eval_utils/eval_utils.py
+    #       tools/scripts/dist_train.sh
+    #       tools/scripts/slurm_test_mgpu.sh
+    #       tools/scripts/slurm_train.sh
+    #       tools/train.py
+    #       tools/train_utils/train_utils.py
+
+[33mcommit 846cf3ed21c274f95f041e7e21fd039ca5c99a1f[m[33m ([m[1;31mupstream/master[m[33m)[m
+Author: xiangruhuang <xiangruhuang816@gmail.com>
+Date:   Wed Apr 13 17:04:35 2022 -0400
+
+    skip backprop in case no grouped indices are available (#926)
+
+[33mcommit 878ad2e0016f3a5c4b3c4d5c86c9e9eebb230a62[m
+Author: cheng052 <chengbowen052@163.com>
+Date:   Thu Apr 7 23:34:11 2022 +0800
+
+    mark idx in BallQuery as non_differentiable (#919)
+
+[33mcommit fd20aabc7aa2f9deb3de7bc31a47b951f2ca8378[m
+Author: Yzichen <zichen.yu0730@gmail.com>
+Date:   Wed Mar 30 04:47:17 2022 +0800
+
+    fix recall calculation bug for empty scene (#908)
+
+[33mcommit 1d5dac7630cd4b4ee92c4e0787c3741991688df8[m
+Author: Julian Schoep <julian.schoep@gmail.com>
+Date:   Tue Mar 29 23:29:54 2022 +0300
+
+    fix: fix TypeError in ROI subsampling function (#893)
+    
+    * fix TypeError in ROI subsampling function
+    
+    * add comment
+
+[33mcommit a35f429768b3aa6ea2e7cd0a6452e1fcb7671c8d[m
+Author: jihan.yang <jihanyang13@gmail.com>
+Date:   Sat Mar 12 11:11:46 2022 +0800
+
+    slight modification for lyft (#863)
+
+[33mcommit 9c8e583e28e45582565175f848b7a2538eb6acf6[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Mar 9 00:50:44 2022 +0100
+
+    remove the version constrain of numpy
+
+[33mcommit a9c66fee5348dcfb5f73ccca71becc2871ce3a78[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Mon Feb 21 15:04:31 2022 +0100
+
+    Update close_stale_issues.yml
+    
+    Updaet to 1000 temporarily to process old issues.
+
+[33mcommit e1bfcecbf4966fe417bf56fa60d6e177a1909724[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Mon Feb 21 03:05:46 2022 +0100
+
+    bugfixed: solve the issue of blocking with dist_train.sh, automatically search tcp ports (#815)
+    
+    * bugfixed: stuck when training with dist_train.sh, support tcp_port
+    
+    * bugfixed: solve the issue of blocking with dist_train.sh, automatically search tcp ports
+
+[33mcommit a5cf2a5362e752beb927bdf3f0785475cf24a64f[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Sun Feb 20 17:06:56 2022 +0100
+
+    Update close_stale_issues.yml
+    
+    add `operations-per-run: 300` to increase the limit of operations to process old issues.
+
+[33mcommit e685140975ca203242e826e13b088654509d6620[m
+Author: Martin Hahner <14181188+MartinHahner@users.noreply.github.com>
+Date:   Sat Feb 19 13:44:20 2022 +0100
+
+    Create close_stale_issues.yml (#813)
+
+[33mcommit 1f261421e4715d1a132c310626818c7800cecd1f[m
+Author: Christoph Gerum <christoph.gerum@uni-tuebingen.de>
+Date:   Fri Feb 18 15:17:00 2022 +0100
+
+    Add missing __init__.py files (#803)
+    
+    * Fix missing __init__.py
+    
+    * Add further missing __init__.py
+
+[33mcommit 6a1495ca610186d3b9d5142a4a6506b8dc78bce1[m
+Author: yangtianyu92 <30435412+yangtianyu92@users.noreply.github.com>
+Date:   Thu Feb 17 09:11:48 2022 +0800
+
+    Fix docker pull command(#807)
+
+[33mcommit 830fba91605f236bc2183f83ae1e986df35200d7[m
+Author: Jiajun Deng <dengjj@mail.ustc.edu.cn>
+Date:   Sat Feb 12 20:38:58 2022 +0800
+
+    Add support for docker (#799)
+    
+    * add cbgs_dyn_pp_centerpoint.yaml
+    
+    * add cbgs_voxel01_res3d_centerpoint.yaml
+    
+    * add support of centerpoint on Nuscenes in README
+    
+    * add translation augmentation, re-implement the performance of CenterPoints with 0.075m voxels
+    
+    * cover the original world translation augmentation
+    
+    * modify random_translation_along_X
+    
+    * fix a small bug in random_world_translation()
+    
+    * add support for docker
+
+[33mcommit 6aff8be6547967f1e14fcd65679dff5ee8445da3[m
+Author: Jiajun Deng <dengjj@mail.ustc.edu.cn>
+Date:   Fri Feb 11 00:04:33 2022 +0800
+
+    Fix a small bug in random_world_translation() (#797)
+    
+    * add cbgs_dyn_pp_centerpoint.yaml
+    
+    * add cbgs_voxel01_res3d_centerpoint.yaml
+    
+    * add support of centerpoint on Nuscenes in README
+    
+    * add translation augmentation, re-implement the performance of CenterPoints with 0.075m voxels
+    
+    * cover the original world translation augmentation
+    
+    * modify random_translation_along_X
+    
+    * fix a small bug in random_world_translation()
+
+[33mcommit d921d138b93fc3c227c11a99163611026c868e4b[m
+Author: Jiajun Deng <dengjj@mail.ustc.edu.cn>
+Date:   Thu Feb 10 23:49:31 2022 +0800
+
+    Fix a small bug in random_world_translation() (#796)
+    
+    * add cbgs_dyn_pp_centerpoint.yaml
+    
+    * add cbgs_voxel01_res3d_centerpoint.yaml
+    
+    * add support of centerpoint on Nuscenes in README
+    
+    * add translation augmentation, re-implement the performance of CenterPoints with 0.075m voxels
+    
+    * cover the original world translation augmentation
+    
+    * modify random_translation_along_X
+
+[33mcommit 7402f6937baf303420004309ad3467e64335bb82[m
+Author: Jiajun Deng <dengjj@mail.ustc.edu.cn>
+Date:   Thu Feb 10 23:44:16 2022 +0800
+
+    Rewrite world translation augmentation, and re-implement CenterPoint with voxel_size=0.075 (#795)
+    
+    * add cbgs_dyn_pp_centerpoint.yaml
+    
+    * add cbgs_voxel01_res3d_centerpoint.yaml
+    
+    * add support of centerpoint on Nuscenes in README
+    
+    * add translation augmentation, re-implement the performance of CenterPoints with 0.075m voxels
+    
+    * cover the original world translation augmentation
+    
+    * modify random_translation_along_X
+
+[33mcommit 0627984bb8bd9b360de2dee77ca2103472d64e65[m
+Author: Jiajun Deng <dengjj@mail.ustc.edu.cn>
+Date:   Mon Feb 7 06:21:28 2022 +0800
+
+    Add support for CenterPoint on Nuscenes (#786)
+    
+    * add cbgs_dyn_pp_centerpoint.yaml
+    
+    * add cbgs_voxel01_res3d_centerpoint.yaml
+    
+    * add support of centerpoint on Nuscenes in README
+
+[33mcommit 7ce6a2b5b99c34716bda042d37c086de47462f4d[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Feb 2 11:58:17 2022 +0100
+
+    bugfixed: stuck when training with dist_train.sh, support tcp_port (#784)
+
+[33mcommit 274c90c55364ab87e15cd27b3e19005b795ae503[m
+Author: jihan.yang <jihanyang13@gmail.com>
+Date:   Mon Jan 24 23:26:52 2022 +0800
+
+    fixbug: miss cls loss weight in center head (#772)
+
+[33mcommit fa78c4f121f5801b223a64290978e0c5094b18fe[m
+Author: Jiajun Deng <dengjj@mail.ustc.edu.cn>
+Date:   Sun Jan 23 20:59:38 2022 +0800
+
+    add options to control the number of checkpoints being evaluated after training (#770)
+
+[33mcommit 5861246c31c876f0e5a3e125086ed2b0be7bc9da[m
+Author: Jiajun Deng <dengjj@mail.ustc.edu.cn>
+Date:   Tue Jan 18 02:15:58 2022 +0800
+
+    Add multi_scale_3d_strides in 3D ResBackbone (#761)
+    
+    * add dynamic pillar vfe
+    
+    * make the upperbound unaccessible
+    
+    * add place holder for voxel generation
+    
+    * add DynPillarVFE
+    
+    * add PFNLayerV2
+    
+    * add try except for torch_scatter package
+    
+    * add dynamic pillar in readme
+    
+    * add the cfg file of centerpoint with dynamic pillar
+    
+    * recover original mask_points_by_range
+    
+    * masking points with points_coords out of grid_size
+    
+    * add dynamic voxelization and config for voxel_rcnn
+    
+    * add multi_scale_3d_strides in resbackbone
+
+[33mcommit 1376e6105c657e04da8116c938ffe9ec6218a58d[m
+Author: Jiajun Deng <dengjj@mail.ustc.edu.cn>
+Date:   Tue Jan 18 01:34:35 2022 +0800
+
+    Add dynamic voxelization and config for voxel r-cnn on Waymo Open Dataset (#760)
+    
+    * add dynamic pillar vfe
+    
+    * make the upperbound unaccessible
+    
+    * add place holder for voxel generation
+    
+    * add DynPillarVFE
+    
+    * add PFNLayerV2
+    
+    * add try except for torch_scatter package
+    
+    * add dynamic pillar in readme
+    
+    * add the cfg file of centerpoint with dynamic pillar
+    
+    * recover original mask_points_by_range
+    
+    * masking points with points_coords out of grid_size
+    
+    * add dynamic voxelization and config for voxel_rcnn
+
+[33mcommit c47a94bce5df68d7ebf138055fab926b3197940d[m
+Author: Jiajun Deng <dengjj@mail.ustc.edu.cn>
+Date:   Tue Jan 18 01:14:04 2022 +0800
+
+    Masking points inside dyanmic_pillar_vfe.py (#759)
+    
+    * add dynamic pillar vfe
+    
+    * make the upperbound unaccessible
+    
+    * add place holder for voxel generation
+    
+    * add DynPillarVFE
+    
+    * add PFNLayerV2
+    
+    * add try except for torch_scatter package
+    
+    * add dynamic pillar in readme
+    
+    * add the cfg file of centerpoint with dynamic pillar
+    
+    * recover original mask_points_by_range
+    
+    * masking points with points_coords out of grid_size
+
+[33mcommit 0f4d3f1f5c1fbe551c35917220e75eb90e28035f[m
+Author: djiajunustc <dengjj@mail.ustc.edu.cn>
+Date:   Sat Jan 15 23:47:48 2022 +0800
+
+    Add DynamicPillarVFE (#754)
+    
+    * add dynamic pillar vfe
+    
+    * make the upperbound unaccessible
+    
+    * add place holder for voxel generation
+    
+    * add DynPillarVFE
+    
+    * add PFNLayerV2
+    
+    * add try except for torch_scatter package
+    
+    * add dynamic pillar in readme
+    
+    * add the cfg file of centerpoint with dynamic pillar
+
+[33mcommit 7f977ea3ab5638bb0e927fbdbc21f7693a71563a[m
+Author: Au1ong <37474760+OuyangJunyuan@users.noreply.github.com>
+Date:   Sat Jan 15 23:26:17 2022 +0800
+
+    Add pyramid data augmentation which mentioned in SE-SSD (#751)
+    
+    * add pyramid augmentation
+    
+    * add pyramid augmentation
+    
+    * format the modified file
+    
+    Co-authored-by: Shaoshuai Shi <shaoshuaics@gmail.com>
+
+[33mcommit a991105c1b11bbb4dc6374eb33f0a4c51049c88d[m
+Merge: 1483517 b6fbf07
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jan 5 22:31:05 2022 +0100
+
+    Release the codes of PV-RCNN++, update OpenPCDet to v0.5.2
+    
+    Release the codes of PV-RCNN++, update OpenPCDet to v0.5.2
+
+[33mcommit b6fbf07fa0d6ca391037d02855a6e704f5478731[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jan 5 22:27:02 2022 +0100
+
+    update README.md
+
+[33mcommit 90d2a65615b62b3ed52bed44ff840795f9d22802[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jan 5 22:22:27 2022 +0100
+
+    update README.md
+
+[33mcommit ae2c03a94db9a4948a17a4defaf679c519e13d4e[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jan 5 22:12:54 2022 +0100
+
+    bugfixed: conflict when merging with master branch
+
+[33mcommit f91d90984a45750c08e34782cfc36b8df7442bde[m
+Merge: ca5a1f1 1483517
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jan 5 19:13:10 2022 +0100
+
+    merge with master
+
+[33mcommit 1483517a6e6ec83a605d0e9ff2a10f468f54afb2[m
+Author: Christian Reisinger <christian-reisinger@gmx.at>
+Date:   Wed Jan 5 19:10:28 2022 +0100
+
+    Gt sampler sweeps (#721)
+    
+    * Fixes #718
+    
+    * FIX: replaced wrong part
+    
+    * #719 Fixes index error max_dt while inference: No gt_db_sampling -> MAX_SWEEPS-1 > # unique dt (e.g. first frame)
+    
+    * move max_sweeps filter to PointFeatureEncoder with new config FILTER_SWEEPS
+    
+    * update to lowercase
+    
+    Co-authored-by: Christian Fruhwirth-Reisinger <christian.reisinger@student.tugraz.at>
+    Co-authored-by: Shaoshuai Shi <shaoshuaics@gmail.com>
+
+[33mcommit ca5a1f19ae8794a1612877173a4d9563d228a440[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jan 5 18:56:27 2022 +0100
+
+    update to version 0.5.2 with PV-RCNN++ and 100% results on WOD
+
+[33mcommit ac5198a7ad7facc5d2febaa46c92116440541502[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jan 5 18:55:16 2022 +0100
+
+    move max_sweeps filter to PointFeatureEncoder with new config FILTER_SWEEPS
+
+[33mcommit 38c89dd633ee649395433ac60f8af235a952221b[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Dec 28 02:42:51 2021 +0100
+
+    add config of PV-RCNN++ (resnet)
+
+[33mcommit c89a92f95f3c7f852f9001b3f4f01833e460b0ac[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Mon Dec 27 10:07:54 2021 +0800
+
+    update back to original version of torch.div and torch.meshgrid to also support lower version pytorch
+
+[33mcommit e496d2488fa034a811545cb855ac635400673dbe[m
+Merge: 684dc23 1f5b787
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Mon Dec 27 01:08:29 2021 +0100
+
+    Merge branch 'dev_v0.5' into dev_v0.5_pvrcnn++
+
+[33mcommit 1f5b7872b03e9e3d42801872bc59681ef36357b5[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Mon Dec 27 01:07:16 2021 +0100
+
+    bugfixed: stuck when training with dist_train.sh (#728)
+
+[33mcommit 684dc23153fd57bb9f1badba296889f2f590205d[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Sun Dec 26 23:54:51 2021 +0100
+
+    update torch.div and torch.meshgrid to remove warning
+
+[33mcommit 46d558ed71d1e1ee157d7f68dc10653969e0f058[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Sun Dec 26 17:33:13 2021 +0100
+
+    bugfixed: cumsum floordiv in vectorpool
+
+[33mcommit 55d12ff5e24a2bff700531f701bf8ee9b5e8a854[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Sun Dec 26 16:57:36 2021 +0100
+
+    add PVRCNNPlusPlus detector
+
+[33mcommit 13789796f70a033435a8289b3e1361000fc4694c[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Sun Dec 26 16:57:10 2021 +0100
+
+    Support PV-RCNN++ frameworks, support VectorPool aggregation
+
+[33mcommit 183d353a05005a0eb625b8ee69d3aea503a46b81[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Sun Dec 26 12:50:38 2021 +0100
+
+    bugfixed: small bug in SPC sampling
+
+[33mcommit fa39f1c508b6b1e12dc65e4104cf423d43f2d284[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Sun Dec 26 12:33:21 2021 +0100
+
+    Support sectorized-proposal-centric (SPC) keypoint sampling
+
+[33mcommit 8922371e27c1e099f7e1daed4905a9a2ebe66f17[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Sun Dec 26 12:32:17 2021 +0100
+
+    Support StackFarthestPointSampling
+
+[33mcommit df299e7c2c215fa11a1dba08cc8f5904a370755b[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Sun Dec 26 10:58:54 2021 +0100
+
+    fix typos: FPS should be farthest point sampling instead of furthest point sampling
+
+[33mcommit ec98288876c707eb01fc78f32abf2e18dd7d7950[m
+Merge: eed89a4 d177430
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Sun Dec 19 22:33:25 2021 +0100
+
+    Merge pull request #720 from jihanyang/master
+    
+    support Lyft dataset
+
+[33mcommit d1774307e6727218529d2b1806a6266b223e564f[m
+Author: jihanyang <jihanyang13@gmail.com>
+Date:   Sun Dec 19 18:30:38 2021 +0800
+
+    update README
+
+[33mcommit dffbb04a35264aa657eab8e7b9dc70cd37ee967f[m
+Author: jihanyang <jihanyang13@gmail.com>
+Date:   Sat Dec 18 15:57:48 2021 +0800
+
+    add lyft model cfg
+
+[33mcommit 75b2d0372288d213b95800e09db2a9ba3e09198e[m
+Author: jihanyang <jihanyang13@gmail.com>
+Date:   Sat Dec 18 15:31:51 2021 +0800
+
+    add lyft splits
+
+[33mcommit 093efb9a81af77aac0f396b157f11cd5a197fa74[m
+Author: jihanyang <jihanyang13@gmail.com>
+Date:   Sat Dec 18 14:26:04 2021 +0800
+
+    add lyft cfgs
+
+[33mcommit afa6adf1c133ac1b15b1a0ec0d9b5f26f59bb111[m
+Author: jihanyang <jihanyang13@gmail.com>
+Date:   Sat Dec 18 14:13:09 2021 +0800
+
+    support lyft dataset
+
+[33mcommit eed89a4d6c6cc6125cf551391a9819a737fd5b20[m
+Author: Christian Reisinger <christian-reisinger@gmx.at>
+Date:   Fri Dec 17 21:37:44 2021 +0100
+
+    Removes object points from gt_sampled point cloud which are not in the scope of MAX_SWEEPS (#719)
+    
+    * Fixes #718
+    
+    * FIX: replaced wrong part
+    
+    Co-authored-by: Christian Fruhwirth-Reisinger <christian.reisinger@student.tugraz.at>
+
+[33mcommit 2d00f82c54a4b894f7d49cf00d4ac551f1d826a1[m
+Author: Martin Hahner <14181188+MartinHahner@users.noreply.github.com>
+Date:   Fri Dec 17 21:36:32 2021 +0100
+
+    Update database_sampler.py (#715)
+    
+    Fix https://github.com/open-mmlab/OpenPCDet/issues/702
+
+[33mcommit 4f0e1f02fe89eeba34a47251620067c8c06a0296[m
+Author: dkliang <dkliang@hust.edu.cn>
+Date:   Fri Dec 10 18:10:54 2021 +0800
+
+    fixed a training bug (#707)
+    
+    fixed a training bug
+
+[33mcommit 76279ff212dfbf16fd06a6e4a51e9bca02304b02[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Dec 9 23:19:07 2021 +0100
+
+    update OpenPCDet to v0.5.1 (#706)
+    
+    * support PointPillar (anchor-based, anchor-free) for WOD datasets
+    
+    * update OpenPCDet to v0.5.1
+
+[33mcommit 63ffbac99ada3d2ba24d26242ced28e4307027d2[m
+Author: Xavier Santos <xavier@ua.pt>
+Date:   Thu Dec 9 21:58:39 2021 +0000
+
+    Added new augmentation methods and the option of augmentation by addition instead of replacement (#653)
+    
+    * NOTEBOOK FOR DATA AUGMENTATION
+    
+    * SMALL SAMPLE DATASET
+    
+    * TRANSLACTIONS GLOBAL AND LOCAL
+    
+    * LOCAL AUGMENTATIONS FINISHED
+    
+    * ADJUSTED DATA FORMATS TO PCDET YAML COMPATIBILITY
+    
+    * BUGFIX
+    
+    * ADDED TITLES
+    
+    * ADAPTED OPENPCDET TO FIT NEW AUGMENTATIONS
+    
+    * SAVE IMAGES OF THE DATA AUGMENTATION EXAMPLES
+    
+    * LOCAL TRANSFORMATION RANDOM VALUES VARY WITH OBJECT AND NOT SCENE
+    
+    * FIXED YAML
+    
+    * FIXED BUGS IN PARAMETERS
+    
+    * FIX IN LOCAL BOXES
+    
+    * NEW BOX FILTER
+    
+    * FRUSTUM DROPOUT
+    
+    * FRUSTUM DROPOUT IMPLEMENTED ON OPENPCDET
+    
+    * REMOVE FIGURES FROM VERSION CONTROL
+    
+    * MORE EFFICIENT LOCAL METHOD
+    
+    * LOCAL TRANSFORMATION WITH NUMPY SPED UP
+    
+    * BUGFIX ON AUGMENTATION FUNCTION
+    
+    * GET PREDICTED LABELS
+    
+    * AUGMENTATION DONE BY ADDITION
+    
+    * RANDOM SELECTION OF REMAINIG FRAMES
+    
+    * LOGGER WITH TRANSFORMATION DETAILS
+    
+    * CHANGED COUNTER TO SAMPLE IDX SELECTION METHOD
+    
+    * BUGFIX ON KITTY_DATABASE
+    
+    * BUGFIX
+    
+    * BUGFIX
+    
+    * FIX ON GENERATOR
+    
+    * DEBUG LOGS TO FILE
+    
+    * FIXED LOGGER
+    
+    * SAVE POINT CLOUDS TO OBJ FILE
+    
+    * UPDATED NOTEBOOK
+    
+    * CLEANUP
+    
+    * .gitignore is now working
+    
+    * fixed .gitignore
+    
+    * REMOVED YAML FILES FROM .gitignore
+    
+    * parse results to a csv
+    
+    * yaml changed
+    
+    * fixed gitignore
+    
+    * FIXED BUG THAT DUPLICATED THE TEST SET
+    
+    * small fixes on yaml
+    
+    * fix gitignore
+    
+    * updated generate_sets.py
+    
+    * fixed csv_parser.py
+    
+    * Delete output directory
+    
+    * Delete output directory
+    
+    * saving figures with better resolution
+    
+    * implemented a way to chose to augment the raw pcs
+    
+    * updated csv_parser.py
+    
+    * fixed yamls to include the new selection system
+    
+    * notebook updated
+    
+    * mosaic added
+    
+    * new models
+    
+    * fixed gitignore
+    
+    * fixed gitignore
+    
+    * applied changes
+    
+    * Delete data_aumentation.ipynb
+    
+    * Delete pointpillar_fullaug.yaml
+    
+    * updated gitignore
+    
+    * bugfix
+    
+    * updated training and notebook
+    
+    * updated gitignore
+    
+    * cleanup code
+    
+    * updated yamls
+    
+    * reset
+    
+    * new augmentation methods
+    
+    * example conf for pointpillars
+    
+    * updated example config
+    
+    * bugfix on the config file
+    
+    * fixed get_points_in_box function
+    
+    * fixed local frustum dropout
+    
+    * fixed pointpillar_newaugs.yaml
+    
+    * bugfixed: import math for some augmentations
+    
+    * increased margin in point selection for local augmentation
+    
+    * bugfixed: velocity should not be translated for translation augs. Add warning to check the correctness before using
+    
+    * bugfixed: add back the aug of random_image_flip
+    
+    Co-authored-by: Shaoshuai Shi <shaoshuaics@gmail.com>
+
+[33mcommit 3b0f5014fb5d5ba6acfbc585067c799f33c6415f[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Dec 9 02:17:57 2021 +0100
+
+    use try-except strategy to skip the dependency on pandas/pandaset if you do not use it
+
+[33mcommit 378593aca52e31a58cf1350454b818c588f05ef0[m
+Author: lea-v <56593778+lea-v@users.noreply.github.com>
+Date:   Thu Dec 9 02:12:04 2021 +0100
+
+    Add pandaset support (#396)
+    
+    * Add basic support for Pandaset dataset
+    
+    * Add gt_sampling support for pandaset
+    
+    * Enable training on different classes than raw dataset
+    
+    * Save pandaset output in the same format as annotations
+    
+    * Add dataset config file for pandaset
+    
+    * Make pandaset dataset compatible with test.py
+    
+    - add 'evaluation' method
+    - add 'name' key to predictions dict
+    
+    * Enable selecting lidar device for pandaset
+
+[33mcommit e94c91d314fbd6477b4c3d4c841ce5d487635324[m
+Author: jihan.yang <jihanyang13@gmail.com>
+Date:   Mon Dec 6 21:19:00 2021 +0800
+
+    refix disp_dict when distributed (#700)
+
+[33mcommit 65554a5296123c174f9cc15afc172dd106956d01[m
+Author: Dingry <39176662+Dingry@users.noreply.github.com>
+Date:   Mon Dec 6 17:51:11 2021 +0800
+
+    Disable logger propogation to avoid repeat logging (#698)
+
+[33mcommit d9e76fe90779ff03d4520f2e449f67e99ece938d[m
+Author: jihan.yang <jihanyang13@gmail.com>
+Date:   Sun Dec 5 13:26:31 2021 +0800
+
+    support recording batch time during training (#697)
+
+[33mcommit 7b27d8e7ec279b6b02360380df8684cf6cbd42bc[m
+Author: xiazhongyv <45617755+xiazhongyv@users.noreply.github.com>
+Date:   Sat Dec 4 18:31:17 2021 +0800
+
+    Use yaml.safe_load instead of yaml.load (#694)
+    
+    Co-authored-by: xiazhongyu <xiazhongyu@pku.edu.cn>
+
+[33mcommit 3fa8b5121dba863b101e84f9b58aa7ddb17c7d2b[m
+Merge: 70857b8 d1368b0
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Dec 1 01:31:54 2021 +0100
+
+    Merge pull request #683 from sshaoshuai/master
+    
+    Release OpenPCDet v0.5.0
+
+[33mcommit d1368b015d3e677840bcfaccc449c78fb241e3c6[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Dec 1 00:48:08 2021 +0100
+
+    update documents for OpenPCDet v0.5.0
+
+[33mcommit 1713360549289c1397a680c4a6358da65b4634c2[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Nov 30 23:28:15 2021 +0100
+
+    update README.md for OpenPCDet v0.5.0
+
+[33mcommit 496ff8fec73c1bd5df9bd29c9594bf7c157a4a8c[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Nov 30 23:17:16 2021 +0100
+
+    add CenterPoint config without ResNet
+
+[33mcommit ab245f476b5d545bfeabff8191eb8a1bae37222a[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Fri Nov 26 21:33:28 2021 +0100
+
+    add PV-RCNN config with CenterHead
+
+[33mcommit d3179c0f1a03baa950f69a10f04852f55ef64abb[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Fri Nov 26 21:31:46 2021 +0100
+
+    support CenterHead for RCNN training/testing
+
+[33mcommit 2d269538606aa9da4fe656105fe2316e33c6c815[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Nov 30 22:05:04 2021 +0100
+
+    update NMS configs of WOD for better performance
+
+[33mcommit 0685f4ffc9b3171b02315155b44e4a700964dd1a[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Sun Nov 28 15:14:35 2021 +0100
+
+    move target_assign of CenterHead from GPU to CPU
+
+[33mcommit 35df959bacdeb37718c60f36aafae30cbd5be090[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Fri Nov 26 21:15:35 2021 +0100
+
+    set to only evaluate last epoch in train.py
+
+[33mcommit abd7b7f068b1d41a3c38e81212c197ec358ac72a[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Fri Nov 26 21:14:57 2021 +0100
+
+    update: set fake_gt_infos=False for waymo_eval.py
+
+[33mcommit c7f2e9876aca8c7582761cf3f57676ae8875025b[m
+Merge: 2c93d25 6d220a3
+Author: jihanyang <jihanyang13@gmail.com>
+Date:   Thu Nov 25 15:34:34 2021 +0800
+
+    Merge branch 'dev_v0.5_vis' into dev_v0.5
+
+[33mcommit 6d220a349e0eee4a83d53e92fa3a099e5e72d561[m
+Author: jihanyang <jihanyang13@gmail.com>
+Date:   Thu Nov 25 15:33:54 2021 +0800
+
+    support open3d visualization tool
+
+[33mcommit 2c93d25adcaa5e9edb3391c7f639b68135c93f67[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Nov 24 17:35:03 2021 +0100
+
+    fix some warnings, set default workers=4, depend on torchvision/kornia (CaDDN) softly
+
+[33mcommit 3365a5e89eb5d4c7c921b4d748f205646910583a[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Nov 24 17:29:13 2021 +0100
+
+    update default training batch for PartA2 and training epochs for centerpoint
+
+[33mcommit 82987c4d79aaddc31f7c9c6c95f112f876dd9337[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Nov 24 14:31:25 2021 +0100
+
+    add CenterPoint WOD config
+
+[33mcommit be7951cf11afdc1ce68d7758298cd147ad656325[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Nov 24 02:00:42 2021 +0100
+
+    [continue] support CenterHead / CenterPoint (1stage), add its WOD config
+
+[33mcommit 52310ad9e6696473c90a659bfa879fde0c51898c[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Nov 24 01:58:09 2021 +0100
+
+    support CenterHead / CenterPoint (1stage), add its WOD config
+
+[33mcommit 0ccbbaae0bf2848d5905d7cd6a599a8e14cb9004[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Nov 24 01:54:12 2021 +0100
+
+    support FILTER_EMPTY_BOXES_FOR_TRAIN and DISABLE_NLZ_FLAG_ON_POINTS for WOD by default, eval with sample_interval=1
+
+[33mcommit f6c824ccba79ebff982bf788171b5d0fb81abb40[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Nov 24 00:44:13 2021 +0100
+
+    save WOD metadata to infos
+
+[33mcommit ce26ea1abbdf988fd16205fef8d606e7eae7c79a[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Nov 24 00:38:30 2021 +0100
+
+    add _init_path.py for using multiple PCDet in the same environment
+
+[33mcommit 1f8da8d1da734b62b2fbf0cf6a4958c39e759b50[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Nov 24 00:37:34 2021 +0100
+
+    update create_groundtruth_database of WOD to generate global npy file for sharedmemory based GT_database
+
+[33mcommit 2e4d090e05198c74e9bb224274a63bbd12371192[m
+Merge: 14e2adc 14fdedc
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Nov 23 23:52:31 2021 +0100
+
+    support SharedMemory option for WOD Data and GT_database to speed up the training process
+
+[33mcommit 14e2adc51ac581953cfba7ffb8ba1cfd5edb1600[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jun 9 17:45:17 2021 +0800
+
+    update check_sequence_name_with_all_version of WOD to support train/val/test prefix
+
+[33mcommit 738ba6f9347155a5fc229671bfd1146ac611325d[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jun 9 16:25:12 2021 +0800
+
+    Improve WOD performance with two LiDAR returns, speed up WOD data pre-processing with multiprocesssing.Pool
+
+[33mcommit 70857b83ca8689732af9c1e1efc84c99041ac467[m
+Merge: c9d31d3 8fc1a5d
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Nov 23 17:36:57 2021 +0100
+
+    Merge pull request #658 from acivgin1/master for spconv 2.0
+    
+    Add support for spconv 2.0
+
+[33mcommit 8fc1a5d57bcb418d71d5118fb3df4b58d4ea0244[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Nov 23 17:31:42 2021 +0100
+
+    bugfixed: weights transformation between spconv 1.x and spconv 2.x, should consider both native/implicit spconv 2.x
+
+[33mcommit cddcf9ba4ec4a9f16f3b303723895efc870c8c2f[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Nov 23 17:28:09 2021 +0100
+
+    move spconv_utils.py to pcdet/utils/, update find_all_spconv_keys()
+
+[33mcommit 511244e24f897c1d705284b0d393b8d1868c7162[m
+Author: acivgin1 <amar.civgin@gmail.com>
+Date:   Tue Nov 16 13:24:08 2021 +0100
+
+    better handling of weight loading for spconv1 vs 2
+
+[33mcommit 667572fdc86703a2435986740d1f9d6f9dcd543a[m
+Author: acivgin1 <amar.civgin@gmail.com>
+Date:   Fri Nov 5 13:23:50 2021 +0100
+
+    backward support for spconv VoxelGenerator
+
+[33mcommit 09385e1e35b2170cc07c6cbba760d3b0847b537d[m
+Author: acivgin1 <amar.civgin@gmail.com>
+Date:   Fri Nov 5 13:22:25 2021 +0100
+
+    backward support for spconv import and features
+
+[33mcommit c9674890cf5274afd866796950c5f294b0058850[m
+Author: acivgin1 <amar.civgin@gmail.com>
+Date:   Thu Nov 4 09:23:55 2021 +0100
+
+    version parsing fix
+
+[33mcommit 4bdd8dda6a447b200c2574405bebea911c58f8f0[m
+Author: acivgin1 <amar.civgin@gmail.com>
+Date:   Thu Nov 4 09:04:23 2021 +0100
+
+    bug fix in version check
+
+[33mcommit 59ed73040da9b1635ffddd5f09a8d26d1ea0d176[m
+Author: acivgin1 <amar.civgin@gmail.com>
+Date:   Thu Nov 4 09:04:10 2021 +0100
+
+    coords need to be contiguous
+
+[33mcommit 19de178dc7650256826760f160ddeffacbae3c32[m
+Author: acivgin1 <amar.civgin@gmail.com>
+Date:   Thu Nov 4 09:02:51 2021 +0100
+
+    switch to replace_feature method
+
+[33mcommit 3817a135c5809f7e6b8a9c3efb5c504e109d3271[m
+Author: acivgin1 <amar.civgin@gmail.com>
+Date:   Wed Nov 3 16:49:32 2021 +0100
+
+    bump up version, support for older models
+    
+    - as per the spconv documentation, the order of channels in weights is now changed
+    - we need to get all the affected weights, using the util function in spconv_utils
+    - we need to check the version with the version checker in __init__.py
+    - we need to transpose last two dimensions of existing weights, from older models
+    - to avoid duplication a single _load_state_dict method is added
+
+[33mcommit 43b3c006a394c9e5f37a72ffb4caf744ea9a53cb[m
+Author: acivgin1 <amar.civgin@gmail.com>
+Date:   Wed Nov 3 16:49:11 2021 +0100
+
+    switch to new VoxelGenerator
+
+[33mcommit 9d9e9b853af802a372a8f713125ceb10390d3285[m
+Author: acivgin1 <amar.civgin@gmail.com>
+Date:   Wed Nov 3 16:48:58 2021 +0100
+
+    spconv changed imports
+
+[33mcommit 14fdedcaeee82ba44ff35673b4176a57b8ffb6ed[m
+Author: jihan.yang <jihanyang13@gmail.com>
+Date:   Tue Sep 14 15:20:26 2021 +0800
+
+    Modify global gt database to support multi-machine
+
+[33mcommit 3b9549c9a7a33dc284e5aa2370767cb088929cad[m
+Author: jihan.yang <jihanyang13@gmail.com>
+Date:   Tue Sep 14 11:20:13 2021 +0800
+
+    fixbug: modify global gt database when applying data aug
+
+[33mcommit a4c3ccf5d6729b6b47dc9424611c97a90872a0ef[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Sat Sep 11 16:40:08 2021 +0800
+
+    update global gtdatabase name
+
+[33mcommit 70d5aef3bcf68981a88cd8c2be44377338eb0d42[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Sat Sep 11 16:05:06 2021 +0800
+
+    support USE_SHARED_MEMORY=True in DBSampler with Global GT database
+
+[33mcommit 27c77208d755effba4dd11751fa9ee9106ed113a[m
+Author: Honggyu Choi <42855032+honggyuchoi@users.noreply.github.com>
+Date:   Thu Sep 9 22:22:08 2021 +0900
+
+    fix bug (#8)
+    
+    Co-authored-by: 2015005205 <2015005205@hanyang.ac.kr>
+
+[33mcommit 9fc9f152b9895ccbbfb8780b7dbcb3a3e8ba8e0b[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Sep 9 19:08:32 2021 +0800
+
+    add USE_SHARED_MEMORY=False by default
+
+[33mcommit 05f59def35ab3b23e2e5d86d46eebbfee9a9c156[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Sep 9 19:05:32 2021 +0800
+
+    support clean sharedmemory after training
+
+[33mcommit 880257ab5a72a7aac2b3d71ca74626e41744a991[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Sep 9 18:35:35 2021 +0800
+
+    support USE_SHARED_MEMORY=True in WaymoDataset
+
+[33mcommit 01b425bd7de9507e4ecdcfc138e5d36b1c2a1a6c[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Sep 9 17:23:43 2021 +0800
+
+    support USE_SHARED_MEMORY=True for GT sampling
+
+[33mcommit ee11621ce43097762612df46f6e34bec9cdc915d[m
+Merge: cbf2f4e c9d31d3
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Sep 9 15:34:58 2021 +0800
+
+    Merge branch 'master' into dev_v0.3.1
+
+[33mcommit 1c4c525b7d3642021d6b67bb6fc6da027959a8ac[m
+Author: Yezhen Cong <52420115+THU17cyz@users.noreply.github.com>
+Date:   Wed Sep 1 02:19:50 2021 +0800
+
+    Update README.md
+
+[33mcommit c9d31d393acaae34d74cb03bd6ccff9976d3d1f3[m
+Author: Nopileos2 <Nopileos2@users.noreply.github.com>
+Date:   Mon Aug 30 13:58:27 2021 +0200
+
+    Changed dist to dist_train for loading parameters (#621)
+    
+    Passing dist_train instead of dist as the to_cpu paremeter to the loading functions.
+
+[33mcommit fe48aaaefab751b5ff7438e25c6a2fc903a538da[m
+Author: Yezhen Cong <52420115+THU17cyz@users.noreply.github.com>
+Date:   Tue Aug 10 23:05:22 2021 +0800
+
+    Change split_0.01_1 to train_0.01_1 in README
+
+[33mcommit d6a2ab69516e81258c5801edee76d2d680cfe1f3[m
+Author: Yezhen Cong <52420115+THU17cyz@users.noreply.github.com>
+Date:   Tue Aug 10 21:16:52 2021 +0800
+
+    Fix #5
+
+[33mcommit 46c71731d1dc0e83471e39621c96d14bfe6a920c[m
+Author: Yezhen Cong <52420115+THU17cyz@users.noreply.github.com>
+Date:   Tue Aug 10 21:04:11 2021 +0800
+
+    Update database_sampler.py
+    
+    #5
+
+[33mcommit 8e055f02df245b1f0675e874792dd708fb84c04b[m
+Author: djiajunustc <dengjj@mail.ustc.edu.cn>
+Date:   Thu Aug 5 16:13:08 2021 +0800
+
+    add voxel r-cnn in readme (#610)
+    
+    * Update __init__.py
+    
+    missing kornia. before image_to_tensor
+    
+    * Update README.md
+    
+    add Voxel R-CNN to changelog
+    
+    * Update README.md
+    
+    Add Voxel R-CNN as the officially released code
+
+[33mcommit 3d6653f468f86f9270a5d2a6fc691e9308c13ebb[m
+Author: djiajunustc <dengjj@mail.ustc.edu.cn>
+Date:   Thu Aug 5 15:58:34 2021 +0800
+
+    Update __init__.py (#609)
+    
+    missing kornia. before image_to_tensor
+
+[33mcommit 1aa469fb7b0bdc22fc030f660f741e59a666160c[m
+Author: Yezhen Cong <52420115+THU17cyz@users.noreply.github.com>
+Date:   Tue Jul 13 13:04:59 2021 +0800
+
+    Update README.md
+
+[33mcommit aece3837457ad7677f7025f85ff452a854222056[m
+Author: Yezhen Cong <52420115+THU17cyz@users.noreply.github.com>
+Date:   Tue Jul 6 13:54:59 2021 +0800
+
+    Add files via upload
+
+[33mcommit b50d9fd932c42e6916d29ad7153f1d3ccbd55827[m
+Author: Yezhen Cong <52420115+THU17cyz@users.noreply.github.com>
+Date:   Sat Jun 19 13:40:44 2021 +0800
+
+    Fix typos in README
+
+[33mcommit a141b5d12d6eccd679977ab5edefc1b6a2bd62e9[m
+Author: Yezhen Cong <52420115+THU17cyz@users.noreply.github.com>
+Date:   Sat Jun 19 11:07:04 2021 +0800
+
+    Update README.md
+
+[33mcommit 7de2c8634cca2f5cd3cd7c51fe28b6cca40da1d7[m
+Author: Yezhen Cong <52420115+THU17cyz@users.noreply.github.com>
+Date:   Sat Jun 19 10:56:00 2021 +0800
+
+    Update README.md
+
+[33mcommit 3c7a869dcfdf26a075309f3050525b468025fae2[m
+Author: Yezhen Cong <52420115+THU17cyz@users.noreply.github.com>
+Date:   Sat Jun 19 10:55:07 2021 +0800
+
+    Update README.md
+
+[33mcommit 46f1d4ef84778b648967bc870b51cbc9c2fe52d1[m
+Author: Yezhen Cong <52420115+THU17cyz@users.noreply.github.com>
+Date:   Sat Jun 19 10:49:40 2021 +0800
+
+    Update README and default params
+
+[33mcommit 977b582242161b68f1f062a6af906e32312e12bd[m
+Author: Yezhen Cong <52420115+THU17cyz@users.noreply.github.com>
+Date:   Fri Jun 18 17:12:48 2021 +0800
+
+    Update README.md
+
+[33mcommit c0505f81145492421e9b18e65c80f1336d5166c3[m
+Author: Yezhen Cong <52420115+THU17cyz@users.noreply.github.com>
+Date:   Fri Jun 18 17:07:35 2021 +0800
+
+    Update README.md
+
+[33mcommit 41988f9f62fc0ba1337ca5c65648abc899cde7be[m
+Author: Yezhen Cong <52420115+THU17cyz@users.noreply.github.com>
+Date:   Fri Jun 18 16:42:18 2021 +0800
+
+    Update README.md
+
+[33mcommit 35bebae81b71079ddc2561728783643ea9df08a5[m
+Author: Yezhen Cong <52420115+THU17cyz@users.noreply.github.com>
+Date:   Fri Jun 18 16:30:29 2021 +0800
+
+    Initial commit
+
+[33mcommit 9e3d58acdad14d87c1cbbcb3ebb83780e1893a00[m
+Author: Yezhen Cong <52420115+THU17cyz@users.noreply.github.com>
+Date:   Fri Jun 18 16:07:25 2021 +0800
+
+    Initial commit
+
+[33mcommit cbf2f4eb0996c939017877b4c0713b2bb144a54e[m
+Merge: 19dba90 c5a759f
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jun 9 17:53:25 2021 +0800
+
+    Merge branch 'master' into dev_v0.3.1
+
+[33mcommit 26a16123cf820e29ed565f4ad53964c66f3ea030[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jun 9 17:52:28 2021 +0800
+
+    bugfixed: add **kwargs to each roi_head to support variable argument (#559)
+
+[33mcommit c5a759f3d4c98f65e6cc07625e2f9005ef15fd28[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jun 9 17:47:11 2021 +0800
+
+    bugfixed: add **kwargs to each roi_head to support variable argument
+
+[33mcommit 19dba90e2878d6c7461e4ebc92ab90d8164ef91a[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jun 9 17:45:17 2021 +0800
+
+    update check_sequence_name_with_all_version of WOD to support train/val/test prefix
+
+[33mcommit ba9484e9353de6376900a466f54072b3a1a98f1b[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jun 9 16:25:12 2021 +0800
+
+    Improve WOD performance with two LiDAR returns, speed up WOD data pre-processing with multiprocesssing.Pool
+
+[33mcommit 686cf446991c50e1117b97ad4468adcdfea080f8[m
+Author: djiajunustc <dengjj@mail.ustc.edu.cn>
+Date:   Tue Jun 8 22:00:32 2021 +0800
+
+    Add Voxel R-CNN (#555)
+    
+    * add voxel roi pooling
+    
+    * add voxel r-cnn head
+    
+    * add voxel query
+    
+    * add voxel r-cnn
+    
+    * add Voxel R-CNN
+    
+    * add infos about Voxel R-CNN
+    
+    * add voxel_rcnn_car.yaml
+    
+    * add infos about Voxel R-CNN
+    
+    Co-authored-by: Shaoshuai Shi <shaoshuaics@gmail.com>
+
+[33mcommit 05009423dc53f53f7b4ea07ae3c21070dcf2ed29[m
+Author: shijianjian <sj8716643@126.com>
+Date:   Tue Jun 8 20:17:24 2021 +0800
+
+    Kornia adaption (#552)
+
+[33mcommit 150b7ba0eee87e6994dd30d2ba16b9ba8f7e278e[m
+Author: Syed Luqman Quadri <luqman.quadri@gmail.com>
+Date:   Tue Jun 1 10:46:00 2021 +0530
+
+    Typo fix in DEMO.md (#548)
+    
+    There was some typo mistakes that i fixed in this file.
+
+[33mcommit 19068b52a182c04694305c4542fede9dddc4d527[m
+Author: ArtificialCleverness <chenkangl@hotmail.com>
+Date:   Tue Jun 1 13:15:36 2021 +0800
+
+    modified few documentation about ious (#550)
+    
+    Co-authored-by: pengfengming <pengfengming@haomo.ai>
+
+[33mcommit 7efdf026a341b5d9862ca419f9c5e08a3acc0577[m
+Author: Martin Hahner <14181188+MartinHahner@users.noreply.github.com>
+Date:   Sat May 22 11:19:01 2021 +0200
+
+    Fix issues with CaDDN (#542)
+    
+    * Download DeepLabV3 if not available yet
+    
+    * Fix dtype issue
+    
+    Fix RuntimeError: expected backend CPU and dtype Float but got backend CPU and dtype Long
+
+[33mcommit aaf9cbeb9c9b5753eba821e652c80160c558184d[m
+Author: Cody Reading <codyreading@gmail.com>
+Date:   Wed May 19 23:13:27 2021 -0400
+
+    Support Monocular 3D Detector CaDDN (#538)
+    
+    * Added CaDDN detector and support for image, depth map, and 2D GT box
+    dataloading
+    
+    * Moved image flip augmentation to augmentor_utils
+    
+    * Updated default get item list to include points
+    
+    * Moved utils functions into transform_utils
+    
+    * Combined FFE + F2V into ImageVFE, renamed FFE to FFN, moved depth downsample into data_processor
+    
+    * Updated README with updated CaDDN weights
+    
+    * Updated comments for image vfe
+
+[33mcommit e3bec15f1052b4827d942398f20f2db1cb681c01[m
+Author: jihan.yang <jihanyang13@gmail.com>
+Date:   Mon May 10 23:33:08 2021 +0800
+
+    support SECOND-IoU and baseline results (#517)
+    
+    * support SECOND-IoU
+    
+    * rename file
+    
+    * modify readme and fix model name in __init__.py
+
+[33mcommit a59df77de67906dd35bac6fa05e7b2dab934a283[m
+Author: Lynn <19627675+lynnpepin@users.noreply.github.com>
+Date:   Mon May 10 11:32:47 2021 -0400
+
+    Removed trailing spaces that broke commands in GETTING_STARTED.md (#436)
+
+[33mcommit 725c59fd8e39aaf29bd145ad743f2964ad679631[m
+Author: Martin Hahner <14181188+MartinHahner@users.noreply.github.com>
+Date:   Mon May 10 17:31:19 2021 +0200
+
+    Fix issue if there are less than half of NUM_KEYPOINTS (#534)
+    
+    If there are less than half of model_cfg.NUM_KEYPOINTS it will lead to
+    RuntimeError: unsupported operation: some elements of the input tensor and the written-to tensor refer to a single memory location.
+    Please clone() the tensor before performing the operation.
+
+[33mcommit e4d2b75bc0e48399177a1823ad6f4ff8179cc835[m
+Merge: 0642cf0 c25f699
+Author: jihan.yang <jihanyang13@gmail.com>
+Date:   Tue Apr 20 17:32:34 2021 +0800
+
+    Merge pull request #513 from jihanyang/master
+    
+    fixbug: multi_classes_nms and waymo dataset with old version splits
+
+[33mcommit c25f699c99ea7d5cab3326a1bcff7b0578899efb[m
+Author: jihanyang <jihanyang13@gmail.com>
+Date:   Tue Apr 20 17:30:18 2021 +0800
+
+    fixbug: multi_classes_nms and waymo dataset with old version splits
+
+[33mcommit 0642cf06d0fd84f50cc4c6c01ea28edbc72ea810[m
+Merge: 5874585 86cf4ed
+Author: jihan.yang <jihanyang13@gmail.com>
+Date:   Wed Jan 27 16:11:49 2021 +0800
+
+    Merge pull request #445 from jihanyang/master
+    
+    fixbug: modify input args with return for box utils
+
+[33mcommit 86cf4edff4616751d863e2601174e401b0808ce7[m
+Author: jihanyang <jihanyang13@gmail.com>
+Date:   Wed Jan 27 16:03:18 2021 +0800
+
+    fixbug: modify input args with return for box utils
+
+[33mcommit 58745850e419b171893c7b0161c34a085e08d10f[m
+Merge: b56ab15 ca0a950
+Author: jihan.yang <jihanyang13@gmail.com>
+Date:   Wed Jan 27 14:04:00 2021 +0800
+
+    Merge pull request #437 from Starrah/fix_contiguous
+    
+    fixbug: AssertionError features.is_contiguous() in pointnet2_utils.py
+
+[33mcommit b56ab159d3646a7f71ca116e82124b6e3747b082[m
+Merge: a7cf536 a8b7ff1
+Author: jihan.yang <jihanyang13@gmail.com>
+Date:   Wed Jan 27 14:00:11 2021 +0800
+
+    Merge pull request #438 from Starrah/fix_sample_points
+    
+    fixbug: error of sample_points when num_point < far_idx_choice
+
+[33mcommit ca0a9505572bc2481eace14945a914e7814dfbbe[m
+Author: Starrah <46821571+starrah@users.noreply.github.com>
+Date:   Wed Jan 20 05:27:34 2021 +0800
+
+    fix: AssertionError features.is_contiguous() in pointnet2_utils.py
+    caused by `features` in pointnet2_backbone.py:78, which is possible to be a non-contiguous tensor, being directly passed into SA_modules without calling .contiguous()
+
+[33mcommit a8b7ff1bc5c1730c97592352e8edba31bc8bdba2[m
+Author: Starrah <46821571+starrah@users.noreply.github.com>
+Date:   Wed Jan 20 05:22:54 2021 +0800
+
+    fix: error of sample_points when num_point < far_idx_choice
+    In data_processor.py sample_points, when num_points < far_idx_choice, a negative value is passed into np.random.choice, which cause a ValueError.
+    In fact the variable `near_idxs_choice` return by the deleted line is never used.
+
+[33mcommit a7cf5368d9cbc3969b4613c9e61ba4dcaf217517[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Dec 2 14:19:56 2020 +0800
+
+    bugfixed: remove separate_multihead in AxisAlignedTargetAssigner (#392)
+
+[33mcommit a07572f389a00dadb859b7186471ef837e044278[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Fri Nov 27 14:36:23 2020 +0800
+
+    add clarification for Waymo evaluation (#384)
+    
+    * bugfixed: add num_points_in_gt to the waymo_infos for evaluation
+    
+    * add clarification for Waymo evaluation
+
+[33mcommit c37a7a1df35297bf22b2bba132c12a45f8c31086[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Fri Nov 27 13:50:57 2020 +0800
+
+    bugfixed: add num_points_in_gt to the waymo_infos for evaluation (#383)
+
+[33mcommit 594962844729353842207b9e3c50f8b2434484f9[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Nov 25 15:22:26 2020 +0800
+
+    add kitti_utils.py for evaluating with KITTI metrics (#374)
+    
+    * add kitti_utils.py for evaluating with KITTI metrics
+
+[33mcommit d5655a41616a0a1bcd0aff5b9a3a5e6975a4bb1d[m
+Author: Martin Hahner <14181188+MartinHahner@users.noreply.github.com>
+Date:   Wed Nov 25 08:22:02 2020 +0100
+
+    Add tqdm to WOD preprocessing (#372)
+
+[33mcommit 53b2b93d6613b8a6b2c8f624b7f33ca36d484607[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Nov 25 15:17:11 2020 +0800
+
+    add contiguous() after transpose() at pointrcnn_head (#373)
+    
+    * bugfixed: ignore empty boxes in visualization
+    
+    * add contiguous() after transpose() at pointrcnn_head.py
+
+[33mcommit 1145f836f9091c7e6fa1fb825e377f5efac134cc[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Nov 17 02:36:03 2020 +0800
+
+    bugfixed: typo for using multihead config, not critical (#352)
+
+[33mcommit a6bb35802ed20dc4091e03fe57399b55355b096d[m
+Merge: 7bc7e55 4d3f000
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Nov 10 15:56:12 2020 +0800
+
+    Support Waymo Open Dataset with SoTA results #349
+
+[33mcommit 4d3f0009eff0bb8291a8022572434dfdd5e57f23[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Nov 10 15:50:03 2020 +0800
+
+    update codes of WOD
+
+[33mcommit 8df9187e23846d42f14826236d7e487da271330c[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Nov 10 15:41:35 2020 +0800
+
+    update docs for WOD
+
+[33mcommit fc2586225423238d889a0085b82d73d9dd6cab16[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Nov 10 15:30:40 2020 +0800
+
+    small update of WOD
+
+[33mcommit ae04946df20640316feca4d4789e84db634b2bca[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Nov 10 15:16:56 2020 +0800
+
+    use pathlib instead of path
+
+[33mcommit 42ee22970346d274abb6e882132c95cb6f01adc9[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Nov 10 15:13:18 2020 +0800
+
+    update docs for WOD
+
+[33mcommit 327c173a56068e24e48bed583c01e8fbafbe46a4[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Nov 10 13:46:52 2020 +0800
+
+    update README
+
+[33mcommit 9d28ad44719746baf43d80b6cfb3ce8ed5802720[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Nov 10 13:34:54 2020 +0800
+
+    add train/val splits of WOD, update README
+
+[33mcommit 9ca83d4501395e5675feeb3e55367024173b086c[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Nov 10 00:13:33 2020 +0800
+
+    update the README
+
+[33mcommit cb658689b380d76c9dc0acc77cc2fff7b203b821[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Mon Nov 9 22:38:17 2020 +0800
+
+    add SECOND and PartA2 configs on waymo
+
+[33mcommit 8f3bf93f1eca65745e144ce92276b86dda3d99dd[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Mon Nov 9 22:33:54 2020 +0800
+
+    add WaymoDataset dataloader and evaluation tools, add related configs
+
+[33mcommit 7bc7e551f963be782aca0cda1e19f20e8b2ac93c[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Sun Nov 8 01:56:13 2020 +0800
+
+    Bugfixed: re-sample gt_boxes when training
+
+[33mcommit 0e84f82d7c45bc86ab59a646fab1da9050c05aa9[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Nov 4 23:23:39 2020 +0800
+
+    bugfixed: re-sample scene if gt_boxes.shape[0] == 0, check fg_num in PointHeadTemplate (#340)
+
+[33mcommit f982b5bfdf0e8e15a2e2d7fead2925ff564051d7[m
+Author: Martin Hahner <MartinHahner88@users.noreply.github.com>
+Date:   Tue Sep 8 13:41:29 2020 +0200
+
+    Fix NMS settings for evaluation / postprocessing (#278)
+
+[33mcommit 9e460da23163dffcca007ac8725221257cf36d55[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Mon Aug 10 19:08:10 2020 +0800
+
+    bugfixed: ignore empty boxes in visualization (#234)
+
+[33mcommit 262596c6130b1360846f61f395a5e1f480cb9b9e[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Mon Aug 10 14:58:42 2020 +0800
+
+    bugfixed: update the provided NuScenes models (#229)
+
+[33mcommit aecc89c3eef604bc87cfb20c2a1140f989edab05[m
+Author: jihan.yang <jihanyang13@gmail.com>
+Date:   Sun Aug 9 13:29:06 2020 +0800
+
+    automatically find unused tcp port when mgpu train or test (#224)
+    
+    * automatically find unused tcp port when mgpu train or test
+    
+    * fixbug: set tcp_port before set python args
+
+[33mcommit 07419768607d76ee16b4f8d641ee7f1990ec55d8[m
+Author: ltphy <phylieng97@gmail.com>
+Date:   Fri Aug 7 10:23:34 2020 +0700
+
+    fix sampling points (#218)
+
+[33mcommit 96a60920c0afffd0eb26764334ccb16ec83acd67[m
+Merge: 32567b0 226bf45
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Fri Jul 31 17:19:48 2020 +0800
+
+    Merge pull request #196 from sshaoshuai/master
+    
+    bugfixed: update slurm_train.sh
+
+[33mcommit 226bf4507f7b6af385f8b6d75bb85d15de5750b0[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Fri Jul 31 17:17:43 2020 +0800
+
+    bugfixed: update slurm_train.sh
+
+[33mcommit 32567b044c327a4d3cee179094f32646d8311c95[m
+Merge: 853b759 04e0d4f
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 30 16:05:04 2020 +0800
+
+    Merge pull request #192 from sshaoshuai/master
+    
+    Release OpenPCDet v0.3.0
+
+[33mcommit 04e0d4f095c6087a1f4c30766228cb174521f554[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 30 15:59:09 2020 +0800
+
+    update README.md
+
+[33mcommit 44c10a3afc6d9bc2f457ad3f8266a83de5f9b312[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 30 15:44:44 2020 +0800
+
+    sort python imports with isort
+
+[33mcommit 2b53953096b183f184b6dba2f210c1f92b1666ae[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 30 15:12:11 2020 +0800
+
+    update README.md
+
+[33mcommit 35b68c9241dbb483c00869e535175e923788ef63[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 30 14:17:54 2020 +0800
+
+    update VoxelGenerator to support spconv1.0 and spconv1.2
+
+[33mcommit 4db49780f924e3c0127adefc5b79773b27c50d07[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jul 29 05:24:46 2020 -0400
+
+    continune to update cuda codes to support PyTorch 1.1/1.5
+
+[33mcommit 11a7e4345dca4fe1c6eb4c47a00278df76beb026[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jul 29 15:57:04 2020 +0800
+
+    update cuda codes to support PyTorch 1.5
+
+[33mcommit f38468701c3174ec425be8d46f16c87d87152050[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Jul 28 21:42:55 2020 +0800
+
+    update README.md
+
+[33mcommit b937d3827f202af0afbb4c3a84430b244a1b6510[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Jul 28 21:15:33 2020 +0800
+
+    update README.md
+
+[33mcommit d2829c9682410dc896544f3b6a9dad9e0aeeab89[m
+Merge: 669881e b43d99f
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Jul 28 20:54:30 2020 +0800
+
+    Merge branch 'dev_v0.3'
+
+[33mcommit 669881e43f28551518cb7ee961fefc60e9b30a1d[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Jul 28 20:54:21 2020 +0800
+
+    update README.md
+
+[33mcommit b43d99f549bf56bba314fe4ffb2d68b9dfdefa84[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Jul 28 20:53:09 2020 +0800
+
+    update config, fix small bugs for testing
+
+[33mcommit d2d32f692cd0d5cc628c2d0399dc29dc70039417[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Jul 28 19:47:12 2020 +0800
+
+    fix seed for sample_points data_processsor, update configs
+
+[33mcommit c4033be4f7273c6083e6880ddd51651acb2feead[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Jul 28 17:54:59 2020 +0800
+
+    nuscene config updated, README updated
+
+[33mcommit 71a45080af988eaa796b850f685fbfd41976a2c4[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Jul 28 17:39:26 2020 +0800
+
+    specify epochs and batch size in the configs
+
+[33mcommit e15c16a70324db43d8f24c0f05aa18df762e77fc[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Jul 28 17:07:51 2020 +0800
+
+    update documents
+
+[33mcommit d4cce0994b6bd9897ed2c55c7f0ffa569b89a8c6[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Jul 28 17:06:05 2020 +0800
+
+    update documents
+
+[33mcommit f561b8ae288f3b6fa6e5aca971ebbcd3012c18b3[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Jul 28 14:46:37 2020 +0800
+
+    bugfixed: backward bug in ThreeInterpolate of stacked version pointnet2
+
+[33mcommit 3b2bcdafeeb99aadbd981854e8e01683b7f302b8[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Sat Jul 25 21:04:32 2020 +0800
+
+    bugfixed to test with multi-class nms on multihead
+
+[33mcommit a236428baa3d6251fedc3970ec8d76c046c8caf7[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Sat Jul 25 20:34:49 2020 +0800
+
+    support multi-classes nms for multi-head, not checked
+
+[33mcommit 6901df66b8b68696d5d2b79beb0fb31dbf1bd96d[m
+Merge: 43baf78 1c4e139
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Mon Jul 27 20:51:43 2020 +0800
+
+    merge with nuscene related codes
+
+[33mcommit 43baf787bcc3ceefc007c0bafb3b122a56911cc9[m
+Merge: 85ff046 8075b17
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Mon Jul 27 20:41:49 2020 +0800
+
+    Merge branch 'dev_pointrcnn' into dev_v0.2.1
+
+[33mcommit 85ff046dd4ee23902758665cf4bf9e202eaefc8f[m
+Merge: c66f663 853b759
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Fri Jul 24 15:48:42 2020 +0800
+
+    Merge branch 'master' of https://github.com/open-mmlab/OpenPCDet
+
+[33mcommit 853b759be4663b799f0c5ad32a0472cfaf37e1e9[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Fri Jul 24 15:48:16 2020 +0800
+
+    remove the visualization dependency on CUDA OpenPCDet (#182)
+
+[33mcommit c66f663d1dc90dc490e3b67e99c8eb79cd50cdbd[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Fri Jul 24 15:46:36 2020 +0800
+
+    remove the visualization dependency on CUDA OpenPCDet
+
+[33mcommit 8075b170abb0b528e37298d4f0a212bdb165c2e0[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Fri Jul 24 15:31:04 2020 +0800
+
+    support PartA2_free models, update PointHead
+
+[33mcommit 48400f13e628cf80fef8370f45ea0daaf428e2cf[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 23 21:10:50 2020 +0800
+
+    update pointrcnn_roiawarepool.yaml
+
+[33mcommit 29ad7c8916b9e55588208805d44abf49ed734c39[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 23 21:08:02 2020 +0800
+
+    support PointRCNNHead with roipoint_pool3d, and pointrcnn.yaml
+
+[33mcommit 33c0632a0c4f525d91a68b34f9d91db05285899b[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 23 21:06:57 2020 +0800
+
+    add config pointrcnn_roiawarepool.yaml
+
+[33mcommit a90d93754942920f4de0953d4aa7008f67d3cae4[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 23 17:14:06 2020 +0800
+
+    support PointNet2MSG backbone_3d for PointRCNN
+
+[33mcommit adbb322f1a2a42f8dcb9e6644c402f97861b23fe[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 23 17:11:43 2020 +0800
+
+    add PointNet2 batch version from https://github.com/sshaoshuai/Pointnet2.PyTorch
+
+[33mcommit 30df59ed8cc0e366a9b9a3c2fa6a0c718da8d8bc[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 23 17:10:27 2020 +0800
+
+    add sample_points data_processor from PointRCNN
+
+[33mcommit e6f6151c5f81a874b6394febf2893f9a42cf7ff8[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 23 14:45:53 2020 +0800
+
+    add RETURN_ENCODED_TENSOR config for Spconv UNet
+
+[33mcommit b6fbc50d28c0a308b7f8b597b9fb99a8dbb19a09[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 23 13:46:33 2020 +0800
+
+    add PartA2_free.yaml config without part regression
+
+[33mcommit b492d113d0469616c95bf616fe79d7b804a3fff4[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 23 01:07:57 2020 +0800
+
+    bugfixed: set num_point_features without vfe, typos (#177)
+
+[33mcommit 0d524bc156d77f27eeda02ca604cd6d2aff17e12[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 23 00:59:14 2020 +0800
+
+    bugfixed: remove batch_index after proposal_layer
+
+[33mcommit 202d767d1c84f10f752dc979e3cb1d2c604cd0ea[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 23 00:29:41 2020 +0800
+
+    add config DISABLE_PART for PartA2Head
+
+[33mcommit 8ec2a2d4fbd7bcfe6cc07ef9f608d235d762618b[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 23 00:29:15 2020 +0800
+
+    support PointRCNN with PartA2 head
+
+[33mcommit 4edd264b7cbe80f636d2b211dc12da83c165dc81[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 23 00:28:19 2020 +0800
+
+    update setup.py to support pointnet2 cuda
+
+[33mcommit cf29d887b6c7f01fb9c4aecfd3013f6a742f7a38[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 23 00:27:48 2020 +0800
+
+    support dense_head PointHeadBox
+
+[33mcommit 0b21d8f92220daeee037d6a173b4cecd7f3913d4[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 23 00:26:19 2020 +0800
+
+    support PointNet2Backbone
+
+[33mcommit 6b4dae4d1474a27e91bd6594ddaebd7c6a197f58[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 23 00:25:24 2020 +0800
+
+    support PointNet2 3D backbone with pointnet2_stack cuda codes
+
+[33mcommit 8447a4754000cd9fb3018d8fd5b1c117bc5754b1[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 23 00:24:12 2020 +0800
+
+    support PointResidualCoder
+
+[33mcommit a2e7d4744e32c05c405a3f58c369cbfebedc2cce[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 23 00:23:07 2020 +0800
+
+    bugfixed: set num_point_features without vfe, typos
+
+[33mcommit 1c4e13918624b3f9b7df308a8e7548bebe554e80[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Jul 21 22:03:09 2020 +0800
+
+    bugfixed: use relative path in nuscene infos for sweeps
+
+[33mcommit 9babdfda77921d2033dcad23ab42c094c7f9eacd[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Jul 21 21:50:14 2020 +0800
+
+    bugfixed: shape check in vsa layer and nms (#174)
+
+[33mcommit bea20f3bc6da1ebb714d15b5ee373a9c3967b3d5[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Fri Jul 17 19:59:37 2020 +0800
+
+    update README.md (#166)
+
+[33mcommit 45311136af5abda377e71077b1bfe172827642fa[m
+Merge: 9f5d201 b8d2131
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Fri Jul 17 18:49:16 2020 +0800
+
+    Merge pull request #165 from sshaoshuai/master
+    
+    Add visualization codes and a quick demo.
+
+[33mcommit b8d2131af21f31008346616f698685438c85703f[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Fri Jul 17 18:45:35 2020 +0800
+
+    update DEMO.md
+
+[33mcommit 9bb7a60cf4f0f81f0c4da3ec0680b73d6555f826[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Fri Jul 17 18:44:47 2020 +0800
+
+    update DEMO.md
+
+[33mcommit b1cefad0bd15a72f935c7f3204bc5a4e59a8411f[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Fri Jul 17 18:39:09 2020 +0800
+
+    add quick demo codes and introduction to test on custom data
+
+[33mcommit e0bc968256b3f9eafb0f0953bd0b02cdf1d09e2b[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Fri Jul 17 17:10:58 2020 +0800
+
+    add simple visualization codes
+
+[33mcommit 6f9d92b9fa114eabf23b157ebaff9930d8764d9e[m
+Merge: f4bd7b0 9f5d201
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Fri Jul 17 15:02:36 2020 +0800
+
+    Merge branch 'master' into develop
+
+[33mcommit 9f5d201e108c7a16d46dd4fde06767d79a160fec[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 16 20:35:25 2020 +0800
+
+    add torch.no_grad context for proposal_layer (#160)
+
+[33mcommit 2400fdf22fb3279f0a274d4678d13bf547315276[m
+Author: Martin Hahner <MartinHahner88@users.noreply.github.com>
+Date:   Wed Jul 15 13:16:53 2020 +0200
+
+    Make browsing TensorBoard easier (#152)
+    
+    * Make TensorBoard more concise
+    
+    * Export only metrics using 40 recalll positions
+
+[33mcommit f4bd7b0b28e2709cea7f9c4e885ddfa0db65ac2c[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Jul 14 00:26:02 2020 +0800
+
+    Update README.md
+
+[33mcommit 0b1afcf978a02a729b44eb3239881fd40f5d7958[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Mon Jul 13 23:39:05 2020 +0800
+
+    Update README.md
+
+[33mcommit e5ba23faaa71d1b922e733d4ea1e3c927d512674[m
+Merge: b7553c8 7ac5625
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Mon Jul 13 23:24:49 2020 +0800
+
+    Merge branch 'develop'
+
+[33mcommit 7ac5625a5346fc356e20e43e6b9e1b22238b6d0c[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Mon Jul 13 23:13:17 2020 +0800
+
+    optimize the target_assigner to be more efficient
+
+[33mcommit 69326cef7a4c780524c090ff1e6739ec906ea79d[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Mon Jul 13 20:30:49 2020 +0800
+
+    speed up PFNLayer
+
+[33mcommit f70902b827629a94db2fca21c4898a0cac89b328[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Mon Jul 13 19:35:00 2020 +0800
+
+    add config cbgs_1conv_sepreg_dir.yaml
+
+[33mcommit eaa36cef3092df17a30761c8dac988234bb4643b[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Mon Jul 13 16:39:18 2020 +0800
+
+    speed up the axis_aligned_target_assigner.py
+
+[33mcommit efb942212a90d8eced0334a166031ca14a1d8bfd[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Sun Jul 12 22:45:53 2020 +0800
+
+    fix tiny bugs
+
+[33mcommit 8375336143ff4fdd70b25af550369dcef199701b[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Sun Jul 12 22:44:48 2020 +0800
+
+    fix tiny bugs
+
+[33mcommit f93948af691e8800689c3c7c3e1cbb087f57aa08[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Sun Jul 12 22:43:25 2020 +0800
+
+    bugfixed: DO NOT encode angle by sin when using cossin angle encoding
+
+[33mcommit ba28c08f0c94d39628895d222913d2e09e4c266e[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Sat Jul 11 17:35:22 2020 +0800
+
+    bugfixed: separte regression heads training
+
+[33mcommit 72088ee36263dacc5c2ad872386f512262a4a0a8[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Sat Jul 11 16:40:36 2020 +0800
+
+    support separate regression heads for different properties
+
+[33mcommit 3a551ac19d961a4a42bcecd9fbf06c75b2e0f66d[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Sat Jul 11 14:52:56 2020 +0800
+
+    bugfixed: continue to fix velocity flip and rot
+
+[33mcommit 14ac4d12f00f51b5b0f2ed20f5995ceaf0edf7d6[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Sat Jul 11 12:42:31 2020 +0800
+
+    bugfixed: flip and rot velocity when doing augmentation
+
+[33mcommit cb32ff13d1cbe8673efae71491cb79dc02a06dfb[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 9 20:20:12 2020 +0800
+
+    set pos_cls_weight=1.0, neg_cls_weight=2.0 for NuScenes configs
+
+[33mcommit 0dd5326e84d03a28c8742519375f6a145037f0a8[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 9 19:07:01 2020 +0800
+
+    bugfixed: support merge_all_iters_to_one_epoch in dataloader
+
+[33mcommit b7553c879d0ba36477931efe07a55adbc39823b9[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 9 19:09:22 2020 +0800
+
+    bugfixed: support merge_all_iters_to_one_epoch in dataloader (#142)
+    
+    * bugfixed: support merge_all_iters_to_one_epoch in dataloader
+
+[33mcommit f50c306af3e4837184d6a9e5219db72b1ecc3cf1[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 9 19:07:01 2020 +0800
+
+    bugfixed: support merge_all_iters_to_one_epoch in dataloader
+
+[33mcommit 7ef143090ac20ce4b104991611c86764e7ab3d69[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 9 17:47:01 2020 +0800
+
+    support merge_all_iters_to_one_epoch in NuScenes
+
+[33mcommit 9157ee4436432424232624c4efc37e101dec2011[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 9 15:15:32 2020 +0800
+
+    add config SET_NAN_VELOCITY_TO_ZEROS=True for NuScenes
+
+[33mcommit 67b43a3bda4d2592e510b9d89ce015e5b57506c2[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jul 8 22:43:20 2020 +0800
+
+    support merge_all_iters_to_one_epoch to avoid deadlock when switching epochs, eval last 10 epochs after training
+
+[33mcommit 1e2b0adb3aaeaf8ad5d2a052db606237ecd0f877[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jul 8 23:11:40 2020 +0800
+
+    support merge_all_iters_to_one_epoch, eval last 10 epochs after training (#137)
+    
+    support merge_all_iters_to_one_epoch to avoid deadlock when switching epochs, eval last 10 epochs after training (#137)
+
+[33mcommit ed6f3dd244e27ef0dfbacd98d22802beccd09b25[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jul 8 22:43:20 2020 +0800
+
+    support merge_all_iters_to_one_epoch to avoid deadlock when switching epochs, eval last 10 epochs after training
+
+[33mcommit 53fb27a16c31a434b53023dd9722f5e8161f7667[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jul 8 16:17:35 2020 +0800
+
+    config bugfixed in cbgs.yaml and cbgs_1conv.yaml
+
+[33mcommit 1bc21f70aa9499b562e76b3204c0eca419d1bc4e[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jul 8 15:54:18 2020 +0800
+
+    add pp_multihead.yaml config for NuScenes, modify loc weights from 2.0 to 0.25
+
+[33mcommit b35146e92f799b8d5cf0b6d104f7b11c54b4edaa[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Jul 7 22:47:06 2020 +0800
+
+    plot_examples=0 in nuscene evaluation
+
+[33mcommit 9b3246dd267e0d62fcc864a50ae1a5959a3d4c4d[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Jul 7 15:59:06 2020 +0800
+
+    add cbgs_1conv for nuscene dataset
+
+[33mcommit 764ce52e53e1c58489058ebb9b1c7692362ed1ae[m
+Merge: c45634a eb074cf
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Jul 7 15:56:51 2020 +0800
+
+    Merge branch 'dev_multihead' into dev_nuscene
+
+[33mcommit eb074cf274be8b74ea4805f9a414d99466b29050[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Jul 7 15:56:20 2020 +0800
+
+    refactoring some configs and codes of multi-head
+
+[33mcommit c45634a338154ecffdbcf4a1da88264718e5171f[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Jul 7 12:39:11 2020 +0800
+
+    bugfixed: try two eval_version for different version of nuscenes-devkit
+
+[33mcommit 9c07c58a2e7b8a55225a9b598e3cbe4e23aafde1[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Mon Jul 6 22:45:54 2020 +0800
+
+    add NuScenes configs for CBGS net
+
+[33mcommit 8f4ec1e3fff88a822185709d3ddb42bafe6a2ea4[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Mon Jul 6 22:44:54 2020 +0800
+
+    bugfixed: indice_key in VoxelResBackBone8x
+
+[33mcommit e0609869d45f9baa493edab828626cca291fb607[m
+Merge: 7d25122 0ac2901
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Mon Jul 6 22:42:17 2020 +0800
+
+    merge with dev_multihead
+
+[33mcommit 0ac2901ce59b17a330c488597b953466c5bddf9d[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Mon Jul 6 22:40:16 2020 +0800
+
+    bugfixed: loss calculation for separted multi-head
+
+[33mcommit 19c66f795be6925bb9ad535f571d39a18c77e03a[m
+Author: Gus-Guo <gus_guo@outlook.com>
+Date:   Sat Jul 4 11:35:45 2020 +0800
+
+    support more flexible setting of conv head; slice inputs when batch size is too large in PFNLayer to avoid bugs (#124)
+    
+    * support more flexible setting
+    
+    * slice inputs of nn.Linear when batch size is too large
+
+[33mcommit 6b3e52c9e820cbbdf04a113663e54d1e1ba9fbcd[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Mon Jul 6 21:11:35 2020 +0800
+
+    bugfixed: typo in anchor_head_multi
+
+[33mcommit 3e92d169de726ac01b060df998293dfce2dabcae[m
+Author: Gus-Guo <gus_guo@outlook.com>
+Date:   Mon Jul 6 20:53:43 2020 +0800
+
+    update config of multihead
+
+[33mcommit b16e08917465ae144eb3c3065ef786377a8a77e2[m
+Author: Gus-Guo <gus_guo@outlook.com>
+Date:   Mon Jul 6 20:52:36 2020 +0800
+
+    support multiheads that predict seperate classes
+
+[33mcommit 5de3373d887620c745f7a34bd55d80ce2c8b29aa[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Mon Jul 6 12:56:43 2020 +0800
+
+    bugfixed: support pcdet.__version__ for recording
+
+[33mcommit 6f80c436769a40c80ba1e9d7bfe7397015bbbcf0[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Fri Jul 3 21:21:26 2020 +0800
+
+    support DISABLE_AUG_LIST config for using --set disable augs
+
+[33mcommit 7d25122061e16140d97a9b485933eaf4c60e9111[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Mon Jul 6 16:28:44 2020 +0800
+
+    add VoxelResBackbone8x 3D backbone
+
+[33mcommit d0489cf666aa5427b2a7e6d75b5e9c55cc74d6ef[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Mon Jul 6 16:27:50 2020 +0800
+
+    support WeightedL1Loss in anchor_head_template
+
+[33mcommit 04a73eda55689d009dbaafe2c2f4c6b5dccf16ca[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Mon Jul 6 15:21:59 2020 +0800
+
+    bugfixed: velocity in infos with official nuscenes-devikit, add FILTER_MIN_POINTS_IN_GT config for nuscenes dataset
+
+[33mcommit c23c42084594e27147620bb0ef124fe24ca36061[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Mon Jul 6 13:23:33 2020 +0800
+
+    support class-balanced sampling for nuScenes dataset
+
+[33mcommit ea6cf24732c8b2da4087350ba8921a7e29315de9[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Sat Jul 4 01:26:34 2020 +0800
+
+    bugfixed: run nuscene testing with velocity
+
+[33mcommit 2c34611d16df64604e81c50a922c0f5ae9523072[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Fri Jul 3 20:35:54 2020 +0800
+
+    bugfixed: cvpr2019 ==> detection_cvpr_2019
+
+[33mcommit c1d93158891a044e00c7ff0d41873d89eea20fa9[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Fri Jul 3 20:21:16 2020 +0800
+
+    support velocity prediction with SECOND in NuScenes
+
+[33mcommit 950c67120fd1fd7a67c343209b2b6cc49fba4e58[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Fri Jul 3 18:45:19 2020 +0800
+
+    support nuscene evaluation
+
+[33mcommit c7f6de362a2f5aa914a567c55922d56c8850bcfe[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Fri Jul 3 15:25:56 2020 +0800
+
+    add second_multihead.yaml config for nuscenes
+
+[33mcommit 505468d19aa77ab5a61d92d9545b0071dd622cdf[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Fri Jul 3 00:13:35 2020 +0800
+
+    bugfixed: lidar_path ==> str(lidar_path), speed up create_groundtruth_database of nuscenes
+
+[33mcommit 45ffca4723aa2feda12b251e291537fef9e9f110[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 2 23:03:19 2020 +0800
+
+    support NuScenes dataset with training
+
+[33mcommit 9fdb4435ac5375adba530b8813ef608dffb681c0[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Mon Jul 6 12:58:48 2020 +0800
+
+    bugfixed: support pcdet.__version__ for recording (#126)
+    
+    * bugfixed: support pcdet.__version__ for recording
+
+[33mcommit 883fc156518bb5f4c6d9120635ea998f3169a04d[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Mon Jul 6 12:56:43 2020 +0800
+
+    bugfixed: support pcdet.__version__ for recording
+
+[33mcommit b42d7a99fefaa2418149596e22c27e68b798163c[m
+Author: Gus-Guo <gus_guo@outlook.com>
+Date:   Sat Jul 4 11:35:45 2020 +0800
+
+    support more flexible setting of conv head; slice inputs when batch size is too large in PFNLayer to avoid bugs (#124)
+    
+    * support more flexible setting
+    
+    * slice inputs of nn.Linear when batch size is too large
+
+[33mcommit b79844c93cc1df9f86f9400ec1661a6024b336a4[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Fri Jul 3 21:23:14 2020 +0800
+
+    support DISABLE_AUG_LIST config for using --set disable augs (#122)
+
+[33mcommit db4baf83fa9c09f0216b2ba1b19b2129dab24830[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Fri Jul 3 21:21:26 2020 +0800
+
+    support DISABLE_AUG_LIST config for using --set disable augs
+
+[33mcommit 5904f8e3fbe825af704a145178d7585e4e3a9d31[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Fri Jul 3 14:08:33 2020 +0800
+
+    remove warning from yaml and dbsampler (#121)
+    
+    * remove warning from yaml and dbsampler
+
+[33mcommit 4337fc4e5272fb9b8ab838014489a202124263ca[m
+Author: Gus-Guo <gus_guo@outlook.com>
+Date:   Fri Jul 3 00:22:27 2020 +0800
+
+    simplify codes of axis aligned target assigner and update corresponding config
+
+[33mcommit 3cd5c47b249a709ba3161bc15a1822b246709946[m
+Author: Gus-Guo <gus_guo@outlook.com>
+Date:   Fri Jul 3 00:17:59 2020 +0800
+
+    simplify codes of multihead and update multihead config
+
+[33mcommit 57e37335099365bcb76915471c5ff3b8d1f58633[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 2 23:06:07 2020 +0800
+
+    bugfixed: support gt_sampling with empty scenes, add logger without log_file (#119)
+    
+    * bugfixed: support gt_sampling with empty scenes, add logger without log_file
+
+[33mcommit 4497eb59195e72c31a497f2eb4ed133c82fbf29a[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 2 14:43:05 2020 +0800
+
+    abstract load_data_to_gpu function in train/test (#116)
+    
+    * abstract load_data_to_gpu function in train/test
+
+[33mcommit be0507ce5e59121d82e194c28d4ace3f86779df7[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 2 13:14:21 2020 +0800
+
+    add comments for supporting costum dataset (#115)
+    
+    * add comments for supporting costum dataset
+
+[33mcommit 45840b51704b86fcc6ee2a2a9265855ca3c534b8[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jul 2 12:29:27 2020 +0800
+
+    Support ditributed testing with torch.distributed.launch  (#114)
+    
+    * add dist_test.sh script for multi-gpu testing
+    
+    * update README.md
+
+[33mcommit 34076a445ef711760eeb78284ddbf30bd0832d15[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jul 1 17:14:58 2020 +0800
+
+    update README.md
+
+[33mcommit dc036f5bd6e7fd3aaf7d694e86656e4e962b35bd[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jul 1 13:00:09 2020 +0800
+
+    update README.md
+
+[33mcommit 63d6540ca692d62fe5447bfe7c63233126170774[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jul 1 12:35:45 2020 +0800
+
+    update README.md
+
+[33mcommit b32fbddbe06183507bad433ed99b407cbc2175c2[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jul 1 02:27:40 2020 +0800
+
+    bugfixed: inference and generate results on KITTI test set
+
+[33mcommit 12b8c131bb69c514d00c62834dde869b69c0e5f5[m
+Author: Gus-Guo <gus_guo@outlook.com>
+Date:   Fri Jun 26 19:14:49 2020 +0800
+
+    update config
+
+[33mcommit 88babd5406ba6041f61d056637292368ef4a86b4[m
+Author: Gus-Guo <gus_guo@outlook.com>
+Date:   Fri Jun 26 19:12:00 2020 +0800
+
+    avoid logger being pickled
+
+[33mcommit eaae7f474a0b313eb15016bb3ee5278188d5357e[m
+Author: Gus-Guo <gus_guo@outlook.com>
+Date:   Fri Jun 26 19:06:59 2020 +0800
+
+    delete usage of register function
+
+[33mcommit b6f114e581484b1d303cf3798bc2f34764306036[m
+Author: guochaoxu <guochaoxu@sensetime.com>
+Date:   Thu Jun 25 13:47:50 2020 +0800
+
+    update INSTALL.md
+
+[33mcommit c6302949d86d83d59e562416d1fa046879fea908[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jun 25 00:26:35 2020 +0800
+
+    bugfixed: run create_kitti_infos on PCDet v0.2.0
+
+[33mcommit a8703703beccff58cc90a0279535d133a7ca33bf[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Thu Jun 25 00:07:54 2020 +0800
+
+    bugfixed: config update to load GT box with unified normative coordinate
+
+[33mcommit 20653988bbea0847a9075ed923021dc1318ffba5[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jun 24 18:20:44 2020 +0800
+
+    update README.md
+
+[33mcommit 6463e71b1337728b894bec569130a3dccea6778a[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jun 24 18:05:47 2020 +0800
+
+    Update README.md
+
+[33mcommit a0cfd6e4ee3cc94edf2c21377f4c5a3c6071ba84[m
+Author: Gus-Guo <gus_guo@outlook.com>
+Date:   Wed Jun 24 16:12:57 2020 +0800
+
+    update README.md
+
+[33mcommit 62f2f5e79d3e40694e5ba1c5a1fa25990a1de55b[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jun 24 15:36:47 2020 +0800
+
+    update INSTALL.md
+
+[33mcommit d4551b2f34da8889d4e2b49f3df221b6126e71be[m
+Author: Gus-Guo <gus_guo@outlook.com>
+Date:   Wed Jun 24 15:28:14 2020 +0800
+
+    Add codes for creating kitti infos and gt database (#4)
+    
+    * add codes for creating kitti infos and gt database
+
+[33mcommit 9027859a42691ff25b924893885bcaa0a5b67b06[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jun 24 14:22:13 2020 +0800
+
+    add requirements.txt, update config
+
+[33mcommit 98281d051622bb982bb97ab6df33d859539ea230[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jun 24 14:18:12 2020 +0800
+
+    add pretrained model links and performance
+
+[33mcommit c8e80b0c8609e255df0400d4c50bcec9eadf797d[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jun 24 13:00:15 2020 +0800
+
+    add README.md
+
+[33mcommit 1106197e82a7e37aa929adfef0f294bb25577385[m
+Author: Gus-Guo <gus_guo@outlook.com>
+Date:   Wed Jun 24 11:58:54 2020 +0800
+
+    update config of pointpillar
+
+[33mcommit b7e2fb708c62856ad08002f79bee5a0d8deb057a[m
+Merge: c3dd2d5 8007ce0
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jun 24 01:49:47 2020 +0800
+
+    Merge pull request #2 from sshaoshuai/develop_gcx_release
+    
+    Support PointPillar, Second, AxisAlignedTargetAssigner, MultiHead and multi-gpu testing
+
+[33mcommit 8007ce047e55f4227bb6a60740444b05d497e579[m
+Author: Gus-Guo <gus_guo@outlook.com>
+Date:   Wed Jun 24 01:43:02 2020 +0800
+
+    update configs
+
+[33mcommit e97be7f7aa196cbdb52c185588aad003af4bad35[m
+Author: Gus-Guo <gus_guo@outlook.com>
+Date:   Wed Jun 24 01:25:52 2020 +0800
+
+    add kitti eval codes
+
+[33mcommit 09b289eace5043b89970be8a755cef4b88bc1bd0[m
+Author: Gus-Guo <gus_guo@outlook.com>
+Date:   Wed Jun 24 01:25:29 2020 +0800
+
+    support pointpillar
+
+[33mcommit 2fa93c6946e84a41156f37001df5dd2e56e4f7b5[m
+Author: Gus-Guo <gus_guo@outlook.com>
+Date:   Wed Jun 24 01:23:59 2020 +0800
+
+    support second and multihead
+
+[33mcommit 96dfcbd05101d0bc3cc6ad87548c4d69b475b989[m
+Author: Gus-Guo <gus_guo@outlook.com>
+Date:   Wed Jun 24 01:22:11 2020 +0800
+
+    add AxisAlignedTargetAssigner
+
+[33mcommit 1059a42b2f867df3d90d450137d6df731bbd67ef[m
+Author: Gus-Guo <gus_guo@outlook.com>
+Date:   Wed Jun 24 01:14:04 2020 +0800
+
+    support multi-gpu testing
+
+[33mcommit c3dd2d54bc33f621b7653ee6ddadd44baf0918dc[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Wed Jun 24 00:55:56 2020 +0800
+
+    add LICENSE and README.md
+
+[33mcommit acc9dd2639c20a99bfb673e6d3b2528d9b2b0dbe[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Jun 23 20:47:27 2020 +0800
+
+    add training and testing scripts
+
+[33mcommit 19a75f1c1656f33c8e3f8f0eb0071cb8e3c6ca8a[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Jun 23 20:37:23 2020 +0800
+
+    add configs for PartA2 and PV-RCNN, and add setup.py for compiling
+
+[33mcommit 4399b6e756028876b3f6399fd4b534ebc0159d3a[m
+Merge: 405730d 4895cd7
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Jun 23 18:04:19 2020 +0800
+
+    Merge pull request #1 from sshaoshuai/dev_loss
+    
+    add training loss utils
+
+[33mcommit 4895cd74d94137685c227ef0df68ae676d0b2936[m
+Author: jihanyang <jihanyang13@gmail.com>
+Date:   Tue Jun 23 18:02:05 2020 +0800
+
+    add training losses
+
+[33mcommit 405730dde6fc1df6a71fb41630071fda2b1f4449[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Jun 23 17:53:28 2020 +0800
+
+    add training and testing tool codes
+
+[33mcommit 635f1e94e855d7832363ecdb2ed70affe487608a[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Jun 23 17:44:58 2020 +0800
+
+    all model codes refactoring for training/testing, support multiple 3D detectors (SECOND, PartA2-Net (official release), PV-RCNN (official release))
+
+[33mcommit 3fdecc873991c7696a55eb518225b2bd85cbaac2[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Jun 23 17:42:19 2020 +0800
+
+    support stacked-batch-data version of pointnet2
+
+[33mcommit 0f73c62c6d16ece1196606bb0feeab2df51a2dd7[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Jun 23 16:30:45 2020 +0800
+
+    add iou3d_nms cuda ops and roiaware_pool3d cuda ops in the unified normative coordinate
+
+[33mcommit fea61d340cb2ecce72d305ddb958f289808b17dc[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Jun 23 16:29:02 2020 +0800
+
+    add dataset template codes with data_augmentor and data_processor structure in the unified normative coodinates, and utils codes
+
+[33mcommit 760a9d2cb18e1ba8676ad698cf5e8dc9ff6cc99e[m
+Author: Shaoshuai Shi <shaoshuaics@gmail.com>
+Date:   Tue Jun 9 00:40:50 2020 +0800
+
+    initial commit with .gitignore
