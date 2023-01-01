@@ -305,6 +305,11 @@ class KITTIEvalMetrics(Metric):
             num_ulb_samples = total_num_samples
             ulb_lbl_ratio = num_ulb_samples / num_lbl_samples
             pred_labels, pred_scores = [], []
+            lbl_cls_counter={}
+            ulb_cls_counter = {}
+            cls_dist ={}
+            pr_cls = {}
+
             for sample_dets in self.detections:
                 if sample_dets.shape[0] == 0:
                     continue            
@@ -312,20 +317,26 @@ class KITTIEvalMetrics(Metric):
                     continue
                 pred_labels.append(sample_dets[:, -2])
                 pred_scores.append(sample_dets[:, -1])
-                lbl_cls_counter = {}
-                ulb_cls_counter = {}
+
              
             #when all preds are empty in in the initial stages
             if pred_labels == []:
                 for c, cls_name in enumerate(['Car', 'Pedestrian', 'Cyclist']):
+                    num_lbl_cls =  self.dataset.class_counter[cls_name]
+                    lbl_cls_counter[cls_name] = num_lbl_cls
+
+                for c, cls_name in enumerate(['Car', 'Pedestrian', 'Cyclist']):
+                    pr_cls[cls_name] = 0
                     cls_dist[cls_name+'_lbl'] =  lbl_cls_counter[cls_name] / sum(lbl_cls_counter.values()) if sum(lbl_cls_counter.values())!=0 else 0
                     cls_dist[cls_name+'_ulb'] = 0
-                    kitti_eval_metrics['PR'][cls_name] = 0
+
                 lbl_dist = torch.tensor(list(lbl_cls_counter.values())) / sum(lbl_cls_counter.values()) if sum(lbl_cls_counter.values())!=0 else torch.tensor([0,0,0])
                 ulb_dist = torch.tensor([0,0,0])
                 kl_div = F.kl_div(ulb_dist.log().unsqueeze(0), lbl_dist.unsqueeze(0), reduction="batchmean").item()
+
                 kitti_eval_metrics['kl_div'] = kl_div
                 kitti_eval_metrics['class_distribution'] = cls_dist
+                kitti_eval_metrics['PR'] = pr_cls
             else:
                 pred_labels = torch.cat(pred_labels).to(torch.int64).view(-1)
                 pred_scores = torch.cat(pred_scores).view(-1) 
@@ -333,7 +344,7 @@ class KITTIEvalMetrics(Metric):
                     len(pred_labels), 1).gather(
                     dim=-1, index=pred_labels.unsqueeze(-1)).view(-1)
                 tp_mask = pred_scores >= classwise_thresh
-                pr_cls = {}
+             
                 # Because self.dataset.class_counter has other classes we only keep
                 # current classes in this dict to calculate the sum over all classes.
                 for cls_id, cls_thresh in zip(self.current_classes, self.min_overlaps[0, self.metric]):
@@ -349,9 +360,11 @@ class KITTIEvalMetrics(Metric):
                 for c, cls_name in enumerate(['Car', 'Pedestrian', 'Cyclist']):
                     cls_dist[cls_name+'_lbl'] = lbl_cls_counter[cls_name] / sum(lbl_cls_counter.values()) if sum(lbl_cls_counter.values())!=0 else 0
                     cls_dist[cls_name+'_ulb'] = ulb_cls_counter[cls_name] / sum(ulb_cls_counter.values()) if sum(ulb_cls_counter.values())!=0 else 0
+
                 lbl_dist = torch.tensor(list(lbl_cls_counter.values())) / sum(lbl_cls_counter.values()) if sum(lbl_cls_counter.values())!=0 else torch.tensor([0,0,0])
                 ulb_dist = torch.tensor(list(ulb_cls_counter.values())) / sum(ulb_cls_counter.values()) if sum(ulb_cls_counter.values())!=0 else torch.tensor([0,0,0])
                 kl_div = F.kl_div(ulb_dist.log().unsqueeze(0), lbl_dist.unsqueeze(0), reduction="batchmean").item()
+
                 kitti_eval_metrics['class_distribution'] = cls_dist
                 kitti_eval_metrics['kl_div'] = kl_div
                 kitti_eval_metrics['PR'] = pr_cls
