@@ -97,12 +97,14 @@ class RoIHeadTemplate(nn.Module):
             cls_preds = batch_cls_preds[batch_mask]
 
             cur_roi_scores, cur_roi_labels = torch.max(cls_preds, dim=1)
-
+            cur_agr_scores = torch.sum(cls_preds, dim=1) #change
+            alpha_factor = 0.4
+            cur_prs_scores = (1-alpha_factor)*(torch.sigmoid(cur_agr_scores)) + alpha_factor*(cur_roi_scores)
             if nms_config.MULTI_CLASSES_NMS:
                 raise NotImplementedError
             else:
                 selected, selected_scores = class_agnostic_nms(
-                    box_scores=cur_roi_scores, box_preds=box_preds, nms_config=nms_config
+                    box_scores=cur_prs_scores, box_preds=box_preds, nms_config=nms_config
                 )
 
             rois[index, :len(selected), :] = box_preds[selected]
