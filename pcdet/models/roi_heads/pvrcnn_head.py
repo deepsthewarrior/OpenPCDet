@@ -147,11 +147,11 @@ class PVRCNNHead(RoIHeadTemplate):
 
         # proposal_layer doesn't continue if the rois are already in the batch_dict.
         # However, for labeled data proposal layer should continue!
-        targets_dict = self.proposal_layer(batch_dict, nms_config=nms_mode)
+        targets_dict = self.proposal_layer(batch_dict, nms_config=nms_mode) #nms is done based on the topk pred_scores
         # should not use gt_roi for pseudo label generation
         if (self.training or self.print_loss_when_eval) and not disable_gt_roi_when_pseudo_labeling:
-            targets_dict = self.assign_targets(batch_dict)
-            batch_dict['rois'] = targets_dict['rois']
+            targets_dict = self.assign_targets(batch_dict) # --> proposal target layer consistency
+            batch_dict['rois'] = targets_dict['rois'] # transferring the labelled rois and unlabelled rois
             batch_dict['roi_scores'] = targets_dict['roi_scores']
             batch_dict['roi_labels'] = targets_dict['roi_labels']
             # Temporarily add infos to targets_dict for metrics
@@ -168,7 +168,7 @@ class PVRCNNHead(RoIHeadTemplate):
         batch_size_rcnn = pooled_features.shape[0]
         pooled_features = pooled_features.permute(0, 2, 1).\
             contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxN, C, 6, 6, 6)
-
+        #fully connected layers
         shared_features = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
         rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
         rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)

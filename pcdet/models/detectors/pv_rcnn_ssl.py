@@ -282,6 +282,8 @@ class PVRCNN_SSL(Detector3DTemplate):
 
             batch_dict['metric_registry'] = self.metric_registry
             batch_dict['ori_unlabeled_boxes'] = ori_unlabeled_boxes
+
+            ########### Student ###############
             for cur_module in self.pv_rcnn.module_list:
                 if cur_module.model_cfg['NAME'] == 'PVRCNNHead' and self.model_cfg['ROI_HEAD'].get('ENABLE_RCNN_CONSISTENCY', False):
                     # Pass teacher's proposal to the student.
@@ -513,13 +515,13 @@ class PVRCNN_SSL(Detector3DTemplate):
                 pseudo_scores_var.append(pseudo_score_var)
                 pseudo_boxes_var.append(pseudo_box_var)
                 continue
-        
+            #confidence threshold for each class
             conf_thresh = torch.tensor(self.thresh, device=pseudo_label.device).unsqueeze(
                 0).repeat(len(pseudo_label), 1).gather(dim=1, index=(pseudo_label - 1).unsqueeze(-1))
 
-            valid_inds = pseudo_score > conf_thresh.squeeze()
+            valid_inds = pseudo_score > conf_thresh.squeeze()  #classwise objectness score
 
-            valid_inds = valid_inds * (pseudo_sem_score > self.sem_thresh[0])
+            valid_inds = valid_inds * (pseudo_sem_score > self.sem_thresh[0]) #class agnostic sem score self.sem_thresh[0]
 
             # TODO(farzad) can this be similarly determined by tag-based stats before and after filtering?
             # rej_labels = pseudo_label[~valid_inds]

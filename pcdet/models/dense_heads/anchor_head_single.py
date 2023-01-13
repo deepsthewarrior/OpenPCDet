@@ -49,8 +49,8 @@ class AnchorHeadSingle(AnchorHeadTemplate):
         cls_preds = cls_preds.permute(0, 2, 3, 1).contiguous()  # [N, H, W, C]
         box_preds = box_preds.permute(0, 2, 3, 1).contiguous()  # [N, H, W, C]
 
-        self.forward_ret_dict['cls_preds'] = cls_preds
-        self.forward_ret_dict['box_preds'] = box_preds
+        self.forward_ret_dict['cls_preds'] = cls_preds #cls_preds.shape torch.Size([2, 200, 176, 18])
+        self.forward_ret_dict['box_preds'] = box_preds #torch.Size([2, 200, 176, 42])
 
         if self.conv_dir_cls is not None:
             dir_cls_preds = self.conv_dir_cls(spatial_features_2d)
@@ -61,17 +61,17 @@ class AnchorHeadSingle(AnchorHeadTemplate):
 
         if (self.training or self.print_loss_when_eval) and not disable_gt_roi_when_pseudo_labeling:
             targets_dict = self.assign_targets(
-                gt_boxes=data_dict['gt_boxes']
+                gt_boxes=data_dict['gt_boxes']  #assign gt_boxes as targets
             )
             self.forward_ret_dict.update(targets_dict)
 
-        if not self.training or self.predict_boxes_when_training:
-            batch_cls_preds, batch_box_preds = self.generate_predicted_boxes(
+        if not self.training or self.predict_boxes_when_training:    #self.predict_boxes_when_training is a list? 
+            batch_cls_preds, batch_box_preds = self.generate_predicted_boxes(   
                 batch_size=data_dict['batch_size'],
                 cls_preds=cls_preds, box_preds=box_preds, dir_cls_preds=dir_cls_preds
             )
             data_dict['batch_cls_preds'] = batch_cls_preds
-            data_dict['batch_box_preds'] = batch_box_preds
+            data_dict['batch_box_preds'] = batch_box_preds # generates anchors(torch.Size([2, 211200, 3])) 211200=200*176*6 (6=18/3 in cls_preds)
             data_dict['cls_preds_normalized'] = False
 
         return data_dict

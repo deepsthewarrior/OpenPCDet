@@ -72,8 +72,8 @@ class ProposalTargetLayerConsistency(nn.Module):
             cur_gt_boxes = cur_gt_boxes[:k + 1]
             cur_gt_boxes = cur_gt_boxes.new_zeros((1, cur_gt_boxes.shape[1])) if len(cur_gt_boxes) == 0 else cur_gt_boxes
             if index in batch_dict['unlabeled_inds']:
-                subsample_unlabeled_rois = getattr(self, self.roi_sampler_cfg.UNLABELED_SAMPLER_TYPE, None)
-                if subsample_unlabeled_rois is None:
+                subsample_unlabeled_rois = getattr(self, self.roi_sampler_cfg.UNLABELED_SAMPLER_TYPE, None) #TODO: check for adaptive sampler etc.,
+                if subsample_unlabeled_rois is None:  ### do topk based on scores
                     # Let's simply pick top-k rois (wrt PL scores) and postpone setting rcnn cls/reg masks to pre_loss_filtering
                     pred_scores_ema = batch_dict['pred_scores_ema'][index]
                     _, sampled_inds = torch.topk(pred_scores_ema, k=self.roi_sampler_cfg.ROI_PER_IMAGE)
@@ -146,7 +146,10 @@ class ProposalTargetLayerConsistency(nn.Module):
 
         return selected_inds, reg_valid_mask, cls_labels
 
-    def classwise_adapative_thresholds_sampler(self, **kwargs):
+    def classwise_adapative_thresholds_sampler(self,batch_dict,index):
+        gt_scores = batch_dict['pred_scores_ema'][index]
+        gt_boxes = batch_dict['gt_boxes'][index]
+
         raise NotImplementedError
 
     def classwise_top_k_sampler(self, **kwargs):

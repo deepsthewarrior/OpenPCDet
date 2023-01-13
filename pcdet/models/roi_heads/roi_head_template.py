@@ -79,8 +79,8 @@ class RoIHeadTemplate(nn.Module):
 
         batch_size = batch_dict['batch_size']
 
-        batch_box_preds = batch_dict['batch_box_preds']
-        batch_cls_preds = batch_dict['batch_cls_preds']
+        batch_box_preds = batch_dict['batch_box_preds'] # torch.Size([2, 211200, 7])
+        batch_cls_preds = batch_dict['batch_cls_preds'] # torch.Size([2, 211200, 3])
 
         rois = batch_box_preds.new_zeros((batch_size, nms_config.NMS_POST_MAXSIZE, batch_box_preds.shape[-1]))
         roi_scores = batch_box_preds.new_zeros((batch_size, nms_config.NMS_POST_MAXSIZE))
@@ -93,8 +93,8 @@ class RoIHeadTemplate(nn.Module):
             else:
                 assert batch_dict['batch_cls_preds'].shape.__len__() == 3
                 batch_mask = index
-            box_preds = batch_box_preds[batch_mask]
-            cls_preds = batch_cls_preds[batch_mask]
+            box_preds = batch_box_preds[batch_mask] #roi boxes
+            cls_preds = batch_cls_preds[batch_mask] #roi preds
 
             cur_roi_scores, cur_roi_labels = torch.max(cls_preds, dim=1)
 
@@ -275,7 +275,7 @@ class RoIHeadTemplate(nn.Module):
     def assign_targets(self, batch_dict):
 
         with torch.no_grad():
-            targets_dict = self.proposal_target_layer.forward(batch_dict)
+            targets_dict = self.proposal_target_layer.forward(batch_dict) #proposal target layer consistency
 
         batch_size = batch_dict['batch_size']
 
@@ -456,6 +456,7 @@ class RoIHeadTemplate(nn.Module):
         reg_fg_thresh = self.model_cfg.TARGET_CONFIG.UNLABELED_REG_FG_THRESH
         filtering_mask = (rcnn_cls_preds > reg_fg_thresh) & (rcnn_cls_labels > reg_fg_thresh)
         self.forward_ret_dict['reg_valid_mask'][unlabeled_inds] = filtering_mask.long()
+        
 
         # ----------- RCNN_CLS_LABELS -----------
         fg_mask = rcnn_cls_labels > self.model_cfg.TARGET_CONFIG.UNLABELED_CLS_FG_THRESH
@@ -466,6 +467,7 @@ class RoIHeadTemplate(nn.Module):
         rcnn_cls_labels[ignore_mask] = -1
         self.forward_ret_dict['rcnn_cls_labels'][unlabeled_inds] = rcnn_cls_labels
 
+        
     def get_loss(self, tb_dict=None, scalar=True):
         tb_dict = {} if tb_dict is None else tb_dict
 

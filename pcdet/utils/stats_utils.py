@@ -184,7 +184,7 @@ class KITTIEvalMetrics(Metric):
     full_state_update: bool = False
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.reset_state_interval = kwargs.get('reset_state_interval', 256)
+        self.reset_state_interval = kwargs.get('reset_state_interval', 8)
         self.tag = kwargs.get('tag', None)
         self.dataset = kwargs.get('dataset', None)
         current_classes = self.dataset.class_names
