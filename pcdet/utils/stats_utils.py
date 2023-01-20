@@ -209,6 +209,7 @@ class KITTIEvalMetrics(Metric):
         self.add_state("detections", default=[])
         self.add_state("groundtruths", default=[])
         self.add_state("overlaps", default=[])
+        
 
     def update(self, preds: [torch.Tensor], pred_scores: [torch.Tensor], ground_truths: [torch.Tensor],
                rois=None, roi_scores=None, targets=None, target_scores=None) -> None:
@@ -323,11 +324,15 @@ class KITTIEvalMetrics(Metric):
                 ulb_cls_counter[cls_name] = num_ulb_cls
                 lbl_cls_counter[cls_name] = num_lbl_cls
                 pr_cls[cls_name] = num_ulb_cls / (ulb_lbl_ratio * num_lbl_cls)
-
+            cls_dist_diff = {}
             cls_dist = {}
+            dist_diff = {}
             for c, cls_name in enumerate(['Car', 'Pedestrian', 'Cyclist']):
                 cls_dist[cls_name+'_lbl'] = lbl_cls_counter[cls_name] / sum(lbl_cls_counter.values())
                 cls_dist[cls_name+'_ulb'] = ulb_cls_counter[cls_name] / sum(ulb_cls_counter.values())
+                dist_diff[cls_name] = cls_dist[cls_name+'_ulb'] / cls_dist[cls_name+'_lbl']
+                target = lbl_cls_counter[cls_name]/ 37 * self.reset_state_interval
+                cls_dist_diff[cls_name] = ulb_cls_counter[cls_name] / target
             lbl_dist = torch.tensor(list(lbl_cls_counter.values())) / sum(lbl_cls_counter.values())
             ulb_dist = torch.tensor(list(ulb_cls_counter.values())) / sum(ulb_cls_counter.values())
 
@@ -336,6 +341,8 @@ class KITTIEvalMetrics(Metric):
             kitti_eval_metrics['kl_div'] = kl_div                           
             kitti_eval_metrics['PR'] = pr_cls
 
+            kitti_eval_metrics['class_distribution_diff'] = cls_dist_diff
+            kitti_eval_metrics['dist_diff'] = dist_diff
             # Get calculated Precision
             for m, metric_name in enumerate(['mAP_3d', 'mAP_3d_R40']):
                 class_metrics_all = {}
@@ -382,6 +389,7 @@ class KITTIEvalMetrics(Metric):
 
             final_results.update(kitti_eval_metrics)
             # TODO(farzad) Does calling reset in compute make a trouble?
+            
             self.reset()
 
         for key, val in final_results.items():

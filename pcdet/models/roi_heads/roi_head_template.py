@@ -444,13 +444,42 @@ class RoIHeadTemplate(nn.Module):
         }
         return rcnn_loss_cls, tb_dict
 
-    def pre_loss_filtering(self):
+    def adaptive_preloss_filtering(self,adaptive_metrics,rcnn_cls_teacher,rcnn_cls_student,labels):
+        metric = adaptive_metrics['rcnn_pred_gt_metrics_cls/dist_diff']
+        thresh = [0.6,0.6,0.6]
+        thresh = torch.FloatTensor(thresh)
+        adaptive_values = torch.FloatTensor(list(metric.values()))
+        adaptive_thresh = thresh*adaptive_values
+        adaptive_thresh = torch.clamp(adaptive_thresh,min=0.25,max=0.9)
+        adaptive_thresh = adaptive_thresh.clone().detach()
+        labels = labels - 1
+        rcnn_cls_student = rcnn_cls_student.to(torch.device("cpu"))   
+        rcnn_cls_teacher = rcnn_cls_teacher.to(torch.device("cpu"))       
+        labels = labels.to(torch.device("cpu"))
+        classwise_thresh = rcnn_cls_student.new_tensor(adaptive_thresh).unsqueeze(0).repeat(labels.shape[0],labels.shape[-1],1).gather(
+                dim=-1, index=labels.unsqueeze(-1)).squeeze(-1)
+        fg_mask = (rcnn_cls_student > classwise_thresh) & (rcnn_cls_teacher > classwise_thresh)
+        bg_mask = ~fg_mask
+        rcnn_cls_teacher[fg_mask] = 1
+        rcnn_cls_teacher[bg_mask] = 0
+        
+        return rcnn_cls_teacher
+        
+ 
+        
+        #if 
+        pass
+        
+    def pre_loss_filtering(self,adaptive_metrics):
 
         unlabeled_inds = self.forward_ret_dict['unlabeled_inds']
-        rcnn_cls_labels = self.forward_ret_dict['rcnn_cls_labels'].clone().detach()
-        rcnn_cls_preds = self.forward_ret_dict['rcnn_cls'].view_as(rcnn_cls_labels).clone().detach()
+
+        rcnn_cls_labels = self.forward_ret_dict['rcnn_cls_labels'].clone().detach() #teacher
+        rcnn_cls_preds = self.forward_ret_dict['rcnn_cls'].view_as(rcnn_cls_labels).clone().detach() #student
+        labels = self.forward_ret_dict['roi_labels'].view_as(rcnn_cls_labels).clone().detach() #teacher_rpn_labels
         rcnn_cls_labels = rcnn_cls_labels[unlabeled_inds]
         rcnn_cls_preds = torch.sigmoid(rcnn_cls_preds)[unlabeled_inds]
+        ignore_mask = torch.eq(self.forward_ret_dict['gt_of_rois'][unlabeled_inds], 0).all(dim=-1)
 
         # ----------- REG_VALID_MASK -----------
         reg_fg_thresh = self.model_cfg.TARGET_CONFIG.UNLABELED_REG_FG_THRESH
@@ -458,19 +487,26 @@ class RoIHeadTemplate(nn.Module):
         self.forward_ret_dict['reg_valid_mask'][unlabeled_inds] = filtering_mask.long()
 
         # ----------- RCNN_CLS_LABELS -----------
-        fg_mask = rcnn_cls_labels > self.model_cfg.TARGET_CONFIG.UNLABELED_CLS_FG_THRESH
-        bg_mask = rcnn_cls_labels < self.model_cfg.TARGET_CONFIG.UNLABELED_CLS_BG_THRESH
-        ignore_mask = torch.eq(self.forward_ret_dict['gt_of_rois'][unlabeled_inds], 0).all(dim=-1)
-        rcnn_cls_labels[fg_mask] = 1
-        rcnn_cls_labels[bg_mask] = 0
-        rcnn_cls_labels[ignore_mask] = -1
+        if len(adaptive_metrics.keys())!=0:
+            rcnn_cls_labels = self.adaptive_preloss_filtering(adaptive_metrics,rcnn_cls_labels,rcnn_cls_preds,labels[unlabeled_inds])
+            rcnn_cls_labels = rcnn_cls_labels.to(torch.device('cuda'))
+            rcnn_cls_labels[ignore_mask] = -1
+
+        else:
+            fg_mask = rcnn_cls_labels > self.model_cfg.TARGET_CONFIG.UNLABELED_CLS_FG_THRESH
+            bg_mask = rcnn_cls_labels < self.model_cfg.TARGET_CONFIG.UNLABELED_CLS_BG_THRESH
+            
+            rcnn_cls_labels[fg_mask] = 1
+            rcnn_cls_labels[bg_mask] = 0
+            rcnn_cls_labels[ignore_mask] = -1
         self.forward_ret_dict['rcnn_cls_labels'][unlabeled_inds] = rcnn_cls_labels
 
-    def get_loss(self, tb_dict=None, scalar=True):
+
+    def get_loss(self, tb_dict=None, scalar=True, adaptive_metrics=None):
         tb_dict = {} if tb_dict is None else tb_dict
 
         if self.model_cfg.ENABLE_RCNN_CONSISTENCY:
-            self.pre_loss_filtering()
+            self.pre_loss_filtering(adaptive_metrics)
 
         if self.model_cfg.get("ENABLE_EVAL", None):
             # self.update_metrics(self.forward_ret_dict, mask_type='reg')

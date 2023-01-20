@@ -152,6 +152,7 @@ def train_model(model, optimizer, train_loader, model_func, lr_scheduler, optim_
                 test_loader=test_loader,
                 dataloader_test_iter=dataloader_test_iter
             )
+            
 
             # save trained model
             trained_epoch = cur_epoch + 1

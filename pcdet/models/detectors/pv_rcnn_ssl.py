@@ -147,6 +147,7 @@ class PVRCNN_SSL(Detector3DTemplate):
         self.supervise_mode = model_cfg.SUPERVISE_MODE
         cls_bg_thresh = model_cfg.ROI_HEAD.TARGET_CONFIG.CLS_BG_THRESH
         self.metric_registry = MetricRegistry(dataset=self.dataset, cls_bg_thresh=cls_bg_thresh)
+        self.forward_metric = {}
 
     def forward(self, batch_dict):
         if self.training:
@@ -333,7 +334,7 @@ class PVRCNN_SSL(Detector3DTemplate):
             disp_dict = {}
             loss_rpn_cls, loss_rpn_box, tb_dict = self.pv_rcnn.dense_head.get_loss(scalar=False)
             loss_point, tb_dict = self.pv_rcnn.point_head.get_loss(tb_dict, scalar=False)
-            loss_rcnn_cls, loss_rcnn_box, tb_dict = self.pv_rcnn.roi_head.get_loss(tb_dict, scalar=False)
+            loss_rcnn_cls, loss_rcnn_box, tb_dict = self.pv_rcnn.roi_head.get_loss(tb_dict, scalar=False,adaptive_metrics=self.forward_metric)
 
             if not self.unlabeled_supervise_cls:
                 loss_rpn_cls = loss_rpn_cls[labeled_inds, ...].mean()
@@ -353,6 +354,7 @@ class PVRCNN_SSL(Detector3DTemplate):
 
             loss = loss_rpn_cls + loss_rpn_box + loss_point + loss_rcnn_cls + loss_rcnn_box
             tb_dict_ = {}
+            update_dict = {}
             for key in tb_dict.keys():
                 if 'loss' in key:
                     tb_dict_[key+"_labeled"] = tb_dict[key][labeled_inds, ...].mean()
@@ -365,10 +367,14 @@ class PVRCNN_SSL(Detector3DTemplate):
                     tb_dict_[key + "_unlabeled"] = tb_dict[key][unlabeled_inds, ...].mean()
                 else:
                     tb_dict_[key] = tb_dict[key]
-
+            save_keys=['rcnn_pred_gt_metrics_cls/PR','rcnn_pred_gt_metrics_cls/class_distribution_diff','rcnn_pred_gt_metrics_cls/class_distribution','rcnn_pred_gt_metrics_cls/dist_diff']
             for key in self.metric_registry.tags():
                 metrics = self.compute_metrics(tag=key)
                 tb_dict_.update(metrics)
+                for metric in metrics.keys():
+                    if metric in save_keys:
+                        self.forward_metric[metric] = metrics[metric]
+                
 
             if dist.is_initialized():
                 rank = os.getenv('RANK')
