@@ -451,11 +451,11 @@ class RoIHeadTemplate(nn.Module):
         adaptive_values = torch.FloatTensor(list(metric.values()))
         adaptive_thresh = thresh*adaptive_values
         adaptive_thresh = torch.clamp(adaptive_thresh,min=0.25,max=0.9)
-        adaptive_thresh = adaptive_thresh.clone().detach()
+        adaptive_thresh = adaptive_thresh.to(torch.device("cuda")) 
         labels = labels - 1
-        rcnn_cls_student = rcnn_cls_student.to(torch.device("cpu"))   
-        rcnn_cls_teacher = rcnn_cls_teacher.to(torch.device("cpu"))       
-        labels = labels.to(torch.device("cpu"))
+        rcnn_cls_student = rcnn_cls_student.to(torch.device("cuda"))   
+        rcnn_cls_teacher = rcnn_cls_teacher.to(torch.device("cuda"))       
+        labels = labels.to(torch.device("cuda"))
         classwise_thresh = rcnn_cls_student.new_tensor(adaptive_thresh).unsqueeze(0).repeat(labels.shape[0],labels.shape[-1],1).gather(
                 dim=-1, index=labels.unsqueeze(-1)).squeeze(-1)
         fg_mask = (rcnn_cls_student > classwise_thresh) & (rcnn_cls_teacher > classwise_thresh)
