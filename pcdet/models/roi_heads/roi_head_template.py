@@ -446,11 +446,11 @@ class RoIHeadTemplate(nn.Module):
 
     def adaptive_preloss_filtering(self,adaptive_metrics,rcnn_cls_teacher,rcnn_cls_student,labels):
         metric = adaptive_metrics['rcnn_pred_gt_metrics_cls/dist_diff']
-        thresh = [0.6,0.6,0.6]
+        thresh = [0.9,0.9,0.9]
         thresh = torch.FloatTensor(thresh)
         adaptive_values = torch.FloatTensor(list(metric.values()))
         adaptive_thresh = thresh*adaptive_values
-        adaptive_thresh = torch.clamp(adaptive_thresh,min=0.25,max=0.9)
+        adaptive_thresh = torch.clamp(adaptive_thresh,min=0.7,max=0.90)
         adaptive_thresh = adaptive_thresh.to(torch.device("cuda")) 
         labels = labels - 1
         rcnn_cls_student = rcnn_cls_student.to(torch.device("cuda"))   
@@ -465,10 +465,17 @@ class RoIHeadTemplate(nn.Module):
         
         return rcnn_cls_teacher
         
- 
+    def classwise_topk(self,rcnn_cls_teacher,rcnn_cls_student,roi_labels):
+        roi_labels -= 1
+        for k in range(3):  # TODO(Farzad) fixed num class
+            roi_mask = (roi_labels == k)
+            if roi_mask.sum() > 0:
+                cur_gt_scores =rcnn_cls_teacher[roi_mask]
+                                                            
+        return rcnn_cls_teacher
         
         #if 
-        pass
+        
         
     def pre_loss_filtering(self,adaptive_metrics):
 
@@ -510,7 +517,7 @@ class RoIHeadTemplate(nn.Module):
 
         if self.model_cfg.get("ENABLE_EVAL", None):
             # self.update_metrics(self.forward_ret_dict, mask_type='reg')
-            self.update_metrics(self.forward_ret_dict, mask_type='cls', pred_type='pred_gt', vis_type='roi_pl', update_pred_pl=True)
+            self.update_metrics(self.forward_ret_dict, mask_type='cls', pred_type='pred_gt', vis_type='roi_pl', update_pred_pl=False)
 
         rcnn_loss_cls, cls_tb_dict = self.get_box_cls_layer_loss(self.forward_ret_dict, scalar=scalar)
         rcnn_loss_reg, reg_tb_dict = self.get_box_reg_layer_loss(self.forward_ret_dict, scalar=scalar)
