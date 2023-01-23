@@ -98,8 +98,8 @@ class RoIHeadTemplate(nn.Module):
 
             cur_roi_scores, cur_roi_labels = torch.max(cls_preds, dim=1)
             cur_frs_scores = torch.sum(cls_preds,dim=1)
-            # alpha = 0.6
-            # cur_frs_scores = ((1-alpha)*cur_roi_scores) + (alpha*torch.sigmoid(cur_frs_scores))
+            alpha = 0.6
+            cur_frs_scores = ((1-alpha)*cur_roi_scores) + (alpha*torch.sigmoid(cur_frs_scores))
             if nms_config.MULTI_CLASSES_NMS:
                 raise NotImplementedError
             else:
