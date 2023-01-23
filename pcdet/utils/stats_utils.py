@@ -346,6 +346,7 @@ class KITTIEvalMetrics(Metric):
 
             kitti_eval_metrics['class_distribution_diff'] = cls_dist_diff
             kitti_eval_metrics['dist_diff'] = dist_diff
+            kitti_eval_metrics['adaptive_thresh'] = adaptive_thresh
 
             # Get calculated Precision
             for m, metric_name in enumerate(['mAP_3d', 'mAP_3d_R40']):
