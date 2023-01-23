@@ -327,10 +327,12 @@ class KITTIEvalMetrics(Metric):
             cls_dist_diff = {}
             cls_dist = {}
             dist_diff = {}
+            adat_thresh = {}
             for c, cls_name in enumerate(['Car', 'Pedestrian', 'Cyclist']):
                 cls_dist[cls_name+'_lbl'] = lbl_cls_counter[cls_name] / sum(lbl_cls_counter.values())
                 cls_dist[cls_name+'_ulb'] = ulb_cls_counter[cls_name] / sum(ulb_cls_counter.values())
                 dist_diff[cls_name] = cls_dist[cls_name+'_ulb'] / cls_dist[cls_name+'_lbl']
+
                 target = lbl_cls_counter[cls_name]/ 37 * self.reset_state_interval
                 cls_dist_diff[cls_name] = ulb_cls_counter[cls_name] / target
             lbl_dist = torch.tensor(list(lbl_cls_counter.values())) / sum(lbl_cls_counter.values())
@@ -339,14 +341,18 @@ class KITTIEvalMetrics(Metric):
             kl_div = F.kl_div(ulb_dist.log().unsqueeze(0), lbl_dist.unsqueeze(0), reduction="batchmean").item()
             adaptive_values = torch.FloatTensor(list(dist_diff.values()))
             adaptive_thresh = torch.FloatTensor([0.9,0.9,0.9])*adaptive_values
-            adaptive_thresh = torch.clamp(adaptive_thresh,min=0.7,max=0.90)
+            classes = ['Car', 'Pedestrian', 'Cyclist']
+
+            for key,value in zip(classes,adaptive_thresh):
+                adat_thresh[key] = value
+
             kitti_eval_metrics['class_distribution'] = cls_dist
             kitti_eval_metrics['kl_div'] = kl_div                           
             kitti_eval_metrics['PR'] = pr_cls
 
             kitti_eval_metrics['class_distribution_diff'] = cls_dist_diff
             kitti_eval_metrics['dist_diff'] = dist_diff
-            kitti_eval_metrics['adaptive_thresh'] = adaptive_thresh
+            kitti_eval_metrics['adaptive_thresh'] = adat_thresh
 
             # Get calculated Precision
             for m, metric_name in enumerate(['mAP_3d', 'mAP_3d_R40']):
