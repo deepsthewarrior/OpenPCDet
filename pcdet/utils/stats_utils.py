@@ -337,12 +337,16 @@ class KITTIEvalMetrics(Metric):
             ulb_dist = torch.tensor(list(ulb_cls_counter.values())) / sum(ulb_cls_counter.values())
 
             kl_div = F.kl_div(ulb_dist.log().unsqueeze(0), lbl_dist.unsqueeze(0), reduction="batchmean").item()
+            adaptive_values = torch.FloatTensor(list(dist_diff.values()))
+            adaptive_thresh = torch.FloatTensor([0.9,0.9,0.9])*adaptive_values
+            adaptive_thresh = torch.clamp(adaptive_thresh,min=0.7,max=0.90)
             kitti_eval_metrics['class_distribution'] = cls_dist
             kitti_eval_metrics['kl_div'] = kl_div                           
             kitti_eval_metrics['PR'] = pr_cls
 
             kitti_eval_metrics['class_distribution_diff'] = cls_dist_diff
             kitti_eval_metrics['dist_diff'] = dist_diff
+
             # Get calculated Precision
             for m, metric_name in enumerate(['mAP_3d', 'mAP_3d_R40']):
                 class_metrics_all = {}
