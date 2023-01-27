@@ -35,19 +35,21 @@ class PredQualityMetrics(Metric):
         self.metrics_name = ["pred_ious", "pred_accs", "pred_precision", "pred_recall", "num_correctly_classified",
                              "num_misclassified_fp", "num_misclassified_fn", "pred_fgs", "sem_score_fgs",
                              "sem_score_bgs", "score_fgs", "score_bgs", "target_score_fg", "target_score_bg",
-                             "num_pred_boxes", "num_gt_boxes"]
+                             "num_pred_boxes", "num_gt_boxes", "ema_rcnn_scores_teacher","rcnn_conf_thresh"]
         self.min_overlaps = np.array([0.7, 0.5, 0.5, 0.7, 0.5, 0.7])
         self.class_agnostic_fg_thresh = 0.7
         for metric_name in self.metrics_name:
             self.add_state(metric_name, default=[], dist_reduce_fx='cat')
-
+        # self.ema = 1/3 #(1/num of classes)
+        # self.decay = 0.4
     def update(self, preds: [torch.Tensor], ground_truths: [torch.Tensor], pred_scores: [torch.Tensor],
-               rois=None, roi_scores=None, targets=None, target_scores=None) -> None:
+               rois=None, roi_scores=None, targets=None, target_scores=None, raw_target_scores=None, unlabeled_inds=None, conf_thresh = None) -> None:
         assert isinstance(preds, list) and isinstance(ground_truths, list) and isinstance(pred_scores, list)
         assert all([pred.dim() == 2 for pred in preds]) and all([pred.dim() == 2 for pred in ground_truths]) and all([pred.dim() == 1 for pred in pred_scores])
         assert all([pred.shape[-1] == 8 for pred in preds]) and all([gt.shape[-1] == 8 for gt in ground_truths])
         if roi_scores is not None:
             assert len(pred_scores) == len(roi_scores)
+        sample_tensor = preds[0] if len(preds) else ground_truths[0]
 
         roi_scores = [score.clone().detach() for score in roi_scores] if roi_scores is not None else None
         preds = [pred_box.clone().detach() for pred_box in preds]
@@ -55,7 +57,14 @@ class PredQualityMetrics(Metric):
         target_scores = [target_score.clone().detach() for target_score in target_scores] if target_scores is not None else None
         ground_truths = [gt_box.clone().detach() for gt_box in ground_truths]
 
-        sample_tensor = preds[0] if len(preds) else ground_truths[0]
+        # raw_target_scores =  [raw_target_score.clone().detach() for raw_target_score in raw_target_scores] if raw_target_scores is not None else None
+        # objectness_mean = torch.tensor([raw_target_score.mean() for raw_target_score in raw_target_scores]) if raw_target_scores is not None else None
+
+        # if objectness_mean is not None: 
+        #     self.ema = torch.tensor([(1-self.decay)*(objectness_mean.sum()/len(unlabeled_inds)) + (self.decay*self.ema)]) 
+        # else:
+        #     self.ema = sample_tensor.new_zeros(1).fill_(float('nan'))
+
         num_classes = len(self.dataset.class_names)
         for i in range(len(preds)):
             valid_preds_mask = torch.logical_not(torch.all(preds[i] == 0, dim=-1))
@@ -74,11 +83,11 @@ class PredQualityMetrics(Metric):
 
             valid_gts_mask = torch.logical_not(torch.all(ground_truths[i] == 0, dim=-1))
             valid_gt_boxes = ground_truths[i][valid_gts_mask]
-
+            
             # Starting class indices from zero
             valid_pred_boxes[:, -1] -= 1
             valid_gt_boxes[:, -1] -= 1
-
+            
             # Adding predicted scores as the last column
             valid_pred_boxes = torch.cat([valid_pred_boxes, valid_pred_scores], dim=-1)
 
@@ -90,6 +99,7 @@ class PredQualityMetrics(Metric):
             classwise_metrics = {}
             for metric_name in self.metrics_name:
                 classwise_metrics[metric_name] = sample_tensor.new_zeros(num_classes + 1).fill_(float('nan'))
+            # classwise_metrics['ema_rcnn_scores_teacher'] = self.ema
 
             for cind in range(num_classes):
                 pred_cls_mask = pred_labels == cind
@@ -106,7 +116,7 @@ class PredQualityMetrics(Metric):
                     tp_mask = (pred_cls_mask & assigned_gt_cls_mask)
                     fp_mask = pred_cls_mask & (~assigned_gt_cls_mask)
                     fn_mask = (~pred_cls_mask) & assigned_gt_cls_mask
-
+                    
                     classwise_metrics['num_correctly_classified'][cind] = tp_mask.sum()
                     classwise_metrics['num_misclassified_fp'][cind] = fp_mask.sum()
                     classwise_metrics['num_misclassified_fn'][cind] = fn_mask.sum()
@@ -155,6 +165,8 @@ class PredQualityMetrics(Metric):
         if len(preds) == 0:
             for metric_name in self.metrics_name:
                 getattr(self, metric_name).append(sample_tensor.new_zeros(num_classes + 1).fill_(float('nan')))
+                
+         #if self.ema is not None else None
 
     def compute(self):
         final_results = {}
@@ -184,7 +196,11 @@ class KITTIEvalMetrics(Metric):
     full_state_update: bool = False
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.adaptive_reset_state_interval = 16
         self.reset_state_interval = kwargs.get('reset_state_interval', 256)
+        self.unlabeled_inds = 0
+        self.conf_thresh= 1 /3
+        self.decay = 0.6
         self.tag = kwargs.get('tag', None)
         self.dataset = kwargs.get('dataset', None)
         current_classes = self.dataset.class_names
@@ -209,16 +225,22 @@ class KITTIEvalMetrics(Metric):
         self.add_state("detections", default=[])
         self.add_state("groundtruths", default=[])
         self.add_state("overlaps", default=[])
+        self.add_state("conf_scores", default=[])
+        self.add_state("labels",default=[])
+        self.add_state("selected_inds",default=[])
 
     def update(self, preds: [torch.Tensor], pred_scores: [torch.Tensor], ground_truths: [torch.Tensor],
-               rois=None, roi_scores=None, targets=None, target_scores=None) -> None:
+               rois=None, roi_scores=None, targets=None, target_scores=None, rcnn_soft_scores=None) -> None:
         assert all([pred.shape[-1] == 8 for pred in preds]) and all([tar.shape[-1] == 8 for tar in ground_truths])
         if roi_scores is not None:
             assert len(pred_scores) == len(roi_scores)
+        
         preds = [pred_box.clone().detach() for pred_box in preds]
         ground_truths = [gt_box.clone().detach() for gt_box in ground_truths]
         pred_scores = [ps_score.clone().detach() for ps_score in pred_scores]
         roi_scores = [score.clone().detach() for score in roi_scores] if roi_scores is not None else None
+        rcnn_soft_scores = [rcnn_soft_score.clone().detach() for rcnn_soft_score in rcnn_soft_scores] if rcnn_soft_scores is not None else None
+        roi_labels = [roi.clone().detach() for roi in rois] if rois is not None else None
 
         for i in range(len(preds)):
             valid_preds_mask = torch.logical_not(torch.all(preds[i] == 0, dim=-1))
@@ -227,6 +249,10 @@ class KITTIEvalMetrics(Metric):
                 pred_scores[i] = pred_scores[i].unsqueeze(dim=-1)
             if roi_scores is not None and roi_scores[i].ndim == 1:
                 roi_scores[i] = roi_scores[i].unsqueeze(dim=-1)
+            if rois is not None and rois[i].ndim== 2:
+                roi_labels[i] = roi_labels[i][...,-1] - 1
+            # if rois is not None and rois[i].ndim == 2:
+            #     roi[i] = 
 
             valid_pred_boxes = preds[i][valid_preds_mask]
             valid_gt_boxes = ground_truths[i][valid_gts_mask]
@@ -251,8 +277,59 @@ class KITTIEvalMetrics(Metric):
             self.groundtruths.append(valid_gt_boxes)
             self.overlaps.append(overlap)
 
+        if rcnn_soft_scores is not None:
+            for i,rcnn_soft_score in enumerate(rcnn_soft_scores):
+                non_zero_indices = torch.nonzero(rcnn_soft_score)
+                selected_scores = rcnn_soft_score[non_zero_indices]
+                self.conf_scores.append(selected_scores)
+                self.labels.append(roi_labels[i])
+                self.selected_inds.append(non_zero_indices)
+
+
     def compute(self):
         final_results = {}
+        kitti_adaptive_metrics = {}
+        if(len(self.conf_scores) >= self.adaptive_reset_state_interval):   
+            conf_mean = []
+            class_learn = {}
+            classwise_conf_thresh = {}
+            clswise_clamp_conf_thresh = {}
+            classwise_conf = [0]*3
+            for i,conf_score in enumerate(self.conf_scores):  
+                conf_score = conf_score.squeeze()
+                conf_mean.append(conf_score.mean())
+                self.unlabeled_inds +=1
+                
+            conf_sum = torch.tensor(conf_mean).sum()
+            self.conf_thresh = (1-self.decay)*self.conf_thresh + self.decay*(conf_sum/self.unlabeled_inds)
+
+            for i,conf_score in enumerate(self.conf_scores):  
+                selected_rois = self.labels[i][self.selected_inds[i].squeeze()]
+                for c, cls_name in enumerate(['Car', 'Pedestrian', 'Cyclist']):
+                    filtered_labels = selected_rois == c
+                    class_conf = conf_score[torch.nonzero(filtered_labels.long()).squeeze()].squeeze()
+                    if class_conf.nelement()!=0:
+                        classwise_conf[c] += class_conf.mean()                        
+
+            for c, cls_name in enumerate(['Car', 'Pedestrian', 'Cyclist']):
+                classwise_conf[c]= (classwise_conf[c]/self.unlabeled_inds).item()
+
+            for c, cls_name in enumerate(['Car', 'Pedestrian', 'Cyclist']):
+                class_learn[cls_name] = classwise_conf[c]/max(classwise_conf)
+                classwise_conf_thresh[cls_name] = self.conf_thresh*class_learn[cls_name]
+                clswise_clamp_conf_thresh[cls_name] = min(0.9, max(0.33,classwise_conf_thresh[cls_name]))
+            
+            kitti_adaptive_metrics['raw_rcnn_conf_thresh'] = self.conf_thresh
+            kitti_adaptive_metrics['clswise_conf_thresh'] = clswise_clamp_conf_thresh
+            kitti_adaptive_metrics['learning_status'] = class_learn
+            kitti_adaptive_metrics['clswise_rawconf_thresh'] = classwise_conf_thresh
+
+            #reset
+            self.unlabeled_inds = 0
+            self.conf_scores = []
+            self.labels = []
+            self.selected_inds = []
+
         if (len(self.detections) >= self.reset_state_interval) and cfg.MODEL.POST_PROCESSING.ENABLE_KITTI_EVAL:
             # eval_class() takes ~45ms for each sample and linearly increasing
             # => ~1.7s for one epoch or 37 samples (if only called once at the end of epoch).
@@ -261,7 +338,7 @@ class KITTIEvalMetrics(Metric):
             mAP_3d = get_mAP(kitti_eval_metrics["precision"])
             mAP_3d_R40 = get_mAP_R40(kitti_eval_metrics["precision"])
             kitti_eval_metrics.update({"mAP_3d": mAP_3d, "mAP_3d_R40": mAP_3d_R40})
-
+            
             # Get calculated TPs, FPs, FNs
             # Early results might not be correct as the 41 values are initialized with zero
             # and only a few predictions are available and thus a few thresholds are non-zero.
@@ -293,7 +370,7 @@ class KITTIEvalMetrics(Metric):
 
             self.class_to_name = {0: 'Car', 1: 'Pedestrian', 2: 'Cyclist', 3: 'Van', 4: 'Person_sitting', 5: 'Truck'}
             name_to_class = {v: n for n, v in self.class_to_name.items()}
-
+            
             # Get calculated PR
             num_lbl_samples = len(self.dataset.kitti_infos)
             num_ulb_samples = total_num_samples
@@ -335,7 +412,7 @@ class KITTIEvalMetrics(Metric):
             kitti_eval_metrics['class_distribution'] = cls_dist
             kitti_eval_metrics['kl_div'] = kl_div                           
             kitti_eval_metrics['PR'] = pr_cls
-
+            
             # Get calculated Precision
             for m, metric_name in enumerate(['mAP_3d', 'mAP_3d_R40']):
                 class_metrics_all = {}
@@ -379,7 +456,7 @@ class KITTIEvalMetrics(Metric):
             kitti_eval_metrics.pop('raw_recall')
             kitti_eval_metrics.pop('raw_precision')
             kitti_eval_metrics.pop('detailed_stats')
-
+            
             final_results.update(kitti_eval_metrics)
             # TODO(farzad) Does calling reset in compute make a trouble?
             self.reset()
@@ -387,7 +464,7 @@ class KITTIEvalMetrics(Metric):
         for key, val in final_results.items():
             if isinstance(val, list):
                 final_results[key] = np.nanmean(val)
-
+        final_results.update(kitti_adaptive_metrics)
         return final_results
 
 # https://github.com/pytorch/pytorch/issues/21987#issuecomment-813859270

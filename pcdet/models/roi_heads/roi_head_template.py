@@ -32,7 +32,8 @@ class RoIHeadTemplate(nn.Module):
         self.build_losses(self.model_cfg.LOSS_CONFIG)
         self.forward_ret_dict = None
         self.predict_boxes_when_training = predict_boxes_when_training
-
+        self.conf_ema = 1/3
+    
     def build_losses(self, losses_cfg):
         self.add_module(
             'reg_loss_func',
@@ -196,10 +197,12 @@ class RoIHeadTemplate(nn.Module):
         sample_targets, sample_target_scores = [], []
         sample_pls, sample_pl_scores = [], []
         sample_gts = []
+        
+        rcnn_soft_scores = self.forward_ret_dict['rcnn_soft_cls_labels']
         for i, uind in enumerate(unlabeled_inds):
             mask = (targets_dict['reg_valid_mask'][uind] > 0) if mask_type == 'reg' else (
                         targets_dict['rcnn_cls_labels'][uind] >= 0)
-
+            
             # (Proposals) ROI info
             rois = targets_dict['rois'][uind][mask].detach().clone()
             roi_labels = targets_dict['roi_labels'][uind][mask].unsqueeze(-1).detach().clone()
@@ -207,7 +210,7 @@ class RoIHeadTemplate(nn.Module):
             roi_labeled_boxes = torch.cat([rois, roi_labels], dim=-1)
             sample_rois.append(roi_labeled_boxes)
             sample_roi_scores.append(roi_scores)
-
+            
             # Target info
             target_labeled_boxes = targets_dict['gt_of_rois_src'][uind][mask].detach().clone()
             target_scores = targets_dict['rcnn_cls_labels'][uind][mask].detach().clone()
@@ -256,7 +259,7 @@ class RoIHeadTemplate(nn.Module):
                       filename=f'vis_{vis_type}_{uind}.png')
 
         metric_inputs = {'preds': sample_preds, 'pred_scores': sample_pred_scores, 'rois': sample_rois, 'roi_scores': sample_roi_scores,
-                         'ground_truths': sample_gts, 'targets': sample_targets, 'target_scores': sample_target_scores}
+                         'ground_truths': sample_gts, 'targets': sample_targets, 'target_scores': sample_target_scores, 'rcnn_soft_scores':rcnn_soft_scores}
         metrics.update(**metric_inputs)
 
         if update_roi_pl:
@@ -444,6 +447,24 @@ class RoIHeadTemplate(nn.Module):
         }
         return rcnn_loss_cls, tb_dict
 
+    def adaptive_filtering(self):
+        unlabeled_inds = self.forward_ret_dict['unlabeled_inds']
+        rcnn_cls_labels = self.forward_ret_dict['rcnn_cls_labels'].clone().detach()
+        rcnn_cls_preds = self.forward_ret_dict['rcnn_cls'].view_as(rcnn_cls_labels).clone().detach()
+        rcnn_cls_labels = rcnn_cls_labels[unlabeled_inds]
+        rcnn_cls_preds = torch.sigmoid(rcnn_cls_preds)[unlabeled_inds]
+
+        # ----------- RCNN_CLS_LABELS -----------
+        fg_mask = rcnn_cls_labels > self.conf_ema 
+        #TODO:Deepika adjust BG dynamically based on conf ema
+        bg_mask = rcnn_cls_labels < self.model_cfg.TARGET_CONFIG.UNLABELED_CLS_BG_THRESH
+        ignore_mask = torch.eq(self.forward_ret_dict['gt_of_rois'][unlabeled_inds], 0).all(dim=-1)
+        rcnn_cls_labels[bg_mask] = 0
+        rcnn_cls_labels[ignore_mask] = -1
+        self.forward_ret_dict['rcnn_soft_cls_labels'] = rcnn_cls_labels.clone().detach()
+        rcnn_cls_labels[fg_mask] = 1
+        self.forward_ret_dict['rcnn_cls_labels'][unlabeled_inds] = rcnn_cls_labels
+
     def pre_loss_filtering(self):
 
         unlabeled_inds = self.forward_ret_dict['unlabeled_inds']
@@ -457,20 +478,14 @@ class RoIHeadTemplate(nn.Module):
         filtering_mask = (rcnn_cls_preds > reg_fg_thresh) & (rcnn_cls_labels > reg_fg_thresh)
         self.forward_ret_dict['reg_valid_mask'][unlabeled_inds] = filtering_mask.long()
 
-        # ----------- RCNN_CLS_LABELS -----------
-        fg_mask = rcnn_cls_labels > self.model_cfg.TARGET_CONFIG.UNLABELED_CLS_FG_THRESH
-        bg_mask = rcnn_cls_labels < self.model_cfg.TARGET_CONFIG.UNLABELED_CLS_BG_THRESH
-        ignore_mask = torch.eq(self.forward_ret_dict['gt_of_rois'][unlabeled_inds], 0).all(dim=-1)
-        rcnn_cls_labels[fg_mask] = 1
-        rcnn_cls_labels[bg_mask] = 0
-        rcnn_cls_labels[ignore_mask] = -1
-        self.forward_ret_dict['rcnn_cls_labels'][unlabeled_inds] = rcnn_cls_labels
+
 
     def get_loss(self, tb_dict=None, scalar=True):
         tb_dict = {} if tb_dict is None else tb_dict
 
         if self.model_cfg.ENABLE_RCNN_CONSISTENCY:
             self.pre_loss_filtering()
+            self.adaptive_filtering()
 
         if self.model_cfg.get("ENABLE_EVAL", None):
             # self.update_metrics(self.forward_ret_dict, mask_type='reg')
