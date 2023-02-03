@@ -26,7 +26,7 @@ class PredQualityMetrics(Metric):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.reset_state_interval = kwargs.get('reset_state_interval', 64)
+        self.reset_state_interval = kwargs.get('reset_state_interval', 1)
         self.tag = kwargs.get('tag', None)
         self.dataset = kwargs.get('dataset', None)
         self.config = kwargs.get('config', None)
@@ -55,10 +55,10 @@ class PredQualityMetrics(Metric):
         if roi_scores is not None:
             assert len(pred_scores) == len(roi_scores)
 
-        roi_scores = [score.clone().detach() for score in roi_scores] if roi_scores is not None else None
-        preds = [pred_box.clone().detach() for pred_box in preds]
-        pred_scores = [ps_score.clone().detach() for ps_score in pred_scores]
-        pred_iou_wrt_pl = [iou.clone().detach() for iou in pred_iou_wrt_pl] if pred_iou_wrt_pl is not None else None
+        roi_scores = [score.clone().detach() for score in roi_scores] if roi_scores is not None else None 
+        preds = [pred_box.clone().detach() for pred_box in preds] # roi boxes
+        pred_scores = [ps_score.clone().detach() for ps_score in pred_scores]  #roi sem score
+        pred_iou_wrt_pl = [iou.clone().detach() for iou in pred_iou_wrt_pl] if pred_iou_wrt_pl is not None else None #  gt_roi_
         target_scores = [target_score.clone().detach() for target_score in target_scores] if target_scores is not None else None
         ground_truths = [gt_box.clone().detach() for gt_box in ground_truths]
         pseudo_labels = [pl_box.clone().detach() for pl_box in pseudo_labels] if pseudo_labels is not None else None
@@ -108,10 +108,10 @@ class PredQualityMetrics(Metric):
                     overlap = iou3d_nms_utils.boxes_iou3d_gpu(valid_pred_boxes[:, 0:7], valid_gt_boxes[:, 0:7])
                     preds_iou_max, assigned_gt_inds = overlap.max(dim=1)
 
-                    assigned_gt_cls_mask = valid_gt_boxes[assigned_gt_inds, -1] == cind
+                    assigned_gt_cls_mask = valid_gt_boxes[assigned_gt_inds, -1] == cind #wtf?
 
                     cc_mask = (pred_cls_mask & assigned_gt_cls_mask)  # correctly classified mask
-                    mc_mask = (pred_cls_mask & (~assigned_gt_cls_mask)) | ((~pred_cls_mask) & assigned_gt_cls_mask)  # misclassified mask
+                    mc_mask = (pred_cls_mask & (~assigned_gt_cls_mask)) | ((~pred_cls_mask) & assigned_gt_cls_mask)  # misclassified mask 
 
                     # Using kitti test class-wise fg threshold instead of thresholds used during train.
                     classwise_fg_thresh = self.min_overlaps[cind]
@@ -239,7 +239,7 @@ class KITTIEvalMetrics(Metric):
     full_state_update: bool = False
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.reset_state_interval = kwargs.get('reset_state_interval', 256)
+        self.reset_state_interval = kwargs.get('reset_state_interval', 1)
         self.tag = kwargs.get('tag', None)
         self.dataset = kwargs.get('dataset', None)
         current_classes = self.dataset.class_names

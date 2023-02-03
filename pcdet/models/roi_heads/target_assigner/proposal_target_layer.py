@@ -34,7 +34,7 @@ class ProposalTargetLayer(nn.Module):
 
         return targets_dict
 
-    def sample_rois_for_rcnn(self, batch_dict):
+    def sample_rois_for_rcnn(self, batch_dict): # 
         """
         Args:
             batch_dict:
@@ -75,7 +75,7 @@ class ProposalTargetLayer(nn.Module):
                     sampled_inds, cur_reg_valid_mask, cur_cls_labels, roi_ious, gt_assignment, cur_interval_mask = self.subsample_labeled_rois(batch_dict, index)
                 else:
                     sampled_inds, cur_reg_valid_mask, cur_cls_labels, roi_ious, gt_assignment, cur_interval_mask = subsample_unlabeled_rois(batch_dict, index)
-                cur_roi = batch_dict['rois'][index][sampled_inds]
+                cur_roi = batch_dict['rois'][index][sampled_inds] # 512 here. u subsample and reduce it to 512
                 cur_roi_scores = batch_dict['roi_scores'][index][sampled_inds]
                 cur_roi_labels = batch_dict['roi_labels'][index][sampled_inds]
                 batch_roi_ious[index] = roi_ious
@@ -87,20 +87,30 @@ class ProposalTargetLayer(nn.Module):
                 cur_roi_scores = batch_dict['roi_scores'][index][sampled_inds]
                 cur_roi_labels = batch_dict['roi_labels'][index][sampled_inds]
                 batch_roi_ious[index] = roi_ious
-                batch_gt_of_rois[index] = cur_gt_boxes[gt_assignment[sampled_inds]]
+                batch_gt_of_rois[index] = cur_gt_boxes[gt_assignment[sampled_inds]] 
 
             batch_rois[index] = cur_roi
-            batch_roi_labels[index] = cur_roi_labels
+            batch_roi_labels[index] = cur_roi_labels 
             batch_roi_scores[index] = cur_roi_scores
             interval_mask[index] = cur_interval_mask
             batch_reg_valid_mask[index] = cur_reg_valid_mask
             batch_cls_labels[index] = cur_cls_labels
 
-        targets_dict = {'rois': batch_rois, 'gt_of_rois': batch_gt_of_rois, 'gt_iou_of_rois': batch_roi_ious,
-                        'roi_scores': batch_roi_scores, 'roi_labels': batch_roi_labels,
-                        'reg_valid_mask': batch_reg_valid_mask,
-                        'rcnn_cls_labels': batch_cls_labels,
-                        'interval_mask': interval_mask}
+        targets_dict = {'rois': batch_rois,# roi
+                        'gt_of_rois': batch_gt_of_rois, #assigned gt for each roi (batch roi) torch.Size([2, 128, 8])
+                        'gt_iou_of_rois': batch_roi_ious, # raw iou scores torch.Size([2, 128])
+                        'roi_scores': batch_roi_scores, # scores each roi 
+                        'roi_labels': batch_roi_labels, # labels for each roi 
+                        'reg_valid_mask': batch_reg_valid_mask, # 
+                        'rcnn_cls_labels': batch_cls_labels, # iou's with balanced fg/bg  batch roi ious > 0.75 == 1 batch roi ious > 0.25 == 0, rest is cls interval and normalized and torch.Size([128])
+                        'interval_mask': interval_mask} # indices in which normalized values are present in 'rcnn cls labels'
+# rcnn_cls_labels is the modification of batch roi ious
+#  batch roi ious > 0.75 == 1
+# cal interval mask and normalize the [0.25,0,75] --> [0,1]
+# NOTE: bg mask is not zeroed yet !! NOTE: it was zeroed :(
+# 'gt_of_rois' is the boxes for the 
+#batch_gt_of_rois.shape
+#torch.Size([2, 128, 8])
 
         return targets_dict
 

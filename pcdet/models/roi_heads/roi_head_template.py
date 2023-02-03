@@ -515,8 +515,8 @@ class RoIHeadTemplate(nn.Module):
             unlabeled_inds = self.forward_ret_dict['unlabeled_inds']
 
             if self.model_cfg.TARGET_CONFIG.get("UNLABELED_SAMPLER_TYPE", None) != 'subsample_labeled_rois':
-                gt_iou_of_rois = self.forward_ret_dict['gt_iou_of_rois'][unlabeled_inds].detach().clone()
-                roi_labels = self.forward_ret_dict['roi_labels'][unlabeled_inds].detach().clone() - 1
+                gt_iou_of_rois = self.forward_ret_dict['gt_iou_of_rois'][unlabeled_inds].detach().clone() # raw iou scores from subsampling
+                roi_labels = self.forward_ret_dict['roi_labels'][unlabeled_inds].detach().clone() - 1 # 0,1,2 based on class
 
                 # ----------- REG_VALID_MASK -----------
                 ulb_reg_fg_thresh = self.model_cfg.TARGET_CONFIG.UNLABELED_REG_FG_THRESH
