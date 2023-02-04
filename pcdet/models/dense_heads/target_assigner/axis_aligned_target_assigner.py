@@ -58,7 +58,7 @@ class AxisAlignedTargetAssigner(object):
             cur_gt_classes = gt_classes[k][:cnt + 1].int()
 
             target_list = []
-            for anchor_class_name, anchors in zip(self.anchor_class_names, all_anchors):
+            for anchor_class_name, anchors in zip(self.anchor_class_names, all_anchors): #all anchors = 70400
                 if cur_gt_classes.shape[0] > 1:
                     mask = torch.from_numpy(self.class_names[cur_gt_classes.cpu() - 1] == anchor_class_name)
                 else:
@@ -158,8 +158,8 @@ class AxisAlignedTargetAssigner(object):
             gt_ids[anchors_with_max_overlap] = gt_inds_force.int()
 
             pos_inds = anchor_to_gt_max >= matched_threshold
-            gt_inds_over_thresh = anchor_to_gt_argmax[pos_inds]
-            labels[pos_inds] = gt_classes[gt_inds_over_thresh]
+            gt_inds_over_thresh = anchor_to_gt_argmax[pos_inds] # gets the corresponding gt number
+            labels[pos_inds] = gt_classes[gt_inds_over_thresh] #
             gt_ids[pos_inds] = gt_inds_over_thresh.int()
             bg_inds = (anchor_to_gt_max < unmatched_threshold).nonzero()[:, 0]
         else:

@@ -26,7 +26,7 @@ class PredQualityMetrics(Metric):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.reset_state_interval = kwargs.get('reset_state_interval', 1)
+        self.reset_state_interval = kwargs.get('reset_state_interval', 64)
         self.tag = kwargs.get('tag', None)
         self.dataset = kwargs.get('dataset', None)
         self.config = kwargs.get('config', None)
@@ -58,9 +58,9 @@ class PredQualityMetrics(Metric):
         roi_scores = [score.clone().detach() for score in roi_scores] if roi_scores is not None else None 
         preds = [pred_box.clone().detach() for pred_box in preds] # roi boxes
         pred_scores = [ps_score.clone().detach() for ps_score in pred_scores]  #roi sem score
-        pred_iou_wrt_pl = [iou.clone().detach() for iou in pred_iou_wrt_pl] if pred_iou_wrt_pl is not None else None #  gt_roi_
-        target_scores = [target_score.clone().detach() for target_score in target_scores] if target_scores is not None else None
-        ground_truths = [gt_box.clone().detach() for gt_box in ground_truths]
+        pred_iou_wrt_pl = [iou.clone().detach() for iou in pred_iou_wrt_pl] if pred_iou_wrt_pl is not None else None #  gt_roi_iou raw score 
+        target_scores = [target_score.clone().detach() for target_score in target_scores] if target_scores is not None else None # modified target score
+        ground_truths = [gt_box.clone().detach() for gt_box in ground_truths] # ori gt
         pseudo_labels = [pl_box.clone().detach() for pl_box in pseudo_labels] if pseudo_labels is not None else None
         pred_weights = [pred_weight.clone().detach() for pred_weight in pred_weights] if pred_weights is not None else None
 
@@ -111,12 +111,12 @@ class PredQualityMetrics(Metric):
                     assigned_gt_cls_mask = valid_gt_boxes[assigned_gt_inds, -1] == cind #wtf?
 
                     cc_mask = (pred_cls_mask & assigned_gt_cls_mask)  # correctly classified mask
-                    mc_mask = (pred_cls_mask & (~assigned_gt_cls_mask)) | ((~pred_cls_mask) & assigned_gt_cls_mask)  # misclassified mask 
+                    mc_mask = (pred_cls_mask & (~assigned_gt_cls_mask)) | ((~pred_cls_mask) & assigned_gt_cls_mask)  # misclassified mask "could have done simple xor"
 
                     # Using kitti test class-wise fg threshold instead of thresholds used during train.
                     classwise_fg_thresh = self.min_overlaps[cind]
                     fg_mask = preds_iou_max >= classwise_fg_thresh
-                    bg_mask = preds_iou_max <= self.config.ROI_HEAD.TARGET_CONFIG.UNLABELED_CLS_BG_THRESH
+                    bg_mask = preds_iou_max <= self.config.ROI_HEAD.TARGET_CONFIG.UNLABELED_CLS_BG_THRESH #0.2
                     uc_mask = ~(bg_mask | fg_mask)  # uncertain mask
 
                     cc_fg_mask = fg_mask & cc_mask
@@ -191,7 +191,7 @@ class PredQualityMetrics(Metric):
                             cls_target_score_fn = (valid_target_scores * fn_mask.float()).sum() / fn_mask.sum()
                             classwise_metrics['target_score_fn'][cind] = cls_target_score_fn
                             cls_target_score_tp = (valid_target_scores * tp_mask.float()).sum() / tp_mask.sum()
-                            classwise_metrics['target_score_tp'][cind] = cls_target_score_tp
+                            classwise_metrics['target_score_fn'][cind] = cls_target_score_tp
                             cls_target_score_fp = (valid_target_scores * fp_mask.float()).sum() / fp_mask.sum()
                             classwise_metrics['target_score_fp'][cind] = cls_target_score_fp
                         if valid_pred_weights is not None:
@@ -239,7 +239,7 @@ class KITTIEvalMetrics(Metric):
     full_state_update: bool = False
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.reset_state_interval = kwargs.get('reset_state_interval', 1)
+        self.reset_state_interval = kwargs.get('reset_state_interval', 64)
         self.tag = kwargs.get('tag', None)
         self.dataset = kwargs.get('dataset', None)
         current_classes = self.dataset.class_names
