@@ -196,6 +196,7 @@ class ProposalTargetLayerConsistency(nn.Module):
         cur_roi_labels = batch_dict['roi_labels'][index]
 
         if self.roi_sampler_cfg.get('SAMPLE_ROI_BY_EACH_CLASS', False):
+           
             max_overlaps, gt_assignment = self.get_max_iou_with_same_class(
                 rois=cur_roi, roi_labels=cur_roi_labels,
                 gt_boxes=cur_gt_boxes[:, 0:7], gt_labels=cur_gt_boxes[:, -1].long()
@@ -227,7 +228,9 @@ class ProposalTargetLayerConsistency(nn.Module):
                 (roi_ious[interval_mask] - iou_bg_thresh) / (iou_fg_thresh - iou_bg_thresh)
 
         return sampled_inds, reg_valid_mask, cls_labels, roi_ious, gt_assignment
+    
 
+    
     def subsample_rois(self, max_overlaps):
         # sample fg, easy_bg, hard_bg
         fg_rois_per_image = int(np.round(self.roi_sampler_cfg.FG_RATIO * self.roi_sampler_cfg.ROI_PER_IMAGE))

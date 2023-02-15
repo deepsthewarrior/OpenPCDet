@@ -28,7 +28,7 @@ class RoIHeadTemplate(nn.Module):
         if self.model_cfg.ENABLE_RCNN_CONSISTENCY:
             self.proposal_target_layer = ProposalTargetLayerConsistency(roi_sampler_cfg=self.model_cfg.TARGET_CONFIG)
         else:
-            self.proposal_target_layer = ProposalTargetLayer(roi_sampler_cfg=self.model_cfg.TARGET_CONFIG)
+            self.proposal_target_layer = ProposalTargetLayer(roi_sampler_cfg=self.model_cfg.TARGET_CONFIG, loss_cfg=self.model_cfg.LOSS_CONFIG)
         self.build_losses(self.model_cfg.LOSS_CONFIG)
         self.forward_ret_dict = None
         self.predict_boxes_when_training = predict_boxes_when_training
@@ -84,7 +84,8 @@ class RoIHeadTemplate(nn.Module):
 
         rois = batch_box_preds.new_zeros((batch_size, nms_config.NMS_POST_MAXSIZE, batch_box_preds.shape[-1]))
         roi_scores = batch_box_preds.new_zeros((batch_size, nms_config.NMS_POST_MAXSIZE))
-        roi_labels = batch_box_preds.new_zeros((batch_size, nms_config.NMS_POST_MAXSIZE), dtype=torch.long)
+        roi_labels = batch_box_preds.new_zeros((batch_size, nms_config.NMS_POST_MAXSIZE), dtype=torch.long)       
+        roi_raw_scores =  batch_box_preds.new_zeros((batch_size, nms_config.NMS_POST_MAXSIZE, 3))
 
         for index in range(batch_size):
             if batch_dict.get('batch_index', None) is not None:
@@ -108,6 +109,10 @@ class RoIHeadTemplate(nn.Module):
             rois[index, :len(selected), :] = box_preds[selected]
             roi_scores[index, :len(selected)] = cur_roi_scores[selected]
             roi_labels[index, :len(selected)] = cur_roi_labels[selected]
+            roi_raw_scores[index, :len(selected)] = cls_preds[selected]
+        
+        if nms_config.NMS_POST_MAXSIZE == 512:
+            batch_dict['roi_raw_scores'] = roi_raw_scores
 
         batch_dict['rois'] = rois
         batch_dict['roi_scores'] = roi_scores
@@ -388,6 +393,7 @@ class RoIHeadTemplate(nn.Module):
                 rcnn_reg.view(rcnn_batch_size, -1).unsqueeze(dim=0),
                 reg_targets.unsqueeze(dim=0),
             )  # [B, M, 7]
+            
             if scalar:
                 rcnn_loss_reg = (rcnn_loss_reg.view(rcnn_batch_size, -1) * fg_mask.unsqueeze(dim=-1).float()).sum() \
                                 / max(fg_sum, 1)

@@ -147,9 +147,11 @@ class PVRCNNHead(RoIHeadTemplate):
 
         # proposal_layer doesn't continue if the rois are already in the batch_dict.
         # However, for labeled data proposal layer should continue!
+
         targets_dict = self.proposal_layer(batch_dict, nms_config=nms_mode)
         # should not use gt_roi for pseudo label generation
         if (self.training or self.print_loss_when_eval) and not disable_gt_roi_when_pseudo_labeling:
+            batch_dict['roi_raw_scores'] = targets_dict['roi_raw_scores']
             targets_dict = self.assign_targets(batch_dict)
             batch_dict['rois'] = targets_dict['rois']
             batch_dict['roi_scores'] = targets_dict['roi_scores']
@@ -162,12 +164,12 @@ class PVRCNNHead(RoIHeadTemplate):
             targets_dict['metric_registry'] = batch_dict['metric_registry']
 
         # RoI aware pooling
-        pooled_features = self.roi_grid_pool(batch_dict)  # (BxN, 6x6x6, C)
+        pooled_features = self.roi_grid_pool(batch_dict)  # (BxN, 6x6x6, C) #torch.Size([400, 216, 128])
 
-        grid_size = self.model_cfg.ROI_GRID_POOL.GRID_SIZE
+        grid_size = self.model_cfg.ROI_GRID_POOL.GRID_SIZE 
         batch_size_rcnn = pooled_features.shape[0]
         pooled_features = pooled_features.permute(0, 2, 1).\
-            contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxN, C, 6, 6, 6)
+            contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxN, C, 6, 6, 6) #torch.Size([400, 128, 6, 6, 6])
 
         shared_features = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
         rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)

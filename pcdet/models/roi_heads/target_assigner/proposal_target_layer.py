@@ -1,15 +1,22 @@
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
+from ....utils import box_coder_utils, common_utils, loss_utils
 from ....ops.iou3d_nms import iou3d_nms_utils
 
 
 class ProposalTargetLayer(nn.Module):
-    def __init__(self, roi_sampler_cfg):
+    def __init__(self, roi_sampler_cfg,loss_cfg = None):
         super().__init__()
+        self.loss_cfg = loss_cfg
         self.roi_sampler_cfg = roi_sampler_cfg
-
+        self.box_coder = getattr(box_coder_utils, self.roi_sampler_cfg.BOX_CODER)(
+            **self.roi_sampler_cfg.get('BOX_CODER_CONFIG', {})
+        )
+        self.build_losses(self.loss_cfg)
+        
     def forward(self, batch_dict):
         """
         Args:
@@ -33,8 +40,48 @@ class ProposalTargetLayer(nn.Module):
         targets_dict = self.sample_rois_for_rcnn(batch_dict=batch_dict)
 
         return targets_dict
+    
+    def build_losses(self, losses_cfg):
+        self.add_module(
+            'reg_loss_func',
+            loss_utils.WeightedSmoothL1Loss(code_weights=losses_cfg.LOSS_WEIGHTS['code_weights'])
+        )   
 
-    def sample_rois_for_rcnn(self, batch_dict):
+    def encode_torch(self, boxes, anchors):
+        """
+        Args:
+            boxes: (N, 7 + C) [x, y, z, dx, dy, dz, heading, ...]
+            anchors: (N, 7 + C) [x, y, z, dx, dy, dz, heading or *[cos, sin], ...]
+
+        Returns:
+
+        """
+        encode_angle_by_sincos = False
+        anchors[:, 3:6] = torch.clamp_min(anchors[:, 3:6], min=1e-5)
+        boxes[:, 3:6] = torch.clamp_min(boxes[:, 3:6], min=1e-5)
+
+        xa, ya, za, dxa, dya, dza, ra, *cas = torch.split(anchors, 1, dim=-1)
+        xg, yg, zg, dxg, dyg, dzg, rg, *cgs = torch.split(boxes, 1, dim=-1)
+
+        diagonal = torch.sqrt(dxa ** 2 + dya ** 2)
+        xt = (xg - xa) / diagonal
+        yt = (yg - ya) / diagonal
+        zt = (zg - za) / dza
+        dxt = torch.log(dxg / dxa)
+        dyt = torch.log(dyg / dya)
+        dzt = torch.log(dzg / dza)
+        
+        if encode_angle_by_sincos:
+            rt_cos = torch.cos(rg) - torch.cos(ra)
+            rt_sin = torch.sin(rg) - torch.sin(ra)
+            rts = [rt_cos, rt_sin]
+        else:
+            rts = [rg - ra]
+
+        cts = [g - a for g, a in zip(cgs, cas)]
+        return torch.cat([xt, yt, zt, dxt, dyt, dzt, *rts, *cts], dim=-1)
+    
+    def sample_rois_for_rcnn(self,   batch_dict):
         """
         Args:
             batch_dict:
@@ -74,7 +121,7 @@ class ProposalTargetLayer(nn.Module):
                 if self.roi_sampler_cfg.UNLABELED_SAMPLER_TYPE is None:
                     sampled_inds, cur_reg_valid_mask, cur_cls_labels, roi_ious, gt_assignment, cur_interval_mask = self.subsample_labeled_rois(batch_dict, index)
                 else:
-                    sampled_inds, cur_reg_valid_mask, cur_cls_labels, roi_ious, gt_assignment, cur_interval_mask = subsample_unlabeled_rois(batch_dict, index)
+                    sampled_inds, cur_reg_valid_mask, cur_cls_labels, roi_ious, gt_assignment, cur_interval_mask = self.subsample_unlabeled_rois(batch_dict, index)
                 cur_roi = batch_dict['rois'][index][sampled_inds]
                 cur_roi_scores = batch_dict['roi_scores'][index][sampled_inds]
                 cur_roi_labels = batch_dict['roi_labels'][index][sampled_inds]
@@ -110,10 +157,12 @@ class ProposalTargetLayer(nn.Module):
         cur_roi_labels = batch_dict['roi_labels'][index]
 
         if self.roi_sampler_cfg.get('SAMPLE_ROI_BY_EACH_CLASS', False):
+            m_cost = self.loss_metric(cur_roi,cur_gt_boxes)
             max_overlaps, gt_assignment = self.get_max_iou_with_same_class(
                 rois=cur_roi, roi_labels=cur_roi_labels,
                 gt_boxes=cur_gt_boxes[:, 0:7], gt_labels=cur_gt_boxes[:, -1].long()
             )
+
         else:
             iou3d = iou3d_nms_utils.boxes_iou3d_gpu(cur_roi, cur_gt_boxes[:, 0:7])  # (M, N)
             max_overlaps, gt_assignment = torch.max(iou3d, dim=1)
@@ -142,7 +191,55 @@ class ProposalTargetLayer(nn.Module):
         interval_mask = torch.zeros_like(sampled_inds, dtype=torch.bool)
 
         return sampled_inds, cur_reg_valid_mask, cur_cls_labels, roi_ious, gt_assignment, interval_mask
+    
+    def subsample_unlabeled_rois(self, batch_dict, index):
+        cur_roi = batch_dict['rois'][index]
+        cur_gt_boxes = batch_dict['gt_boxes'][index]
+        cur_roi_labels = batch_dict['roi_labels'][index]
+        cur_roi_raw_scores = batch_dict['roi_raw_scores'][index]
 
+        k = cur_gt_boxes.__len__() - 1
+        while k >= 0 and cur_gt_boxes[k].sum() == 0:
+            k -= 1
+        cur_gt_boxes = cur_gt_boxes[:k + 1]
+        cur_gt_boxes = cur_gt_boxes.new_zeros((1, cur_gt_boxes.shape[1])) if len(
+            cur_gt_boxes) == 0 else cur_gt_boxes
+        
+        if self.roi_sampler_cfg.get('SAMPLE_ROI_BY_EACH_CLASS', False):
+            m_cost = self.loss_metric(cur_roi_labels,cur_roi,cur_roi_raw_scores,cur_gt_boxes)
+            max_overlaps, gt_assignment = self.get_max_iou_with_same_class(
+                rois=cur_roi, roi_labels=cur_roi_labels,
+                gt_boxes=cur_gt_boxes[:, 0:7], gt_labels=cur_gt_boxes[:, -1].long()
+            )
+
+        else:
+            iou3d = iou3d_nms_utils.boxes_iou3d_gpu(cur_roi, cur_gt_boxes[:, 0:7])  # (M, N)
+            max_overlaps, gt_assignment = torch.max(iou3d, dim=1)
+
+        sampled_inds = self.subsample_rois(max_overlaps=max_overlaps)
+        roi_ious = max_overlaps[sampled_inds]
+
+        # regression valid mask
+        reg_valid_mask = (roi_ious > self.roi_sampler_cfg.REG_FG_THRESH).long()
+
+        # classification label
+        if self.roi_sampler_cfg.CLS_SCORE_TYPE == 'cls':
+            cls_labels = (roi_ious > self.roi_sampler_cfg.CLS_FG_THRESH).long()
+            ignore_mask = (roi_ious > self.roi_sampler_cfg.CLS_BG_THRESH) & \
+                          (roi_ious < self.roi_sampler_cfg.CLS_FG_THRESH)
+            cls_labels[ignore_mask > 0] = -1
+        elif self.roi_sampler_cfg.CLS_SCORE_TYPE == 'roi_iou':
+            iou_bg_thresh = self.roi_sampler_cfg.CLS_BG_THRESH
+            iou_fg_thresh = self.roi_sampler_cfg.CLS_FG_THRESH
+            fg_mask = roi_ious > iou_fg_thresh
+            bg_mask = roi_ious < iou_bg_thresh
+            interval_mask = (fg_mask == 0) & (bg_mask == 0)
+            cls_labels = (fg_mask > 0).float()
+            cls_labels[interval_mask] = \
+                (roi_ious[interval_mask] - iou_bg_thresh) / (iou_fg_thresh - iou_bg_thresh)
+
+        return sampled_inds, reg_valid_mask, cls_labels, roi_ious, gt_assignment, interval_mask
+ 
     # TODO(farzad) Our previous method for unlabeled samples. Test it for the new implementation.
     def subsample_labeled_rois(self, batch_dict, index):
         cur_roi = batch_dict['rois'][index]
@@ -183,7 +280,42 @@ class ProposalTargetLayer(nn.Module):
             (roi_ious[interval_mask] - iou_bg_thresh) / (iou_fg_thresh - iou_bg_thresh)
 
         return sampled_inds, reg_valid_mask, cls_labels, roi_ious, gt_assignment, interval_mask
+    
+    def loss_metric(self,roi_labels,rois,roi_raw_scores,gt_boxes):
+        nan = float("nan")
+        match_matrix = torch.full([rois.shape[0],gt_boxes.shape[0]], nan)
+        gt_boxes =  gt_boxes[...,:-1]
+        gt_labels = gt_boxes[..., -1]
+        gt_labels = gt_labels.unsqueeze(0).repeat([rois.shape[0],1])
+        roi_labels = roi_labels.unsqueeze(1).repeat([1,gt_boxes.shape[0]])
+        
 
+        roi_values = rois.unsqueeze(1).repeat(1, gt_boxes.shape[0], 1)
+        roi_values = roi_values.view(-1,7)
+        gt_targets = gt_boxes.unsqueeze(0).repeat(rois.shape[0],1,1)
+        roi_raw_scores = roi_raw_scores.unsqueeze(1).repeat([1,gt_boxes.shape[0],1])
+        gt_targets = gt_targets.view(-1,7)
+        
+        # cls_targets = cls_targets.squeeze(dim=-1)
+        # one_hot_targets = torch.zeros(
+        #     *list(cls_targets.shape), self.num_class + 1, dtype=cls_preds.dtype, device=cls_targets.device
+        # )
+        # one_hot_targets.scatter_(-1, cls_targets.unsqueeze(dim=-1).long(), 1.0)
+        # cls_preds = cls_preds.view(batch_size, -1, self.num_class)
+        # one_hot_targets = one_hot_targets[..., 1:]
+        reg_targets = self.box_coder.encode_torch(
+                gt_targets, roi_values
+            )
+        
+        matching_cost = self.reg_loss_func(
+                roi_values.unsqueeze(dim=0),
+                reg_targets.unsqueeze(dim=0),
+            )
+                
+        matching_cost = matching_cost.view(rois.shape[0],gt_boxes.shape[0],7).sum(dim=-1)
+
+        return matching_cost
+    
     def subsample_rois(self, max_overlaps):
         # sample fg, easy_bg, hard_bg
         fg_rois_per_image = int(np.round(self.roi_sampler_cfg.FG_RATIO * self.roi_sampler_cfg.ROI_PER_IMAGE))
