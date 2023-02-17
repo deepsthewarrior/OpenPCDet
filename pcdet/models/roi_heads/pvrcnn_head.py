@@ -1,5 +1,6 @@
+import torch
 import torch.nn as nn
-
+import torch.nn.functional as F
 from ...ops.pointnet2.pointnet2_stack import pointnet2_modules as pointnet2_stack_modules
 from ...utils import common_utils
 from .roi_head_template import RoIHeadTemplate
@@ -76,7 +77,6 @@ class PVRCNNHead(RoIHeadTemplate):
                 point_cls_scores: (N1 + N2 + N3 + ..., 1)
                 point_part_offset: (N1 + N2 + N3 + ..., 3)
         Returns:
-
         """
         batch_size = batch_dict['batch_size']
         rois = batch_dict['rois']
@@ -168,8 +168,20 @@ class PVRCNNHead(RoIHeadTemplate):
         batch_size_rcnn = pooled_features.shape[0]
         pooled_features = pooled_features.permute(0, 2, 1).\
             contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxN, C, 6, 6, 6)
-
+        
+        cat_feat = []
+        # x = pooled_features.view(batch_size_rcnn, -1, 1).clone().detach()
         shared_features = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
+        
+
+        # for layers in self.shared_fc_layer:
+        #     x = layers(x)
+        #     if isinstance(layers,nn.Conv1d):
+        #         cat_feat.append(x) 
+
+        # feat = torch.cat(cat_feat,1)
+        # avg_feat = F.adaptive_avg_pool1d(feat)
+
         rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
         rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)
 

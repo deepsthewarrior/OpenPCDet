@@ -219,7 +219,7 @@ class PVRCNN_SSL(Detector3DTemplate):
                 with torch.no_grad():
                     for cur_module in self.pv_rcnn_ema.module_list:
                         try:
-                            batch_dict_ema = cur_module(batch_dict_ema, disable_gt_roi_when_pseudo_labeling=True)
+                            batch_dict_ema = cur_module(batch_dict_ema, disable_gt_roi_when_pseudo_labeling = True)
                         except:
                             batch_dict_ema = cur_module(batch_dict_ema)
                 pred_dicts_ens, recall_dicts_ema = self.pv_rcnn_ema.post_processing(batch_dict_ema, no_recall_dict=True,

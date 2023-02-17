@@ -39,13 +39,13 @@ class RoIHeadTemplate(nn.Module):
             loss_utils.WeightedSmoothL1Loss(code_weights=losses_cfg.LOSS_WEIGHTS['code_weights'])
         )
 
-    def make_fc_layers(self, input_channels, output_channels, fc_list):
+    def make_fc_layers(self, input_channels, output_channels, fc_list): #[256, 256]
         fc_layers = []
-        pre_channel = input_channels
+        pre_channel = input_channels #256
         for k in range(0, fc_list.__len__()):
             fc_layers.extend([
                 nn.Conv1d(pre_channel, fc_list[k], kernel_size=1, bias=False),
-                nn.BatchNorm1d(fc_list[k]),
+                nn.BatchNorm1d(fc_list[k]), 
                 nn.ReLU()
             ])
             pre_channel = fc_list[k]
