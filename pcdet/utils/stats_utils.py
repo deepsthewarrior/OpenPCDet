@@ -34,9 +34,9 @@ class PredQualityMetrics(Metric):
         # We use _tp if a pred is fg wrt gt and fg wrt pl.
         # We use _fn if a pred is fg wrt gt and not fg wrt pl.
         # We use _fp if a pred is not fg wrt gt and fg wrt pl.
-        self.metrics_name = ["pred_ious", "pred_fgs", "sem_score_fgs", "sem_score_bgs", "score_fgs", "score_bgs",
-                             "target_score_bg", "num_pred_boxes", "num_gt_boxes", "pred_weight_fg", "pred_weight_bg",
-                             "pred_ucs", "pred_ious_ucs", "score_ucs", "sem_score_ucs", "target_score_uc",
+        self.metrics_name = ["pred_ious", "pred_fgs", "sem_score_fgs", "sem_score_bgs","sem_score_ucs","t_score_fgs", "t_score_bgs",
+                             "t_score_ucs","score_fgs", "score_bgs","target_score_bg", "num_pred_boxes", "num_gt_boxes", "pred_weight_fg", "pred_weight_bg",
+                             "pred_ucs", "pred_ious_ucs", "score_ucs",  "target_score_uc",
                              "pred_weight_uc", "pred_fn_rate", "pred_tp_rate", "pred_fp_ratio", "pred_ious_wrt_pl_fg",
                              "pred_ious_wrt_pl_fn", "pred_ious_wrt_pl_fp", "pred_ious_wrt_pl_tp", "score_fgs_tp",
                              "score_fgs_fn", "score_fgs_fp", "target_score_fn", "target_score_tp", "target_score_fp",
@@ -48,7 +48,7 @@ class PredQualityMetrics(Metric):
 
     def update(self, preds: [torch.Tensor], ground_truths: [torch.Tensor], pred_scores: [torch.Tensor],
                rois=None, roi_scores=None, targets=None, target_scores=None, pred_weights=None,
-               pseudo_labels=None, pseudo_label_scores=None, pred_iou_wrt_pl=None) -> None:
+               pseudo_labels=None, pseudo_label_scores=None, pred_iou_wrt_pl=None, t_scores = None) -> None:
         assert isinstance(preds, list) and isinstance(ground_truths, list) and isinstance(pred_scores, list)
         assert all([pred.dim() == 2 for pred in preds]) and all([pred.dim() == 2 for pred in ground_truths]) and all([pred.dim() == 1 for pred in pred_scores])
         assert all([pred.shape[-1] == 8 for pred in preds]) and all([gt.shape[-1] == 8 for gt in ground_truths])
@@ -63,6 +63,7 @@ class PredQualityMetrics(Metric):
         ground_truths = [gt_box.clone().detach() for gt_box in ground_truths]
         pseudo_labels = [pl_box.clone().detach() for pl_box in pseudo_labels] if pseudo_labels is not None else None
         pred_weights = [pred_weight.clone().detach() for pred_weight in pred_weights] if pred_weights is not None else None
+        t_scores = [score.clone().detach() for score in t_scores] if t_scores is not None else None
 
         sample_tensor = preds[0] if len(preds) else ground_truths[0]
         num_classes = len(self.dataset.class_names)
@@ -77,6 +78,8 @@ class PredQualityMetrics(Metric):
             valid_pred_iou_wrt_pl = pred_iou_wrt_pl[i][valid_preds_mask.nonzero().view(-1)].squeeze() if pred_iou_wrt_pl else None
             valid_gts_mask = torch.logical_not(torch.all(ground_truths[i] == 0, dim=-1))
             valid_gt_boxes = ground_truths[i][valid_gts_mask]
+            valid_t_scores = t_scores[i][valid_preds_mask.nonzero().view(-1)].squeeze() if t_scores else None
+
             if pseudo_labels is not None:
                 valid_pl_mask = torch.logical_not(torch.all(pseudo_labels[i] == 0, dim=-1))
                 valid_pl_boxes = pseudo_labels[i][valid_pl_mask] if pseudo_labels else None
@@ -135,6 +138,8 @@ class PredQualityMetrics(Metric):
                     cls_score_bg = (valid_pred_scores * cls_bg_mask.float()).sum() / torch.clamp(bg_mask.float().sum(), min=1.0)
                     classwise_metrics['score_bgs'][cind] = cls_score_bg
 
+                    
+
                     # Using clamp with min=1 in the denominator makes the final results zero when there's no FG,
                     # while without clamp it is N/A, which makes more sense.
                     if valid_roi_scores is not None:
@@ -145,6 +150,14 @@ class PredQualityMetrics(Metric):
                         cls_sem_score_uc = (valid_roi_scores * cc_uc_mask.float()).sum() / cc_uc_mask.float().sum()
                         classwise_metrics['sem_score_ucs'][cind] = cls_sem_score_uc
 
+                    if valid_t_scores is not None:
+                        cls_t_score_fg = (valid_t_scores * cc_fg_mask.float()).sum() / (cc_fg_mask).sum()
+                        classwise_metrics['t_score_fgs'][cind] = cls_t_score_fg
+                        cls_t_score_bg = (valid_t_scores * cls_bg_mask.float()).sum() / cls_bg_mask.float().sum()
+                        classwise_metrics['t_score_bgs'][cind] = cls_t_score_bg
+                        cls_t_score_uc = (valid_t_scores * cc_uc_mask.float()).sum() / cc_uc_mask.float().sum()
+                        classwise_metrics['t_score_ucs'][cind] = cls_t_score_uc
+                        
                     if valid_target_scores is not None:
                         cls_target_score_bg = (valid_target_scores * cls_bg_mask.float()).sum() / cls_bg_mask.float().sum()
                         classwise_metrics['target_score_bg'][cind] = cls_target_score_bg

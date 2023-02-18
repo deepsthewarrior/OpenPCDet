@@ -228,7 +228,7 @@ class ProposalTargetLayerConsistency(nn.Module):
 
         return sampled_inds, reg_valid_mask, cls_labels, roi_ious, gt_assignment
 
-    def subsample_rois(self, max_overlaps):
+    def subsample_rois(self, max_overlaps,):
         # sample fg, easy_bg, hard_bg
         fg_rois_per_image = int(np.round(self.roi_sampler_cfg.FG_RATIO * self.roi_sampler_cfg.ROI_PER_IMAGE))
         fg_thresh = min(self.roi_sampler_cfg.REG_FG_THRESH, self.roi_sampler_cfg.CLS_FG_THRESH)

@@ -54,6 +54,7 @@ class ProposalTargetLayer(nn.Module):
         batch_roi_labels = rois.new_zeros((batch_size, self.roi_sampler_cfg.ROI_PER_IMAGE), dtype=torch.long)
         batch_gt_of_rois = rois.new_zeros(batch_size, self.roi_sampler_cfg.ROI_PER_IMAGE, code_size + 1)
         batch_roi_ious = rois.new_zeros(batch_size, self.roi_sampler_cfg.ROI_PER_IMAGE)
+        batch_t_scores = rois.new_zeros(batch_size, self.roi_sampler_cfg.ROI_PER_IMAGE)
         # batch_gt_scores = rois.new_zeros(batch_size, self.roi_sampler_cfg.ROI_PER_IMAGE)
         batch_reg_valid_mask = rois.new_zeros((batch_size, self.roi_sampler_cfg.ROI_PER_IMAGE), dtype=torch.long)
         batch_cls_labels = -rois.new_ones(batch_size, self.roi_sampler_cfg.ROI_PER_IMAGE)
@@ -74,19 +75,21 @@ class ProposalTargetLayer(nn.Module):
                 if self.roi_sampler_cfg.UNLABELED_SAMPLER_TYPE is None:
                     sampled_inds, cur_reg_valid_mask, cur_cls_labels, roi_ious, gt_assignment, cur_interval_mask = self.subsample_labeled_rois(batch_dict, index)
                 else:
-                    sampled_inds, cur_reg_valid_mask, cur_cls_labels, roi_ious, gt_assignment, cur_interval_mask = subsample_unlabeled_rois(batch_dict, index)
+                    sampled_inds, cur_reg_valid_mask, cur_cls_labels, roi_ious, gt_assignment, cur_interval_mask,t_scores = subsample_unlabeled_rois(batch_dict, index)
                 cur_roi = batch_dict['rois'][index][sampled_inds]
                 cur_roi_scores = batch_dict['roi_scores'][index][sampled_inds]
+                cur_t_score =  t_scores[sampled_inds]
                 cur_roi_labels = batch_dict['roi_labels'][index][sampled_inds]
                 batch_roi_ious[index] = roi_ious
                 # batch_gt_scores[index] = batch_dict['pred_scores_ema'][index][sampled_inds]
                 batch_gt_of_rois[index] = cur_gt_boxes[gt_assignment[sampled_inds]]
             else:
-                sampled_inds, cur_reg_valid_mask, cur_cls_labels, roi_ious, gt_assignment, cur_interval_mask = self.subsample_labeled_rois(batch_dict, index)
+                sampled_inds, cur_reg_valid_mask, cur_cls_labels, roi_ious, gt_assignment, cur_interval_mask,t_scores = self.subsample_labeled_rois(batch_dict, index)
                 cur_roi = batch_dict['rois'][index][sampled_inds]
                 cur_roi_scores = batch_dict['roi_scores'][index][sampled_inds]
                 cur_roi_labels = batch_dict['roi_labels'][index][sampled_inds]
                 batch_roi_ious[index] = roi_ious
+                cur_t_score =  t_scores[sampled_inds]
                 batch_gt_of_rois[index] = cur_gt_boxes[gt_assignment[sampled_inds]]
 
             batch_rois[index] = cur_roi
@@ -95,12 +98,14 @@ class ProposalTargetLayer(nn.Module):
             interval_mask[index] = cur_interval_mask
             batch_reg_valid_mask[index] = cur_reg_valid_mask
             batch_cls_labels[index] = cur_cls_labels
+            batch_t_scores[index] = cur_t_score
 
         targets_dict = {'rois': batch_rois, 'gt_of_rois': batch_gt_of_rois, 'gt_iou_of_rois': batch_roi_ious,
                         'roi_scores': batch_roi_scores, 'roi_labels': batch_roi_labels,
                         'reg_valid_mask': batch_reg_valid_mask,
                         'rcnn_cls_labels': batch_cls_labels,
-                        'interval_mask': interval_mask}
+                        'interval_mask': interval_mask,
+                        't_scores': batch_t_scores}
 
         return targets_dict
 
@@ -148,6 +153,7 @@ class ProposalTargetLayer(nn.Module):
         cur_roi = batch_dict['rois'][index]
         cur_gt_boxes = batch_dict['gt_boxes'][index]
         cur_roi_labels = batch_dict['roi_labels'][index]
+        cur_roi_raw_scores =  batch_dict['roi_raw_scores'][index]
 
         if self.roi_sampler_cfg.get('SAMPLE_ROI_BY_EACH_CLASS', False):
             max_overlaps, gt_assignment = self.get_max_iou_with_same_class(
@@ -158,7 +164,8 @@ class ProposalTargetLayer(nn.Module):
             iou3d = iou3d_nms_utils.boxes_iou3d_gpu(cur_roi, cur_gt_boxes[:, 0:7])  # (M, N)
             max_overlaps, gt_assignment = torch.max(iou3d, dim=1)
 
-        sampled_inds = self.subsample_rois(max_overlaps=max_overlaps)
+        t_scores =(0.50)*max_overlaps + (0.50)*(batch_dict['roi_scores'][index].sigmoid())
+        sampled_inds = self.subsample_rois(max_overlaps, t_scores, batch_dict, index)
         roi_ious = max_overlaps[sampled_inds]
 
         # regression valid mask
@@ -173,7 +180,7 @@ class ProposalTargetLayer(nn.Module):
             iou_fg_thresh = torch.gather(iou_fg_thresh, dim=-1, index=(cur_roi_labels[sampled_inds]-1).unsqueeze(-1)).squeeze(-1)
         else:
             iou_fg_thresh = self.roi_sampler_cfg.CLS_FG_THRESH
-
+        
         fg_mask = roi_ious > iou_fg_thresh
         bg_mask = roi_ious < iou_bg_thresh
         interval_mask = (fg_mask == 0) & (bg_mask == 0)
@@ -182,17 +189,17 @@ class ProposalTargetLayer(nn.Module):
         cls_labels[interval_mask] = \
             (roi_ious[interval_mask] - iou_bg_thresh) / (iou_fg_thresh - iou_bg_thresh)
 
-        return sampled_inds, reg_valid_mask, cls_labels, roi_ious, gt_assignment, interval_mask
+        return sampled_inds, reg_valid_mask, cls_labels, roi_ious, gt_assignment, interval_mask, t_scores
 
-    def subsample_rois(self, max_overlaps):
+    def subsample_rois(self, max_overlaps, t_scores, batch_dict, index):
         # sample fg, easy_bg, hard_bg
         fg_rois_per_image = int(np.round(self.roi_sampler_cfg.FG_RATIO * self.roi_sampler_cfg.ROI_PER_IMAGE))
         fg_thresh = min(self.roi_sampler_cfg.REG_FG_THRESH, self.roi_sampler_cfg.CLS_FG_THRESH)
-
         fg_inds = ((max_overlaps >= fg_thresh)).nonzero().view(-1)  # > 0.55
         easy_bg_inds = ((max_overlaps < self.roi_sampler_cfg.CLS_BG_THRESH_LO)).nonzero().view(-1)  # < 0.1
         hard_bg_inds = ((max_overlaps < self.roi_sampler_cfg.REG_FG_THRESH) &
                 (max_overlaps >= self.roi_sampler_cfg.CLS_BG_THRESH_LO)).nonzero().view(-1)
+        
 
         fg_num_rois = fg_inds.numel()
         bg_num_rois = hard_bg_inds.numel() + easy_bg_inds.numel()
