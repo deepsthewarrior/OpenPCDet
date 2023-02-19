@@ -1,6 +1,5 @@
-import torch
 import torch.nn as nn
-import torch.nn.functional as F
+
 from ...ops.pointnet2.pointnet2_stack import pointnet2_modules as pointnet2_stack_modules
 from ...utils import common_utils
 from .roi_head_template import RoIHeadTemplate
@@ -67,8 +66,6 @@ class PVRCNNHead(RoIHeadTemplate):
                     nn.init.constant_(m.bias, 0)
         nn.init.normal_(self.reg_layers[-1].weight, mean=0, std=0.001)
 
-
-
     def roi_grid_pool(self, batch_dict):
         """
         Args:
@@ -80,14 +77,14 @@ class PVRCNNHead(RoIHeadTemplate):
                 point_cls_scores: (N1 + N2 + N3 + ..., 1)
                 point_part_offset: (N1 + N2 + N3 + ..., 3)
         Returns:
+
         """
         batch_size = batch_dict['batch_size']
         rois = batch_dict['rois']
-        point_coords = batch_dict["point_coords"]
-        point_features = batch_dict["point_features"]
-        point_cls_scores = batch_dict["point_cls_scores"]
+        point_coords = batch_dict['point_coords']
+        point_features = batch_dict['point_features']
 
-        point_features = point_features * point_cls_scores.view(-1, 1)
+        point_features = point_features * batch_dict['point_cls_scores'].view(-1, 1)
 
         global_roi_grid_points, local_roi_grid_points = self.get_global_grid_points_of_roi(
             rois, grid_size=self.model_cfg.ROI_GRID_POOL.GRID_SIZE
@@ -146,23 +143,15 @@ class PVRCNNHead(RoIHeadTemplate):
         """
 
         # use test-time nms for pseudo label generation
-        nms_mode = self.model_cfg.NMS_CONFIG['TRAIN' if self.training and not disable_gt_roi_when_pseudo_labeling else 'TEST']
+        targets_dict = self.proposal_layer(
+            batch_dict, nms_config=self.model_cfg.NMS_CONFIG['TRAIN' if self.training and not disable_gt_roi_when_pseudo_labeling else 'TEST']
+        )
 
-        # proposal_layer doesn't continue if the rois are already in the batch_dict.
-        # However, for labeled data proposal layer should continue!
-        targets_dict = self.proposal_layer(batch_dict, nms_config=nms_mode)
         # should not use gt_roi for pseudo label generation
         if (self.training or self.print_loss_when_eval) and not disable_gt_roi_when_pseudo_labeling:
             targets_dict = self.assign_targets(batch_dict)
             batch_dict['rois'] = targets_dict['rois']
-            batch_dict['roi_scores'] = targets_dict['roi_scores']
             batch_dict['roi_labels'] = targets_dict['roi_labels']
-            # Temporarily add infos to targets_dict for metrics
-            targets_dict['unlabeled_inds'] = batch_dict['unlabeled_inds']
-            targets_dict['ori_unlabeled_boxes'] = batch_dict['ori_unlabeled_boxes']
-            # TODO(farzad) refactor this with global registry,
-            #  accessible in different places, not via passing through batch_dict
-            targets_dict['metric_registry'] = batch_dict['metric_registry']
 
         # RoI aware pooling
         pooled_features = self.roi_grid_pool(batch_dict)  # (BxN, 6x6x6, C)
@@ -171,8 +160,7 @@ class PVRCNNHead(RoIHeadTemplate):
         batch_size_rcnn = pooled_features.shape[0]
         pooled_features = pooled_features.permute(0, 2, 1).\
             contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxN, C, 6, 6, 6)
-        
-        cat_feat = []
+
         x = pooled_features.view(batch_size_rcnn, -1, 1).clone().detach()
         shared_features = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
 
