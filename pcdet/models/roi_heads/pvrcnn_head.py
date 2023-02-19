@@ -33,9 +33,10 @@ class PVRCNNHead(RoIHeadTemplate):
                 shared_fc_list.append(nn.Dropout(self.model_cfg.DP_RATIO))
 
         self.shared_fc_layer = nn.Sequential(*shared_fc_list)
-
+        self.extended_layer = self.make_fc_layers(input_channels = self.box_coder.code_size * self.num_class,
+                                               output_channels =  self.num_class, fc_list=self.model_cfg.CLS_FC)
         self.cls_layers = self.make_fc_layers(
-            input_channels=pre_channel, output_channels=self.num_class, fc_list=self.model_cfg.CLS_FC
+            input_channels=pre_channel, output_channels=self.num_class, fc_list = self.model_cfg.CLS_FC
         )
         self.reg_layers = self.make_fc_layers(
             input_channels=pre_channel,
@@ -65,6 +66,8 @@ class PVRCNNHead(RoIHeadTemplate):
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
         nn.init.normal_(self.reg_layers[-1].weight, mean=0, std=0.001)
+
+
 
     def roi_grid_pool(self, batch_dict):
         """
@@ -170,20 +173,17 @@ class PVRCNNHead(RoIHeadTemplate):
             contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxN, C, 6, 6, 6)
         
         cat_feat = []
-        # x = pooled_features.view(batch_size_rcnn, -1, 1).clone().detach()
+        x = pooled_features.view(batch_size_rcnn, -1, 1).clone().detach()
         shared_features = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
-        
 
-        # for layers in self.shared_fc_layer:
-        #     x = layers(x)
-        #     if isinstance(layers,nn.Conv1d):
-        #         cat_feat.append(x) 
+        rcnn_cls_norm = self.cls_layers(shared_features)#.transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
 
-        # feat = torch.cat(cat_feat,1)
-        # avg_feat = F.adaptive_avg_pool1d(feat)
-
-        rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
-        rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)
+        rcnn_reg_norm = self.reg_layers(shared_features)  # (B, C)
+        rcnn_reg_attn = self.reg_layers(shared_features)
+        rcnn_reg = rcnn_reg_norm*rcnn_reg_attn
+        rcnn_extended_cls = self.extended_layer(rcnn_reg)
+        rcnn_cls = (rcnn_extended_cls * rcnn_cls_norm).transpose(1, 2).contiguous().squeeze(dim=1)
+        rcnn_reg = rcnn_reg.transpose(1, 2).contiguous().squeeze(dim=1) 
 
         if not self.training or self.predict_boxes_when_training:
             batch_cls_preds, batch_box_preds = self.generate_predicted_boxes(
