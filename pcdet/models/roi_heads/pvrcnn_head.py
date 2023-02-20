@@ -32,7 +32,7 @@ class PVRCNNHead(RoIHeadTemplate):
                 shared_fc_list.append(nn.Dropout(self.model_cfg.DP_RATIO))
 
         self.shared_fc_layer = nn.Sequential(*shared_fc_list)
-        self.extended_layer = self.make_attn_layers(input_channels = self.box_coder.code_size * self.num_class,
+        self.extended_layer = self.make_fc_layers(input_channels = self.box_coder.code_size * self.num_class,
                                                output_channels =  self.num_class, fc_list=[256])
         self.cls_layers = self.make_fc_layers(
             input_channels=pre_channel, output_channels=self.num_class, fc_list = self.model_cfg.CLS_FC
@@ -167,7 +167,7 @@ class PVRCNNHead(RoIHeadTemplate):
         pooled_features = pooled_features.permute(0, 2, 1).\
             contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxN, C, 6, 6, 6)
 
-        x = pooled_features.view(batch_size_rcnn, -1, 1).clone().detach()
+        # x = pooled_features.view(batch_size_rcnn, -1, 1).clone().detach()
         shared_features = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
 
         rcnn_cls_norm = self.cls_layers(shared_features)#.transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
