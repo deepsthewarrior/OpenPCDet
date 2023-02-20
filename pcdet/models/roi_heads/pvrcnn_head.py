@@ -105,7 +105,8 @@ class PVRCNNHead(RoIHeadTemplate):
             new_xyz=new_xyz,
             new_xyz_batch_cnt=new_xyz_batch_cnt,
             features=point_features.contiguous(),
-        )  # (M1 + M2 ..., C)
+        )
+          # (M1 + M2 ..., C)
 
         pooled_features = pooled_features.view(
             -1, self.model_cfg.ROI_GRID_POOL.GRID_SIZE ** 3,
