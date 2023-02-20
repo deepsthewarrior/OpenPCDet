@@ -42,10 +42,10 @@ class PVRCNNHead(RoIHeadTemplate):
             output_channels=self.box_coder.code_size * self.num_class,
             fc_list=self.model_cfg.REG_FC
         )
-        self.attn_reg = self.make_attn_layers(input_channels = pre_channel,
+        self.attn_reg = self.make_fc_layers(input_channels = pre_channel,
                                               output_channels =  self.num_class, fc_list = [256])
         
-        self.attn_cls = self.make_attn_layers(input_channels = self.box_coder.code_size * self.num_class,
+        self.attn_cls = self.make_fc_layers(input_channels = self.box_coder.code_size * self.num_class,
                                                output_channels =  self.num_class, fc_list = [256])
 
         self.init_weights(weight_init='xavier')
@@ -176,6 +176,7 @@ class PVRCNNHead(RoIHeadTemplate):
         rcnn_reg_attn = self.attn_reg(shared_features)
         rcnn_reg = rcnn_reg_norm*rcnn_reg_attn
         rcnn_extended_cls = self.attn_cls(rcnn_reg)
+
         rcnn_cls = (rcnn_extended_cls * rcnn_cls_norm).transpose(1, 2).contiguous().squeeze(dim=1)
         rcnn_reg = rcnn_reg.transpose(1, 2).contiguous().squeeze(dim=1) 
 

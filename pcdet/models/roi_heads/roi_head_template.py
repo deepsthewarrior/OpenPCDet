@@ -43,24 +43,7 @@ class RoIHeadTemplate(nn.Module):
         fc_layers = nn.Sequential(*fc_layers)
         return fc_layers
     
-    def make_attn_layers(self, input_channels, output_channels, fc_list):
-        fc_layers = []
-        pre_channel = input_channels
-        
-        for k in range(0, fc_list.__len__()):
-            fc_layers.extend([
-                nn.Conv1d(pre_channel, fc_list[k], kernel_size=1, bias=False),
-                nn.BatchNorm1d(fc_list[k]),
-                nn.ReLU()
-            ])
-            pre_channel = fc_list[k]
-            if self.model_cfg.DP_RATIO >= 0 and k == 0:
-                fc_layers.append(nn.Dropout(self.model_cfg.DP_RATIO))
-
-        fc_layers.append(nn.Conv1d(pre_channel, output_channels, kernel_size=1, bias=True))
-        fc_layers = nn.Sequential(*fc_layers)
-        return fc_layers        
-
+    
     @torch.no_grad()
     def proposal_layer(self, batch_dict, nms_config):
         """
