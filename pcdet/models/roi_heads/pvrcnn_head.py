@@ -33,7 +33,7 @@ class PVRCNNHead(RoIHeadTemplate):
 
         self.shared_fc_layer = nn.Sequential(*shared_fc_list)
         self.extended_layer = self.make_fc_layers(input_channels = self.box_coder.code_size * self.num_class,
-                                               output_channels =  self.num_class, fc_list=self.model_cfg.CLS_FC)
+                                               output_channels =  self.num_class, fc_list=[256])
         self.cls_layers = self.make_fc_layers(
             input_channels=pre_channel, output_channels=self.num_class, fc_list = self.model_cfg.CLS_FC
         )
@@ -42,6 +42,12 @@ class PVRCNNHead(RoIHeadTemplate):
             output_channels=self.box_coder.code_size * self.num_class,
             fc_list=self.model_cfg.REG_FC
         )
+        self.attn_reg = self.make_fc_layers(input_channels = pre_channel,
+                                              output_channels =  self.num_class, fc_list = [256])
+        
+        self.attn_cls = self.make_fc_layers(input_channels = self.box_coder.code_size * self.num_class,
+                                               output_channels =  self.num_class, fc_list = [256])
+
         self.init_weights(weight_init='xavier')
 
         self.print_loss_when_eval = False
@@ -162,15 +168,16 @@ class PVRCNNHead(RoIHeadTemplate):
         pooled_features = pooled_features.permute(0, 2, 1).\
             contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxN, C, 6, 6, 6)
 
-        x = pooled_features.view(batch_size_rcnn, -1, 1).clone().detach()
+        # x = pooled_features.view(batch_size_rcnn, -1, 1).clone().detach()
         shared_features = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
 
         rcnn_cls_norm = self.cls_layers(shared_features)#.transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
 
         rcnn_reg_norm = self.reg_layers(shared_features)  # (B, C)
-        rcnn_reg_attn = self.reg_layers(shared_features)
+        rcnn_reg_attn = self.attn_reg(shared_features)
         rcnn_reg = rcnn_reg_norm*rcnn_reg_attn
-        rcnn_extended_cls = self.extended_layer(rcnn_reg)
+        rcnn_extended_cls = self.attn_cls(rcnn_reg)
+
         rcnn_cls = (rcnn_extended_cls * rcnn_cls_norm).transpose(1, 2).contiguous().squeeze(dim=1)
         rcnn_reg = rcnn_reg.transpose(1, 2).contiguous().squeeze(dim=1) 
 
