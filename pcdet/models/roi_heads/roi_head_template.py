@@ -363,7 +363,7 @@ class RoIHeadTemplate(nn.Module):
         # calculate kl divergence between lbl_cls_dist and cls_dist_batch
         ulb_cls_dist = ulb_cls_dist + 1e-6
         lbl_cls_dist = lbl_cls_dist + 1e-6
-        ulb_cls_dist_loss = torch.sum(lbl_cls_dist * torch.log(lbl_cls_dist / ulb_cls_dist))
+        ulb_cls_dist_loss = torch.sum(lbl_cls_dist * torch.abs(torch.log(lbl_cls_dist / ulb_cls_dist)))
         # clamp ulb_cls_dist_loss
         ulb_cls_dist_loss = torch.clamp(ulb_cls_dist_loss, min=0.0, max=2.0)
         ulb_cls_dist_loss = ulb_cls_dist_loss * loss_cfgs.LOSS_WEIGHTS['ulb_cls_dist_weight']
