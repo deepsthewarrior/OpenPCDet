@@ -1,5 +1,5 @@
 import os 
-
+import csv
 import numpy as np
 import torch
 import torch.nn as nn
@@ -359,15 +359,16 @@ class RoIHeadTemplate(nn.Module):
         ulb_cls_labels = forward_ret_dict['roi_labels'][ulb_inds]
         ulb_num_cls = torch.bincount(ulb_cls_labels.view(-1), minlength=4)[1:].float()
         ulb_cls_dist = ulb_num_cls / ulb_num_cls.sum()
-
+        hyp = torch.tensor([1, 1.25, 1.25],device=ulb_cls_dist.device)
+        
         # calculate kl divergence between lbl_cls_dist and cls_dist_batch
         ulb_cls_dist = ulb_cls_dist + 1e-6
         lbl_cls_dist = lbl_cls_dist + 1e-6
-        ulb_cls_dist_loss = torch.sum(lbl_cls_dist * torch.log(lbl_cls_dist / ulb_cls_dist))
-        # clamp ulb_cls_dist_loss
+        ulb_cls_dist_loss = torch.sum(lbl_cls_dist * hyp*(torch.square(ulb_cls_dist-lbl_cls_dist )))
+
         ulb_cls_dist_loss = torch.clamp(ulb_cls_dist_loss, min=0.0, max=2.0)
         ulb_cls_dist_loss = ulb_cls_dist_loss * loss_cfgs.LOSS_WEIGHTS['ulb_cls_dist_weight']
-
+        
         tb_dict = {
             # For consistency with other losses
             'ulb_cls_dist_loss': ulb_cls_dist_loss.unsqueeze(0).repeat(forward_ret_dict['roi_labels'].shape[0], 1)
