@@ -26,6 +26,26 @@ class RoIHeadTemplate(nn.Module):
             'reg_loss_func',
             loss_utils.WeightedSmoothL1Loss(code_weights=losses_cfg.LOSS_WEIGHTS['code_weights'])
         )
+    def make_half_fc_layers(self, input_channels, output_channels, fc_list):
+        fc_layers = []
+        pre_channel = input_channels
+        for k in range(0, fc_list.__len__()):
+            fc_layers.extend([
+                nn.Conv1d(pre_channel, fc_list[k], kernel_size=1, bias=False),
+                nn.BatchNorm1d(fc_list[k]),
+                nn.ReLU()
+            ])
+        fc_layers = nn.Sequential(*fc_layers)
+        return fc_layers
+    
+    def make_final_fc_layers(self, input_channels, output_channels, fc_list):
+        fc_layers = []
+        pre_channel = fc_list[-1]
+        if self.model_cfg.DP_RATIO >= 0:
+            fc_layers.append(nn.Dropout(self.model_cfg.DP_RATIO))
+        fc_layers.append(nn.Conv1d(pre_channel, output_channels, kernel_size=1, bias=True))
+        fc_layers = nn.Sequential(*fc_layers)
+        return fc_layers
 
     def make_fc_layers(self, input_channels, output_channels, fc_list):
         fc_layers = []
