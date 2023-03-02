@@ -33,9 +33,9 @@ class PVRCNNHead(RoIHeadTemplate):
 
         self.shared_fc_layer = nn.Sequential(*shared_fc_list)
 
-        self.cls_layers = self.make_fc_layers(
-            input_channels=pre_channel, output_channels=self.num_class, fc_list=self.model_cfg.CLS_FC
-        )
+        # self.cls_layers = self.make_fc_layers(
+        #     input_channels=pre_channel, output_channels=self.num_class, fc_list=self.model_cfg.CLS_FC
+        # )
         self.cls_layers_1 = self.make_half_fc_layers(
             input_channels=pre_channel, output_channels=self.num_class, fc_list=self.model_cfg.CLS_FC
         )
@@ -53,11 +53,11 @@ class PVRCNNHead(RoIHeadTemplate):
             fc_list=self.model_cfg.REG_FC
         )
 
-        self.reg_layers = self.make_fc_layers(
-            input_channels=pre_channel,
-            output_channels=self.box_coder.code_size * self.num_class,
-            fc_list=self.model_cfg.REG_FC
-        )
+        # self.reg_layers = self.make_fc_layers(
+        #     input_channels=pre_channel,
+        #     output_channels=self.box_coder.code_size * self.num_class,
+        #     fc_list=self.model_cfg.REG_FC
+        # )
         self.init_weights(weight_init='xavier')
 
         self.print_loss_when_eval = False
@@ -80,7 +80,7 @@ class PVRCNNHead(RoIHeadTemplate):
                     init_func(m.weight)
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
-        nn.init.normal_(self.reg_layers[-1].weight, mean=0, std=0.001)
+        nn.init.normal_(self.reg_layers_2[-1].weight, mean=0, std=0.001)
 
     def roi_grid_pool(self, batch_dict):
         """
