@@ -256,6 +256,7 @@ class Detector3DTemplate(nn.Module):
                         sem_scores = batch_dict['roi_scores'][index]
                 else:
                     label_preds = label_preds + 1
+                shared_features = batch_dict['shared_features'][index]
                 # Should be True to preserve the order of roi's passed from the student
                 if no_nms_for_unlabeled and index in batch_dict['unlabeled_inds']:
                     selected = torch.arange(len(cls_preds), device=cls_preds.device)
@@ -281,7 +282,7 @@ class Detector3DTemplate(nn.Module):
                 final_scores = selected_scores
                 final_labels = label_preds[selected]
                 final_boxes = box_preds[selected]
-
+                final_shared = shared_features[selected]
                 if self.training:
                     final_sem_scores = torch.sigmoid(sem_scores[selected])
                     if 'batch_box_preds_var' in batch_dict.keys():
@@ -300,6 +301,7 @@ class Detector3DTemplate(nn.Module):
                 'pred_boxes': final_boxes,
                 'pred_scores': final_scores,
                 'pred_labels': final_labels,
+                'shared_features': final_shared,
             }
             if self.training:
                 record_dict['pred_sem_scores'] = final_sem_scores

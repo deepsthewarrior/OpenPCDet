@@ -71,16 +71,16 @@ def train_one_epoch(model, optimizer, train_loader, model_func, lr_scheduler, ac
             tb_log.add_scalar('meta_data/learning_rate', cur_lr, accumulated_iter)
 
         model.train()
-        optimizer.zero_grad()
+        # optimizer.zero_grad()
 
-        loss, tb_dict, disp_dict = model_func(model, batch)
+        _ = model_func(model, batch)
 
         forward_timer = time.time()
         cur_forward_time = forward_timer - data_timer
 
-        loss.backward()
-        clip_grad_norm_(model.parameters(), optim_cfg.GRAD_NORM_CLIP)
-        optimizer.step()
+        # loss.backward()
+        # clip_grad_norm_(model.parameters(), optim_cfg.GRAD_NORM_CLIP)
+        # optimizer.step()
 
         accumulated_iter += 1
 
@@ -101,22 +101,22 @@ def train_one_epoch(model, optimizer, train_loader, model_func, lr_scheduler, ac
             data_time.update(avg_data_time)
             forward_time.update(avg_forward_time)
             batch_time.update(avg_batch_time)
-            disp_dict.update({
-                'loss': loss.item(), 'lr': cur_lr, 'd_time': f'{data_time.val:.2f}({data_time.avg:.2f})',
-                'f_time': f'{forward_time.val:.2f}({forward_time.avg:.2f})', 'b_time': f'{batch_time.val:.2f}({batch_time.avg:.2f})'
-            })
+            # disp_dict.update({
+            #     'loss': loss.item(), 'lr': cur_lr, 'd_time': f'{data_time.val:.2f}({data_time.avg:.2f})',
+            #     'f_time': f'{forward_time.val:.2f}({forward_time.avg:.2f})', 'b_time': f'{batch_time.val:.2f}({batch_time.avg:.2f})'
+            # })
 
             pbar.update()
             pbar.set_postfix(dict(total_it=accumulated_iter))
-            tbar.set_postfix(disp_dict)
+            # tbar.set_postfix(disp_dict)
             tbar.refresh()
 
-            if tb_log is not None:
-                tb_log.add_scalar('train/loss', loss, accumulated_iter)
-                tb_log.add_scalar('meta_data/learning_rate', cur_lr, accumulated_iter)
-                log_tb_dict(tb_log, tb_dict, accumulated_iter)
-                if dataloader_test_iter:
-                    log_tb_dict(tb_log, tb_dict_test, accumulated_iter)
+            # if tb_log is not None:
+            #     tb_log.add_scalar('train/loss', loss, accumulated_iter)
+            #     tb_log.add_scalar('meta_data/learning_rate', cur_lr, accumulated_iter)
+            #     log_tb_dict(tb_log, tb_dict, accumulated_iter)
+            #     if dataloader_test_iter:
+            #         log_tb_dict(tb_log, tb_dict_test, accumulated_iter)
     if rank == 0:
         pbar.close()
     return accumulated_iter
