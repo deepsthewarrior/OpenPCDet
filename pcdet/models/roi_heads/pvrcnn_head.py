@@ -33,14 +33,23 @@ class PVRCNNHead(RoIHeadTemplate):
 
         self.shared_fc_layer = nn.Sequential(*shared_fc_list)
 
-        self.cls_layers = self.make_fc_layers(
+        self.cls_layers_1 = self.make_half_fc_layers(
             input_channels=pre_channel, output_channels=self.num_class, fc_list=self.model_cfg.CLS_FC
         )
-        self.reg_layers = self.make_fc_layers(
+        self.cls_layers_2 = self.make_final_fc_layers(
+            input_channels=pre_channel, output_channels=self.num_class, fc_list=self.model_cfg.CLS_FC
+        )
+        self.reg_layers_1 = self.make_half_fc_layers(
             input_channels=pre_channel,
             output_channels=self.box_coder.code_size * self.num_class,
             fc_list=self.model_cfg.REG_FC
         )
+        self.reg_layers_2 = self.make_final_fc_layers(
+            input_channels=pre_channel,
+            output_channels=self.box_coder.code_size * self.num_class,
+            fc_list=self.model_cfg.REG_FC
+        )
+
         self.init_weights(weight_init='xavier')
 
         self.print_loss_when_eval = False
@@ -63,7 +72,7 @@ class PVRCNNHead(RoIHeadTemplate):
                     init_func(m.weight)
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
-        nn.init.normal_(self.reg_layers[-1].weight, mean=0, std=0.001)
+        nn.init.normal_(self.reg_layers_2[-1].weight, mean=0, std=0.001)
 
     def roi_grid_pool(self, batch_dict):
         """
@@ -80,11 +89,10 @@ class PVRCNNHead(RoIHeadTemplate):
         """
         batch_size = batch_dict['batch_size']
         rois = batch_dict['rois']
-        point_coords = batch_dict["point_coords"]
-        point_features = batch_dict["point_features"]
-        point_cls_scores = batch_dict["point_cls_scores"]
+        point_coords = batch_dict['point_coords']
+        point_features = batch_dict['point_features']
 
-        point_features = point_features * point_cls_scores.view(-1, 1)
+        point_features = point_features * batch_dict['point_cls_scores'].view(-1, 1)
 
         global_roi_grid_points, local_roi_grid_points = self.get_global_grid_points_of_roi(
             rois, grid_size=self.model_cfg.ROI_GRID_POOL.GRID_SIZE
@@ -105,7 +113,8 @@ class PVRCNNHead(RoIHeadTemplate):
             new_xyz=new_xyz,
             new_xyz_batch_cnt=new_xyz_batch_cnt,
             features=point_features.contiguous(),
-        )  # (M1 + M2 ..., C)
+        )
+          # (M1 + M2 ..., C)
 
         pooled_features = pooled_features.view(
             -1, self.model_cfg.ROI_GRID_POOL.GRID_SIZE ** 3,
@@ -143,23 +152,15 @@ class PVRCNNHead(RoIHeadTemplate):
         """
 
         # use test-time nms for pseudo label generation
-        nms_mode = self.model_cfg.NMS_CONFIG['TRAIN' if self.training and not disable_gt_roi_when_pseudo_labeling else 'TEST']
+        targets_dict = self.proposal_layer(
+            batch_dict, nms_config=self.model_cfg.NMS_CONFIG['TRAIN' if self.training and not disable_gt_roi_when_pseudo_labeling else 'TEST']
+        )
 
-        # proposal_layer doesn't continue if the rois are already in the batch_dict.
-        # However, for labeled data proposal layer should continue!
-        targets_dict = self.proposal_layer(batch_dict, nms_config=nms_mode)
         # should not use gt_roi for pseudo label generation
         if (self.training or self.print_loss_when_eval) and not disable_gt_roi_when_pseudo_labeling:
             targets_dict = self.assign_targets(batch_dict)
             batch_dict['rois'] = targets_dict['rois']
-            batch_dict['roi_scores'] = targets_dict['roi_scores']
             batch_dict['roi_labels'] = targets_dict['roi_labels']
-            # Temporarily add infos to targets_dict for metrics
-            targets_dict['unlabeled_inds'] = batch_dict['unlabeled_inds']
-            targets_dict['ori_unlabeled_boxes'] = batch_dict['ori_unlabeled_boxes']
-            # TODO(farzad) refactor this with global registry,
-            #  accessible in different places, not via passing through batch_dict
-            targets_dict['metric_registry'] = batch_dict['metric_registry']
 
         # RoI aware pooling
         pooled_features = self.roi_grid_pool(batch_dict)  # (BxN, 6x6x6, C)
@@ -169,9 +170,13 @@ class PVRCNNHead(RoIHeadTemplate):
         pooled_features = pooled_features.permute(0, 2, 1).\
             contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxN, C, 6, 6, 6)
 
+        # x = pooled_features.view(batch_size_rcnn, -1, 1).clone().detach()
         shared_features = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
-        rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
-        rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)
+        # rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
+        rcnn_cls_interim = self.cls_layers_1(shared_features)
+        rcnn_cls = self.cls_layers_2(rcnn_cls_interim).transpose(1, 2).contiguous().squeeze(dim=1)
+        rcnn_reg_interim = self.reg_layers_1(shared_features)
+        rcnn_reg = self.reg_layers_2(rcnn_reg_interim).transpose(1, 2).contiguous().squeeze(dim=1)
 
         if not self.training or self.predict_boxes_when_training:
             batch_cls_preds, batch_box_preds = self.generate_predicted_boxes(

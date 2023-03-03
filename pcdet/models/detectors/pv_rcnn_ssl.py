@@ -161,26 +161,26 @@ class PVRCNN_SSL(Detector3DTemplate):
             batch_dict['unlabeled_inds'] = unlabeled_inds
             batch_dict['labeled_inds'] = labeled_inds
             
-            batch_dict_ema = {}
-            keys = list(batch_dict.keys())
-            for k in keys:
-                if k + '_ema' in keys:
-                    continue
-                if k.endswith('_ema'):
-                    batch_dict_ema[k[:-4]] = batch_dict[k]
-                else:
-                    batch_dict_ema[k] = batch_dict[k]
-                    keys = list(batch_dict.keys())
+            # batch_dict_ema = {}
+            # keys = list(batch_dict.keys())
+            # for k in keys:
+            #     if k + '_ema' in keys:
+            #         continue
+            #     if k.endswith('_ema'):
+            #         batch_dict_ema[k[:-4]] = batch_dict[k]
+            #     else:
+            #         batch_dict_ema[k] = batch_dict[k]
+            #         keys = list(batch_dict.keys())
 
-            batch_dict_gap = {}
-            for k in keys:
-                if k + 'gap' in keys:
-                    continue
-                if k.endswith('gap'):
-                    batch_dict_gap[k[:-7]] = batch_dict[k]
-                else:
-                    # TODO(farzad) Warning! Here flip_x values are copied from _ema to _ema_wa which is not correct!
-                    batch_dict_gap[k] = batch_dict[k]
+            # batch_dict_gap = {}
+            # for k in keys:
+            #     if k + 'gap' in keys:
+            #         continue
+            #     if k.endswith('gap'):
+            #         batch_dict_gap[k[:-7]] = batch_dict[k]
+            #     else:
+            #         # TODO(farzad) Warning! Here flip_x values are copied from _ema to _ema_wa which is not correct!
+            #         batch_dict_gap[k] = batch_dict[k]
                     
             # self.apply_augmentation(batch_dict_gap, batch_dict_gap, labeled_inds, key='gt_boxes')  
             
@@ -188,9 +188,9 @@ class PVRCNN_SSL(Detector3DTemplate):
             with torch.no_grad():
                 for cur_module in self.pv_rcnn_ema.module_list:
                     try:
-                        batch_dict_gap = cur_module(batch_dict_gap, disable_gt_roi_when_pseudo_labeling=True)
+                        batch_dict= cur_module(batch_dict, disable_gt_roi_when_pseudo_labeling=True)
                     except:
-                        batch_dict_gap = cur_module(batch_dict_gap)
+                        batch_dict_gap = cur_module(batch_dict)
             pred_dicts_gap, recall_dicts_gap = self.pv_rcnn_ema.post_processing(batch_dict_gap, no_recall_dict=True,
                                                                                 override_thresh=0.0,
                                                                             no_nms_for_unlabeled=self.no_nms)
@@ -200,7 +200,7 @@ class PVRCNN_SSL(Detector3DTemplate):
             self._fill_with_pseudo_labels(batch_dict, pseudo_boxes, unlabeled_inds, labeled_inds)            
             values=[]
             for vals in pred_dicts_gap:
-                values.append(vals['shared_features'])
+                values.append(vals['shared_features'][labeled_inds])
             self.shared_pkl['shared_features'].append(values)
             output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]
             shared_path = os.path.join(output_dir, 'shared_corrected.pkl')
