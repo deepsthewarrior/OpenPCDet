@@ -187,9 +187,12 @@ class PVRCNNHead(RoIHeadTemplate):
             batch_dict['batch_box_preds'] = batch_box_preds
             batch_dict['cls_preds_normalized'] = False
             batch_dict['shared_features'] = shared_features 
+            batch_dict['rcnn_cls_interim'] = rcnn_cls_interim
+            batch_dict['rcnn_reg_interim'] = rcnn_reg_interim
+            
             # Temporarily add infos to targets_dict for metrics
             targets_dict['batch_box_preds'] = batch_box_preds
-            
+
         if self.training or self.print_loss_when_eval:
             targets_dict['rcnn_cls'] = rcnn_cls
             targets_dict['rcnn_reg'] = rcnn_reg

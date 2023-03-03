@@ -150,7 +150,7 @@ class PVRCNN_SSL(Detector3DTemplate):
         self.metric_registry = MetricRegistry(dataset=self.dataset, model_cfg=model_cfg)
         vals_to_store = ['iou_roi_pl', 'iou_roi_gt', 'pred_scores', 'weights', 'class_labels', 'iteration']
         self.val_dict = {val: [] for val in vals_to_store}
-        vals_shared = ['shared_features']
+        vals_shared = ['shared_features','rcnn_cls_interim','rcnn_reg_interim']
         self.shared_pkl = {vals: [] for vals in vals_shared}
 
     def forward(self, batch_dict):
@@ -198,10 +198,18 @@ class PVRCNN_SSL(Detector3DTemplate):
                 self._filter_pseudo_labels(pred_dicts_gap, labeled_inds)
 
             self._fill_with_pseudo_labels(batch_dict, pseudo_boxes, unlabeled_inds, labeled_inds)            
-            values=[]
+            shared_features=[]
+            reg_interm = []
+            rcnn_interim = []
             for vals in pred_dicts_gap:
-                values.append(vals['shared_features'][labeled_inds])
-            self.shared_pkl['shared_features'].append(values)
+                shared_features.append(vals['shared_features'][labeled_inds])
+                reg_interm.append(vals['rcnn_cls_interim'][labeled_inds])
+                rcnn_interim.append(vals['rcnn_reg_interim'][labeled_inds])
+                
+            self.shared_pkl['shared_features'].append(shared_features)
+            self.shared_pkl['rcnn_cls_interim'].append(rcnn_interim)
+            self.shared_pkl['rcnn_reg_interim'].append(reg_interm)
+
             output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]
             shared_path = os.path.join(output_dir, 'shared_corrected.pkl')
             pickle.dump(self.shared_pkl, open(shared_path, 'wb'))
