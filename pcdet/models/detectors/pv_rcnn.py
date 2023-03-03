@@ -1,5 +1,8 @@
+import torch
+import numpy as np
 from .detector3d_template import Detector3DTemplate
-
+from pcdet.datasets.augmentor import augmentor_utils
+from ...utils import common_utils
 
 class PVRCNN(Detector3DTemplate):
     def __init__(self, model_cfg, num_class, dataset):
@@ -7,6 +10,7 @@ class PVRCNN(Detector3DTemplate):
         self.module_list = self.build_networks()
 
     def forward(self, batch_dict):
+        batch_dict = self.apply_augmentation(batch_dict, batch_dict, key='gt_boxes')
         for cur_module in self.module_list:
             batch_dict = cur_module(batch_dict)
 
@@ -29,3 +33,18 @@ class PVRCNN(Detector3DTemplate):
 
         loss = loss_rpn + loss_point + loss_rcnn
         return loss, tb_dict, disp_dict
+
+    def apply_augmentation(self, batch_dict, batch_dict_org, key='rois'):
+        batch_dict[key] = augmentor_utils.random_flip_along_x_bbox(
+            batch_dict[key], batch_dict_org['flip_x'])
+        batch_dict[key] = augmentor_utils.random_flip_along_y_bbox(
+            batch_dict[key], batch_dict_org['flip_y'])
+        batch_dict[key] = augmentor_utils.global_rotation_bbox(
+            batch_dict[key], batch_dict_org['rot_angle'])
+        batch_dict[key] = augmentor_utils.global_scaling_bbox(
+            batch_dict[key], batch_dict_org['scale'])
+
+        batch_dict[key] = common_utils.limit_period(
+            batch_dict[key], offset=0.5, period=2 * np.pi
+        )
+        return batch_dict
