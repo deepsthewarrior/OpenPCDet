@@ -186,9 +186,9 @@ class PVRCNNHead(RoIHeadTemplate):
             batch_dict['batch_cls_preds'] = batch_cls_preds
             batch_dict['batch_box_preds'] = batch_box_preds
             batch_dict['cls_preds_normalized'] = False
-            batch_dict['shared_features'] = shared_features 
-            batch_dict['rcnn_cls_interim'] = rcnn_cls_interim
-            batch_dict['rcnn_reg_interim'] = rcnn_reg_interim
+            batch_dict['shared_features'] = shared_features.view(batch_box_preds.shape[0],-1,shared_features.shape[1])
+            batch_dict['rcnn_cls_interim'] = rcnn_cls_interim.view(batch_box_preds.shape[0],-1,rcnn_cls_interim.shape[1])
+            batch_dict['rcnn_reg_interim'] = rcnn_reg_interim.view(batch_box_preds.shape[0],-1,rcnn_reg_interim.shape[1])
             
             # Temporarily add infos to targets_dict for metrics
             targets_dict['batch_box_preds'] = batch_box_preds

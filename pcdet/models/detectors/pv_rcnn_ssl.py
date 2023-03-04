@@ -172,17 +172,7 @@ class PVRCNN_SSL(Detector3DTemplate):
             #         batch_dict_ema[k] = batch_dict[k]
             #         keys = list(batch_dict.keys())
 
-            # batch_dict_gap = {}
-            # for k in keys:
-            #     if k + 'gap' in keys:
-            #         continue
-            #     if k.endswith('gap'):
-            #         batch_dict_gap[k[:-7]] = batch_dict[k]
-            #     else:
-            #         # TODO(farzad) Warning! Here flip_x values are copied from _ema to _ema_wa which is not correct!
-            #         batch_dict_gap[k] = batch_dict[k]
-                    
-            # self.apply_augmentation(batch_dict_gap, batch_dict_gap, labeled_inds, key='gt_boxes')  
+
             
 
             with torch.no_grad():
@@ -191,7 +181,7 @@ class PVRCNN_SSL(Detector3DTemplate):
                         batch_dict= cur_module(batch_dict, disable_gt_roi_when_pseudo_labeling=True)
                     except:
                         batch_dict_gap = cur_module(batch_dict)
-            pred_dicts_gap, recall_dicts_gap = self.pv_rcnn_ema.post_processing(batch_dict_gap, no_recall_dict=True,
+            pred_dicts_gap, recall_dicts = self.pv_rcnn_ema.post_processing(batch_dict, no_recall_dict=True,
                                                                                 override_thresh=0.0,
                                                                             no_nms_for_unlabeled=self.no_nms)
             pseudo_boxes, pseudo_scores, pseudo_sem_scores, pseudo_boxes_var, pseudo_scores_var = \
@@ -199,8 +189,8 @@ class PVRCNN_SSL(Detector3DTemplate):
 
             self._fill_with_pseudo_labels(batch_dict, pseudo_boxes, unlabeled_inds, labeled_inds)            
 
-
-            self.shared_pkl['ens'].append(ens)
+            for inds in labeled_inds:
+                self.shared_pkl['ens'].append(pred_dicts_gap[inds])
 
             # self.shared_pkl['rcnn_cls_interim'].append(rcnn_interim)
             # self.shared_pkl['rcnn_reg_interim'].append(reg_interm)

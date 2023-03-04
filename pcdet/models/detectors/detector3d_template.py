@@ -257,8 +257,8 @@ class Detector3DTemplate(nn.Module):
                 else:
                     label_preds = label_preds + 1
                 shared_features = batch_dict['shared_features'][index]
-                reg_inter = batch_dict['rcnn_reg_interim']
-                cls_inter = batch_dict['rcnn_cls_interim']
+                reg_inter = batch_dict['rcnn_reg_interim'][index]
+                cls_inter = batch_dict['rcnn_cls_interim'][index]
                 
                 # Should be True to preserve the order of roi's passed from the student
                 if no_nms_for_unlabeled and index in batch_dict['unlabeled_inds']:
@@ -285,9 +285,10 @@ class Detector3DTemplate(nn.Module):
                 final_scores = selected_scores
                 final_labels = label_preds[selected]
                 final_boxes = box_preds[selected]
-                final_shared = shared_features[selected]
-                final_reg_inter = reg_inter[selected]
                 final_cls_inter = cls_inter[selected]
+                final_reg_inter = reg_inter[selected]
+                final_shared = shared_features[selected]
+
                 if self.training:
                     final_sem_scores = torch.sigmoid(sem_scores[selected])
                     if 'batch_box_preds_var' in batch_dict.keys():
