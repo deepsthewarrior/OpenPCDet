@@ -150,9 +150,20 @@ class PVRCNN_SSL(Detector3DTemplate):
         self.metric_registry = MetricRegistry(dataset=self.dataset, model_cfg=model_cfg)
         vals_to_store = ['iou_roi_pl', 'iou_roi_gt', 'pred_scores', 'weights', 'class_labels', 'iteration']
         self.val_dict = {val: [] for val in vals_to_store}
-        vals_shared = ['shared_features','rcnn_cls_interim','rcnn_reg_interim','ens']
+        vals_shared = ['shared_features','rcnn_cls_interim','rcnn_reg_interim','pred_boxes','pred_scores','pred_labels','selected','iou','gt_assignment','gt_label','ens']
         self.shared_pkl = {vals: [] for vals in vals_shared}
-
+                # 'pred_boxes': final_boxes,
+                # 'pred_scores': final_scores,
+                # 'pred_labels': final_labels,
+                # 'shared_features': shared_features,
+                # 'rcnn_reg_interim': reg_inter,
+                # 'rcnn_cls_interim': cls_inter,
+                # 'selected' : selected,
+                # 'iou' : max_overlaps,
+                # 'gt_assignment': gt_assignment,
+                # 'pred_scores_all': max_cls_preds,
+                # 'label_preds': label_preds,
+                # 'gt_label': gt_label,
     def forward(self, batch_dict):
         if self.training:
             labeled_mask = batch_dict['labeled_mask'].view(-1)
@@ -188,9 +199,24 @@ class PVRCNN_SSL(Detector3DTemplate):
                 self._filter_pseudo_labels(pred_dicts_gap, labeled_inds)
 
             self._fill_with_pseudo_labels(batch_dict, pseudo_boxes, unlabeled_inds, labeled_inds)            
+            
 
             for inds in labeled_inds:
-                self.shared_pkl['ens'].append(pred_dicts_gap[inds])
+                temp = {}
+                temp['pred_scores'] = pred_dicts_gap[inds]['pred_scores_all']
+                temp['pred_labels'] = (pred_dicts_gap[inds]['label_preds'])
+                temp['iou'] = (pred_dicts_gap[inds]['iou'])
+                temp['gt_assignment'] = (pred_dicts_gap[inds]['gt_assignment'])
+                temp['selected'] = (pred_dicts_gap[inds]['selected'])
+                temp['shared_features'] = (pred_dicts_gap[inds]['shared_features'])
+                temp['rcnn_cls_interim'] = (pred_dicts_gap[inds]['rcnn_cls_interim'])
+                temp['rcnn_reg_interim'] = (pred_dicts_gap[inds]['rcnn_reg_interim'])
+                temp['gt_label'] = (pred_dicts_gap[inds]['gt_label'])
+                self.shared_pkl['ens'].append(temp)
+
+
+
+
 
             # self.shared_pkl['rcnn_cls_interim'].append(rcnn_interim)
             # self.shared_pkl['rcnn_reg_interim'].append(reg_interm)

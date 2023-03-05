@@ -325,8 +325,11 @@ class Detector3DTemplate(nn.Module):
                 'selected' : selected,
                 'iou' : max_overlaps,
                 'gt_assignment': gt_assignment,
-                
+                'pred_scores_all': cls_preds,
+                'label_preds': label_preds,
+                'gt_label': gt_label,
             }
+
             if self.training:
                 record_dict['pred_sem_scores'] = final_sem_scores
                 if 'batch_box_preds_var' in batch_dict.keys():
