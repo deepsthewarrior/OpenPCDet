@@ -281,13 +281,21 @@ class Detector3DTemplate(nn.Module):
                 if post_process_cfg.OUTPUT_RAW_SCORE:
                     max_cls_preds, _ = torch.max(src_cls_preds, dim=-1)
                     selected_scores = max_cls_preds[selected]
-
+                cur_gt_boxes = batch_dict['gt_boxes'][index]
+                k = cur_gt_boxes.__len__() - 1
+                while k >= 0 and cur_gt_boxes[k].sum() == 0:
+                    k -= 1
+                cur_gt_boxes = cur_gt_boxes[:k + 1]
+                iou3d = iou3d_nms_utils.boxes_iou3d_gpu(box_preds, cur_gt_boxes[:, 0:7])  # (M, N)
+                max_overlaps, gt_assignment = torch.max(iou3d, dim=1)
+                gt_label = cur_gt_boxes[...,-1]
                 final_scores = selected_scores
                 final_labels = label_preds[selected]
                 final_boxes = box_preds[selected]
                 final_cls_inter = cls_inter[selected]
                 final_reg_inter = reg_inter[selected]
                 final_shared = shared_features[selected]
+
 
                 if self.training:
                     final_sem_scores = torch.sigmoid(sem_scores[selected])
@@ -307,9 +315,13 @@ class Detector3DTemplate(nn.Module):
                 'pred_boxes': final_boxes,
                 'pred_scores': final_scores,
                 'pred_labels': final_labels,
-                'shared_features': final_shared,
-                'rcnn_reg_interim': final_reg_inter,
-                'rcnn_cls_interim': final_cls_inter,
+                'shared_features': shared_features,
+                'rcnn_reg_interim': reg_inter,
+                'rcnn_cls_interim': cls_inter,
+                'selected' : selected,
+                'iou' : max_overlaps,
+                'gt_assignment': gt_assignment,
+                
             }
             if self.training:
                 record_dict['pred_sem_scores'] = final_sem_scores
