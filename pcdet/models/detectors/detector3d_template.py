@@ -286,8 +286,8 @@ class Detector3DTemplate(nn.Module):
                 while k >= 0 and cur_gt_boxes[k].sum() == 0:
                     k -= 1
                 cur_gt_boxes = cur_gt_boxes[:k + 1]
-                iou3d = iou3d_nms_utils.boxes_iou3d_gpu(box_preds, cur_gt_boxes[:, 0:7])  # (M, N)
-                max_overlaps, gt_assignment = torch.max(iou3d, dim=1)
+                iou3d_rcnn = iou3d_nms_utils.boxes_iou3d_gpu(src_box_preds[:, 0:7], cur_gt_boxes[:, 0:7])
+                max_overlaps, gt_assignment = torch.max(iou3d_rcnn, dim=1)
                 gt_label = cur_gt_boxes[...,-1]
                 final_scores = selected_scores
                 final_labels = label_preds[selected]
