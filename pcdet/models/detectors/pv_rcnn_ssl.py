@@ -150,6 +150,8 @@ class PVRCNN_SSL(Detector3DTemplate):
         self.metric_registry = MetricRegistry(dataset=self.dataset, model_cfg=model_cfg)
         vals_to_store = ['iou_roi_pl', 'iou_roi_gt', 'pred_scores', 'weights', 'class_labels', 'iteration']
         self.val_dict = {val: [] for val in vals_to_store}
+        with open('ema_0.9.pkl','rb') as f:
+            self.lbl_feat = pickle.load(f)
 
     def forward(self, batch_dict):
         if self.training:
@@ -260,7 +262,7 @@ class PVRCNN_SSL(Detector3DTemplate):
             #                  'pred_scores': pseudo_scores,
             #                  'pred_sem_scores': pseudo_sem_scores}
             # self.metrics['after_filtering'].update(**metric_inputs)  # commented to reduce complexity.
-
+            
             batch_dict['metric_registry'] = self.metric_registry
             batch_dict['ori_unlabeled_boxes'] = ori_unlabeled_boxes
             for cur_module in self.pv_rcnn.module_list:
@@ -460,7 +462,7 @@ class PVRCNN_SSL(Detector3DTemplate):
         else:
             for cur_module in self.pv_rcnn.module_list:
                 batch_dict = cur_module(batch_dict)
-
+                            
             pred_dicts, recall_dicts = self.pv_rcnn.post_processing(batch_dict)
 
             pseudo_boxes_list = [torch.cat([pred_dict['pred_boxes'], pred_dict['pred_labels'].unsqueeze(-1)], dim=-1)

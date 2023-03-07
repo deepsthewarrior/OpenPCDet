@@ -6,7 +6,7 @@
 
 import argparse
 import pickle
-
+import torch.nn.functional as F
 from torchmetrics import Metric
 import torch
 import numpy as np
@@ -40,15 +40,44 @@ class PredQualityMetrics(Metric):
                              "pred_weight_uc", "pred_fn_rate", "pred_tp_rate", "pred_fp_ratio", "pred_ious_wrt_pl_fg",
                              "pred_ious_wrt_pl_fn", "pred_ious_wrt_pl_fp", "pred_ious_wrt_pl_tp", "score_fgs_tp",
                              "score_fgs_fn", "score_fgs_fp", "target_score_fn", "target_score_tp", "target_score_fp",
-                             "pred_weight_fn", "pred_weight_tp", "pred_weight_fp"]
+                             "pred_weight_fn", "pred_weight_tp", "pred_weight_fp", "rcnn_sh_fg_mean","rcnn_sh_uc_mean","rcnn_sh_bg_mean","rcnn_sh_fg_mean_Car","rcnn_sh_fg_mean_Ped",
+                             "rcnn_sh_fg_mean_Cyc","rcnn_sh_uc_mean_Car","rcnn_sh_uc_mean_Ped","rcnn_sh_uc_mean_Cyc","rcnn_sh_bg_mean_Ped","rcnn_sh_bg_mean_Cyc","rcnn_cls_fg_mean_Car","rcnn_cls_fg_mean_Ped",
+                             "rcnn_cls_fg_mean_Cyc","rcnn_cls_uc_mean_Car","rcnn_cls_uc_mean_Ped","rcnn_cls_uc_mean_Cyc","rcnn_cls_bg_mean_Ped","rcnn_cls_bg_mean_Cyc","rcnn_reg_fg_mean_Car","rcnn_reg_fg_mean_Ped",
+                             "rcnn_reg_fg_mean_Cyc","rcnn_reg_uc_mean_Car","rcnn_reg_uc_mean_Ped","rcnn_reg_uc_mean_Cyc","rcnn_reg_bg_mean_Ped","rcnn_reg_bg_mean_Cyc","rcnn_sh_bg_mean_Car","rcnn_cls_bg_mean_Car","rcnn_reg_bg_mean_Car"]
+        
         self.min_overlaps = np.array([0.7, 0.5, 0.5, 0.7, 0.5, 0.7])
         self.class_agnostic_fg_thresh = 0.7
+
+        self.rcnn_cls_mean = []
+        self.rcnn_reg_mean = []
+        self.rcnn_sh_mean = []
+
         for metric_name in self.metrics_name:
             self.add_state(metric_name, default=[], dist_reduce_fx='cat')
+        with open('/mnt/data/deka01/debug_OpenPCDet/tools/ema_0.9.pkl','rb') as f:
+            self.rcnn_features = pickle.loads(f.read())
+        
+        Cls = ['Car','Ped','Cyc']
+
+        for cls in Cls:
+            avg = "mean"
+            param = "cls"
+            self.rcnn_cls_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0))
+
+        for cls in Cls:
+            avg = "mean"
+            param = "reg"
+            self.rcnn_reg_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0)) 
+
+        for cls in Cls:
+            avg = "mean"
+            param = "sh"
+            self.rcnn_sh_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0)) 
+
 
     def update(self, preds: [torch.Tensor], ground_truths: [torch.Tensor], pred_scores: [torch.Tensor],
                rois=None, roi_scores=None, targets=None, target_scores=None, pred_weights=None,
-               pseudo_labels=None, pseudo_label_scores=None, pred_iou_wrt_pl=None) -> None:
+               pseudo_labels=None, pseudo_label_scores=None, pred_iou_wrt_pl=None,shared_features=None,rcnn_cls_interim=None,rcnn_reg_interim=None) -> None:
         assert isinstance(preds, list) and isinstance(ground_truths, list) and isinstance(pred_scores, list)
         assert all([pred.dim() == 2 for pred in preds]) and all([pred.dim() == 2 for pred in ground_truths]) and all([pred.dim() == 1 for pred in pred_scores])
         assert all([pred.shape[-1] == 8 for pred in preds]) and all([gt.shape[-1] == 8 for gt in ground_truths])
@@ -77,6 +106,10 @@ class PredQualityMetrics(Metric):
             valid_pred_iou_wrt_pl = pred_iou_wrt_pl[i][valid_preds_mask.nonzero().view(-1)].squeeze() if pred_iou_wrt_pl else None
             valid_gts_mask = torch.logical_not(torch.all(ground_truths[i] == 0, dim=-1))
             valid_gt_boxes = ground_truths[i][valid_gts_mask]
+            valid_sh = shared_features[i][valid_preds_mask.nonzero().view(-1)] if shared_features else None
+            valid_cls = rcnn_cls_interim[i][valid_preds_mask.nonzero().view(-1)] if rcnn_cls_interim else None
+            valid_reg = rcnn_reg_interim[i][valid_preds_mask.nonzero().view(-1)] if rcnn_reg_interim else None
+
             if pseudo_labels is not None:
                 valid_pl_mask = torch.logical_not(torch.all(pseudo_labels[i] == 0, dim=-1))
                 valid_pl_boxes = pseudo_labels[i][valid_pl_mask] if pseudo_labels else None
@@ -124,7 +157,7 @@ class PredQualityMetrics(Metric):
                     classwise_metrics['pred_ious'][cind] = (preds_iou_max * cc_fg_mask.float()).sum() / cc_fg_mask.sum()
                     cls_score_fg = (valid_pred_scores * cc_fg_mask.float()).sum() / (cc_fg_mask).sum()
                     classwise_metrics['score_fgs'][cind] = cls_score_fg
-
+                    # classwise_metrics['cos_cls_fgs'][cind] = 
                     cc_uc_mask = uc_mask & cc_mask
                     classwise_metrics['pred_ucs'][cind] = (cc_uc_mask).sum() / cc_mask.sum()
                     classwise_metrics['pred_ious_ucs'][cind] = (preds_iou_max * cc_uc_mask.float()).sum() / cc_uc_mask.sum()
@@ -145,6 +178,47 @@ class PredQualityMetrics(Metric):
                         cls_sem_score_uc = (valid_roi_scores * cc_uc_mask.float()).sum() / cc_uc_mask.float().sum()
                         classwise_metrics['sem_score_ucs'][cind] = cls_sem_score_uc
 
+                    if valid_sh is not None:
+                        cos_sh_fg = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_fg_mask]],dim=1) if valid_sh[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'))                                               
+                        classwise_metrics['rcnn_sh_fg_mean_Car'][cind] = cos_sh_fg.mean()
+                        # cos_sh_ = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_fg_mask]],dim=1) if valid_sh[cc_fg_mask].shape[0] != 0 else 'nan'                                                 
+                        cos_sh_bg = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_sh[cls_bg_mask]],dim=1) if valid_sh[cls_bg_mask].shape[0] != 0 else torch.full((1,), float('nan'))
+                        classwise_metrics['rcnn_sh_bg_mean'][cind] = cos_sh_bg.mean()
+                        cos_sh_uc =  torch.stack([F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_uc_mask]],dim=1) if valid_sh[cc_uc_mask].shape[0] != 0 else torch.full((1,), float('nan'))
+                        classwise_metrics['rcnn_sh_uc_mean'][cind] = cos_sh_uc.mean()
+
+                        classwise_metrics['rcnn_sh_fg_mean_Car'][cind] =   torch.stack([F.cosine_similarity(self.rcnn_sh_mean[0],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_fg_mask]],dim=1).mean() if valid_sh[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'))
+                        classwise_metrics['rcnn_sh_fg_mean_Ped'][cind] =   torch.stack([F.cosine_similarity(self.rcnn_sh_mean[1],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_fg_mask]],dim=1).mean() if valid_sh[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'))
+                        classwise_metrics['rcnn_sh_fg_mean_Cyc'][cind] =   torch.stack([F.cosine_similarity(self.rcnn_sh_mean[2],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_fg_mask]],dim=1).mean() if valid_sh[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'))
+                        classwise_metrics['rcnn_sh_uc_mean_Car'][cind] =   torch.stack([F.cosine_similarity(self.rcnn_sh_mean[0],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_uc_mask]],dim=1).mean() if valid_sh[cc_uc_mask].shape[0] != 0 else torch.full((1,), float('nan'))
+                        classwise_metrics['rcnn_sh_uc_mean_Ped'][cind] =   torch.stack([F.cosine_similarity(self.rcnn_sh_mean[1],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_uc_mask]],dim=1).mean() if valid_sh[cc_uc_mask].shape[0] != 0 else torch.full((1,), float('nan'))
+                        classwise_metrics['rcnn_sh_uc_mean_Cyc'][cind] =   torch.stack([F.cosine_similarity(self.rcnn_sh_mean[2],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_uc_mask]],dim=1).mean() if valid_sh[cc_uc_mask].shape[0] != 0 else torch.full((1,), float('nan'))
+                        classwise_metrics['rcnn_sh_bg_mean_Car'][cind] =   torch.stack([F.cosine_similarity(self.rcnn_sh_mean[0],sh.unsqueeze(dim=0)) for sh in valid_sh[cls_bg_mask]],dim=1).mean() if valid_sh[cls_bg_mask].shape[0] != 0 else torch.full((1,), float('nan'))
+                        classwise_metrics['rcnn_sh_bg_mean_Ped'][cind] =   torch.stack([F.cosine_similarity(self.rcnn_sh_mean[1],sh.unsqueeze(dim=0)) for sh in valid_sh[cls_bg_mask]],dim=1).mean() if valid_sh[cls_bg_mask].shape[0] != 0 else torch.full((1,), float('nan'))
+                        classwise_metrics['rcnn_sh_bg_mean_Cyc'][cind] =   torch.stack([F.cosine_similarity(self.rcnn_sh_mean[2],sh.unsqueeze(dim=0)) for sh in valid_sh[cls_bg_mask]],dim=1).mean() if valid_sh[cls_bg_mask].shape[0] != 0 else torch.full((1,), float('nan'))
+                        
+                        classwise_metrics['rcnn_cls_fg_mean_Car'][cind] =   torch.stack([F.cosine_similarity(self.rcnn_cls_mean[0],cls.unsqueeze(dim=0)) for cls in valid_cls[cc_fg_mask]],dim=1).mean() if valid_cls[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'))
+                        classwise_metrics['rcnn_cls_fg_mean_Ped'][cind] =   torch.stack([F.cosine_similarity(self.rcnn_cls_mean[1],cls.unsqueeze(dim=0)) for cls in valid_cls[cc_fg_mask]],dim=1).mean() if valid_cls[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'))
+                        classwise_metrics['rcnn_cls_fg_mean_Cyc'][cind] =   torch.stack([F.cosine_similarity(self.rcnn_cls_mean[2],cls.unsqueeze(dim=0)) for cls in valid_cls[cc_fg_mask]],dim=1).mean() if valid_cls[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'))
+                        classwise_metrics['rcnn_cls_uc_mean_Car'][cind] =   torch.stack([F.cosine_similarity(self.rcnn_cls_mean[0],cls.unsqueeze(dim=0)) for cls in valid_cls[cc_uc_mask]],dim=1).mean() if valid_cls[cc_uc_mask].shape[0] != 0 else torch.full((1,), float('nan'))
+                        classwise_metrics['rcnn_cls_uc_mean_Ped'][cind] =   torch.stack([F.cosine_similarity(self.rcnn_cls_mean[1],cls.unsqueeze(dim=0)) for cls in valid_cls[cc_uc_mask]],dim=1).mean() if valid_cls[cc_uc_mask].shape[0] != 0 else torch.full((1,), float('nan'))
+                        classwise_metrics['rcnn_cls_uc_mean_Cyc'][cind] =   torch.stack([F.cosine_similarity(self.rcnn_cls_mean[2],cls.unsqueeze(dim=0)) for cls in valid_cls[cc_uc_mask]],dim=1).mean() if valid_cls[cc_uc_mask].shape[0] != 0 else torch.full((1,), float('nan'))
+                        classwise_metrics['rcnn_cls_bg_mean_Car'][cind] =   torch.stack([F.cosine_similarity(self.rcnn_cls_mean[0],cls.unsqueeze(dim=0)) for cls in valid_cls[cls_bg_mask]],dim=1).mean() if valid_cls[cls_bg_mask].shape[0] != 0 else torch.full((1,), float('nan'))
+                        classwise_metrics['rcnn_cls_bg_mean_Ped'][cind] =   torch.stack([F.cosine_similarity(self.rcnn_cls_mean[1],cls.unsqueeze(dim=0)) for cls in valid_cls[cls_bg_mask]],dim=1).mean() if valid_cls[cls_bg_mask].shape[0] != 0 else torch.full((1,), float('nan'))
+                        classwise_metrics['rcnn_cls_bg_mean_Cyc'][cind] =   torch.stack([F.cosine_similarity(self.rcnn_cls_mean[2],cls.unsqueeze(dim=0)) for cls in valid_cls[cls_bg_mask]],dim=1).mean() if valid_cls[cls_bg_mask].shape[0] != 0 else torch.full((1,), float('nan'))
+                        
+                        classwise_metrics['rcnn_reg_fg_mean_Car'][cind] =   torch.stack([F.cosine_similarity(self.rcnn_reg_mean[0],reg.unsqueeze(dim=0)) for reg in valid_reg[cc_fg_mask]],dim=1).mean() if valid_reg[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'))
+                        classwise_metrics['rcnn_reg_fg_mean_Ped'][cind] =   torch.stack([F.cosine_similarity(self.rcnn_reg_mean[1],reg.unsqueeze(dim=0)) for reg in valid_reg[cc_fg_mask]],dim=1).mean() if valid_reg[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'))
+                        classwise_metrics['rcnn_reg_fg_mean_Cyc'][cind] =   torch.stack([F.cosine_similarity(self.rcnn_reg_mean[2],reg.unsqueeze(dim=0)) for reg in valid_reg[cc_fg_mask]],dim=1).mean() if valid_reg[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'))
+                        classwise_metrics['rcnn_reg_uc_mean_Car'][cind] =   torch.stack([F.cosine_similarity(self.rcnn_reg_mean[0],reg.unsqueeze(dim=0)) for reg in valid_reg[cc_uc_mask]],dim=1).mean() if valid_reg[cc_uc_mask].shape[0] != 0 else torch.full((1,), float('nan'))
+                        classwise_metrics['rcnn_reg_uc_mean_Ped'][cind] =   torch.stack([F.cosine_similarity(self.rcnn_reg_mean[1],reg.unsqueeze(dim=0)) for reg in valid_reg[cc_uc_mask]],dim=1).mean() if valid_reg[cc_uc_mask].shape[0] != 0 else torch.full((1,), float('nan'))
+                        classwise_metrics['rcnn_reg_uc_mean_Cyc'][cind] =   torch.stack([F.cosine_similarity(self.rcnn_reg_mean[2],reg.unsqueeze(dim=0)) for reg in valid_reg[cc_uc_mask]],dim=1).mean() if valid_reg[cc_uc_mask].shape[0] != 0 else torch.full((1,), float('nan'))
+                        classwise_metrics['rcnn_reg_bg_mean_Car'][cind] =   torch.stack([F.cosine_similarity(self.rcnn_reg_mean[0],reg.unsqueeze(dim=0)) for reg in valid_reg[cls_bg_mask]],dim=1).mean() if valid_reg[cls_bg_mask].shape[0] != 0 else torch.full((1,), float('nan'))
+                        classwise_metrics['rcnn_reg_bg_mean_Ped'][cind] =   torch.stack([F.cosine_similarity(self.rcnn_reg_mean[1],reg.unsqueeze(dim=0)) for reg in valid_reg[cls_bg_mask]],dim=1).mean() if valid_reg[cls_bg_mask].shape[0] != 0 else torch.full((1,), float('nan'))
+                        classwise_metrics['rcnn_reg_bg_mean_Cyc'][cind] =   torch.stack([F.cosine_similarity(self.rcnn_reg_mean[2],reg.unsqueeze(dim=0)) for reg in valid_cls[cls_bg_mask]],dim=1).mean() if valid_reg[cls_bg_mask].shape[0] != 0 else torch.full((1,), float('nan'))                        
+
+
+
                     if valid_target_scores is not None:
                         cls_target_score_bg = (valid_target_scores * cls_bg_mask.float()).sum() / cls_bg_mask.float().sum()
                         classwise_metrics['target_score_bg'][cind] = cls_target_score_bg
@@ -156,7 +230,7 @@ class PredQualityMetrics(Metric):
                         classwise_metrics['pred_weight_bg'][cind] = cls_pred_weight_bg
                         cls_pred_weight_uc = (valid_pred_weights * cc_uc_mask.float()).sum() / cc_uc_mask.float().sum()
                         classwise_metrics['pred_weight_uc'][cind] = cls_pred_weight_uc
-                        cls_pred_weight_fg = (valid_pred_weights * cc_fg_mask.float()).sum() / cc_fg_mask.sum()
+                        cls_pred_weight_fg = (valid_pred_weights * cls_bg_mask.float()).sum() / cc_fg_mask.sum()
                         classwise_metrics['pred_weight_fg'][cind] = cls_pred_weight_fg
 
                     if valid_pred_iou_wrt_pl is not None:
@@ -239,7 +313,7 @@ class KITTIEvalMetrics(Metric):
     full_state_update: bool = False
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.reset_state_interval = kwargs.get('reset_state_interval', 256)
+        self.reset_state_interval = kwargs.get('reset_state_interval', 64)
         self.tag = kwargs.get('tag', None)
         self.dataset = kwargs.get('dataset', None)
         current_classes = self.dataset.class_names

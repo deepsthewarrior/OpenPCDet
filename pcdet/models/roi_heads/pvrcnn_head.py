@@ -32,15 +32,32 @@ class PVRCNNHead(RoIHeadTemplate):
                 shared_fc_list.append(nn.Dropout(self.model_cfg.DP_RATIO))
 
         self.shared_fc_layer = nn.Sequential(*shared_fc_list)
-
-        self.cls_layers = self.make_fc_layers(
+        self.cls_layers_1 = self.make_half_fc_layers(
             input_channels=pre_channel, output_channels=self.num_class, fc_list=self.model_cfg.CLS_FC
         )
-        self.reg_layers = self.make_fc_layers(
+        self.cls_layers_2 = self.make_final_fc_layers(
+            input_channels=pre_channel, output_channels=self.num_class, fc_list=self.model_cfg.CLS_FC
+        )
+        self.reg_layers_1 = self.make_half_fc_layers(
             input_channels=pre_channel,
             output_channels=self.box_coder.code_size * self.num_class,
             fc_list=self.model_cfg.REG_FC
         )
+        self.reg_layers_2 = self.make_final_fc_layers(
+            input_channels=pre_channel,
+            output_channels=self.box_coder.code_size * self.num_class,
+            fc_list=self.model_cfg.REG_FC
+        )
+
+
+        # self.cls_layers = self.make_fc_layers(
+        #     input_channels=pre_channel, output_channels=self.num_class, fc_list=self.model_cfg.CLS_FC
+        # )
+        # self.reg_layers = self.make_fc_layers(
+        #     input_channels=pre_channel,
+        #     output_channels=self.box_coder.code_size * self.num_class,
+        #     fc_list=self.model_cfg.REG_FC
+        # )
         self.init_weights(weight_init='xavier')
 
         self.print_loss_when_eval = False
@@ -63,7 +80,8 @@ class PVRCNNHead(RoIHeadTemplate):
                     init_func(m.weight)
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
-        nn.init.normal_(self.reg_layers[-1].weight, mean=0, std=0.001)
+        # nn.init.normal_(self.reg_layers[-1].weight, mean=0, std=0.001)
+        nn.init.normal_(self.reg_layers_2[-1].weight, mean=0, std=0.001)
 
     def roi_grid_pool(self, batch_dict):
         """
@@ -170,13 +188,18 @@ class PVRCNNHead(RoIHeadTemplate):
             contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxN, C, 6, 6, 6)
 
         shared_features = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
-        rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
-        rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)
+        rcnn_cls_interim = self.cls_layers_1(shared_features)
+        rcnn_cls = self.cls_layers_2(rcnn_cls_interim).transpose(1, 2).contiguous().squeeze(dim=1)
+        rcnn_reg_interim = self.reg_layers_1(shared_features)
+        rcnn_reg = self.reg_layers_2(rcnn_reg_interim).transpose(1, 2).contiguous().squeeze(dim=1)
+
+        # rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
+        # rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)
 
         if not self.training or self.predict_boxes_when_training:
             batch_cls_preds, batch_box_preds = self.generate_predicted_boxes(
                 batch_size=batch_dict['batch_size'], rois=batch_dict['rois'], cls_preds=rcnn_cls, box_preds=rcnn_reg
-            )
+            ) 
             # note that the rpn batch_cls_preds and batch_box_preds are being overridden here by rcnn preds
             batch_dict['batch_cls_preds'] = batch_cls_preds
             batch_dict['batch_box_preds'] = batch_box_preds
@@ -187,6 +210,10 @@ class PVRCNNHead(RoIHeadTemplate):
         if self.training or self.print_loss_when_eval:
             targets_dict['rcnn_cls'] = rcnn_cls
             targets_dict['rcnn_reg'] = rcnn_reg
+            targets_dict['rcnn_cls_interim'] = rcnn_cls_interim.view(batch_dict['roi_labels'].shape[0],-1,rcnn_cls_interim.shape[1])
+            targets_dict['rcnn_reg_interim'] = rcnn_reg_interim.view(batch_dict['roi_labels'].shape[0],-1,rcnn_reg_interim.shape[1])
+            targets_dict['shared_features'] = shared_features.view(batch_dict['roi_labels'].shape[0],-1,shared_features.shape[1])
+            
 
             self.forward_ret_dict = targets_dict
 

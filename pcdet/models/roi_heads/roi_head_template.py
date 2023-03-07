@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import pickle
 
 from ...utils import box_coder_utils, common_utils, loss_utils
 from ..model_utils.model_nms_utils import class_agnostic_nms
@@ -32,6 +33,8 @@ class RoIHeadTemplate(nn.Module):
         self.build_losses(self.model_cfg.LOSS_CONFIG)
         self.forward_ret_dict = None
         self.predict_boxes_when_training = predict_boxes_when_training
+        with open('/mnt/data/deka01/debug_OpenPCDet/tools/ema_0.9.pkl','rb') as f:
+            self.rcnn_features = pickle.loads(f.read())
 
     def build_losses(self, losses_cfg):
         self.add_module(
@@ -54,7 +57,28 @@ class RoIHeadTemplate(nn.Module):
         fc_layers.append(nn.Conv1d(pre_channel, output_channels, kernel_size=1, bias=True))
         fc_layers = nn.Sequential(*fc_layers)
         return fc_layers
+    
+    def make_half_fc_layers(self, input_channels, output_channels, fc_list):
+        fc_layers = []
+        pre_channel = input_channels
+        for k in range(0, fc_list.__len__()):
+            fc_layers.extend([
+                nn.Conv1d(pre_channel, fc_list[k], kernel_size=1, bias=False),
+                nn.BatchNorm1d(fc_list[k]),
+                nn.ReLU()
+            ])
+        fc_layers = nn.Sequential(*fc_layers)
+        return fc_layers
 
+    def make_final_fc_layers(self, input_channels, output_channels, fc_list):
+        fc_layers = []
+        pre_channel = fc_list[-1]
+        if self.model_cfg.DP_RATIO >= 0:
+            fc_layers.append(nn.Dropout(self.model_cfg.DP_RATIO))
+        fc_layers.append(nn.Conv1d(pre_channel, output_channels, kernel_size=1, bias=True))
+        fc_layers = nn.Sequential(*fc_layers)
+        return fc_layers
+    
     @torch.no_grad()
     def proposal_layer(self, batch_dict,  nms_config):
         """
@@ -196,6 +220,9 @@ class RoIHeadTemplate(nn.Module):
         ema_preds_of_std_rois, ema_pred_scores_of_std_rois = [], []
         sample_gts = []
         sample_gt_iou_of_rois = []
+        shared_features = []
+        rcnn_cls_interim = []
+        rcnn_reg_interim = []
         for i, uind in enumerate(unlabeled_inds):
             mask = (targets_dict['reg_valid_mask'][uind] > 0) if mask_type == 'reg' else (
                         targets_dict['rcnn_cls_labels'][uind] >= 0)
@@ -209,6 +236,10 @@ class RoIHeadTemplate(nn.Module):
             sample_rois.append(roi_labeled_boxes)
             sample_roi_scores.append(roi_scores)
             sample_gt_iou_of_rois.append(gt_iou_of_rois)
+            shared_features.append(targets_dict['shared_features'][uind][mask])
+            rcnn_cls_interim.append(targets_dict['rcnn_cls_interim'][uind][mask])
+            rcnn_reg_interim.append(targets_dict['rcnn_reg_interim'][uind][mask])
+
             # Target info
             target_labeled_boxes = targets_dict['gt_of_rois_src'][uind][mask].detach().clone()
             target_scores = targets_dict['rcnn_cls_labels'][uind][mask].detach().clone()
@@ -307,9 +338,10 @@ class RoIHeadTemplate(nn.Module):
                              'ground_truths': sample_gts, 'targets': sample_targets,
                              'pseudo_labels': sample_pls, 'pseudo_label_scores': sample_pl_scores,
                              'target_scores': sample_target_scores, 'pred_weights': sample_pred_weights,
-                             'pred_iou_wrt_pl': sample_gt_iou_of_rois}
+                             'pred_iou_wrt_pl': sample_gt_iou_of_rois,'shared_features':shared_features,
+                             'rcnn_cls_interim':rcnn_cls_interim,'rcnn_reg_interim':rcnn_reg_interim}
             metrics.update(**metric_inputs)
-
+            
     def assign_targets(self, batch_dict):
 
         with torch.no_grad():
