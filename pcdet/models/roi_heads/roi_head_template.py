@@ -33,7 +33,7 @@ class RoIHeadTemplate(nn.Module):
         self.build_losses(self.model_cfg.LOSS_CONFIG)
         self.forward_ret_dict = None
         self.predict_boxes_when_training = predict_boxes_when_training
-        with open('/mnt/data/deka01/debug_OpenPCDet/tools/ema_0.9.pkl','rb') as f:
+        with open('ema_0.9.pkl','rb') as f:
             self.rcnn_features = pickle.loads(f.read())
 
     def build_losses(self, losses_cfg):
