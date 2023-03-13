@@ -162,8 +162,8 @@ class AnchorHeadTemplate(nn.Module):
         box_cls_labels = self.forward_ret_dict['box_cls_labels'][ulb_inds].view(-1)
 
         positive = box_cls_labels > 0
-        anchor_scores = ulb_anchor_scores[positive]
-        agg_anchor_labels = ulb_anchor_labels[positive]
+        anchor_scores = ulb_anchor_scores
+        agg_anchor_labels = ulb_anchor_labels
         agg_anchor_scores = []
         for i in range(0,3):
             cls_mask = agg_anchor_labels == i
@@ -172,11 +172,12 @@ class AnchorHeadTemplate(nn.Module):
         ulb_num_cls = torch.bincount(agg_anchor_labels.view(-1), minlength=3).float()
         mean_score = (agg_anchor_scores/ulb_num_cls)
         mean_score = mean_score.nan_to_num(nan=1e-4)
-
+        ulb_cls_dist = ulb_num_cls/ulb_num_cls.sum()
+        
         # # calculate kl divergence between lbl_cls_dist and cls_dist_batch
         lbl_cls_dist = lbl_cls_dist + 1e-6
         mean_score = mean_score + 1e-6
-        cls_wise = lbl_cls_dist * torch.log(lbl_cls_dist / mean_score)
+        cls_wise = lbl_cls_dist * torch.log(lbl_cls_dist / ulb_cls_dist)
         ulb_cls_dist_loss = cls_wise.sum()
 
         # clamp ulb_cls_dist_loss
