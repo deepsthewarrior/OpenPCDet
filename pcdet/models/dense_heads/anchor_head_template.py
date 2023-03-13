@@ -135,7 +135,7 @@ class AnchorHeadTemplate(nn.Module):
             cls_loss = cls_loss_src.reshape(batch_size, -1).sum(-1)
             rpn_acc_cls = ((cls_preds.max(-1)[1] + 1) == cls_targets.long()).view(batch_size, -1).sum(-1).float() / \
                           torch.clamp((cls_targets > 0).view(batch_size, -1).sum(-1).float(), min=1.0)
-
+            
         cls_loss = cls_loss * self.model_cfg.LOSS_CONFIG.LOSS_WEIGHTS['cls_weight']
 
         tb_dict = {
@@ -158,17 +158,31 @@ class AnchorHeadTemplate(nn.Module):
         
         ulb_cls_preds = self.forward_ret_dict['cls_preds'][ulb_inds]
         ulb_cls_preds = ulb_cls_preds.view(-1, self.num_class).sigmoid()
-        mean_cls_scores = ulb_cls_preds.mean(dim=0)
+        ulb_anchor_scores,ulb_anchor_labels = torch.max(ulb_cls_preds,dim=1)
+        box_cls_labels = self.forward_ret_dict['box_cls_labels'][ulb_inds].view(-1)
+
+        positive = box_cls_labels > 0
+        anchor_scores = ulb_anchor_scores[positive]
+        agg_anchor_labels = ulb_anchor_labels[positive]
+        agg_anchor_scores = []
+        for i in range(0,3):
+            cls_mask = agg_anchor_labels == i
+            agg_anchor_scores.append(anchor_scores[cls_mask].sum())
+        agg_anchor_scores = torch.tensor(agg_anchor_scores,device=cls_mask.device)
+        ulb_num_cls = torch.bincount(agg_anchor_labels.view(-1), minlength=3).float()
+        mean_score = (agg_anchor_scores/ulb_num_cls)
+        mean_score = mean_score.nan_to_num(nan=1e-4)
 
         # # calculate kl divergence between lbl_cls_dist and cls_dist_batch
         lbl_cls_dist = lbl_cls_dist + 1e-6
-        mean_cls_scores = mean_cls_scores + 1e-6
-        cls_wise = lbl_cls_dist * torch.log(lbl_cls_dist / mean_cls_scores)
+        mean_score = mean_score + 1e-6
+        cls_wise = lbl_cls_dist * torch.log(lbl_cls_dist / mean_score)
         ulb_cls_dist_loss = cls_wise.sum()
 
         # clamp ulb_cls_dist_loss
         # ulb_cls_dist_loss = torch.clamp(ulb_cls_dist_loss, min=0.0, max=2.0)
         ulb_cls_dist_loss = ulb_cls_dist_loss * loss_cfgs.LOSS_WEIGHTS['ulb_cls_dist_weight']
+        
         
         tb_dict = {
             # For consistency with other losses
