@@ -100,7 +100,9 @@ class PredQualityMetrics(Metric):
         ground_truths = [gt_box.clone().detach() for gt_box in ground_truths]
         pseudo_labels = [pl_box.clone().detach() for pl_box in pseudo_labels] if pseudo_labels is not None else None
         pred_weights = [pred_weight.clone().detach() for pred_weight in pred_weights] if pred_weights is not None else None
-
+        self.rcnn_cls_mean = self.rcnn_cls_mean.to(preds[0].device)
+        self.rcnn_reg_mean = self.rcnn_reg_mean.to(preds[0].device)
+        self.rcnn_sh_mean = self.rcnn_sh_mean.to(preds[0].device)
         sample_tensor = preds[0] if len(preds) else ground_truths[0]
         num_classes = len(self.dataset.class_names)
         for i in range(len(preds)):
@@ -187,8 +189,7 @@ class PredQualityMetrics(Metric):
                         classwise_metrics['sem_score_ucs'][cind] = cls_sem_score_uc
 
                     if valid_sh is not None:
-
-                        classwise_metrics['rcnn_sh_fg_mean'][cind] = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_fg_mask]],dim=1).mean() if valid_sh[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_sh.device)                                               
+                        classwise_metrics['rcnn_sh_fg_mean'][cind] = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_fg_mask]],dim=1).mean() if valid_sh[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_sh.device)
                         classwise_metrics['rcnn_sh_bg_mean'][cind] = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_sh[cls_bg_mask]],dim=1).mean() if valid_sh[cls_bg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_sh.device)
                         classwise_metrics['rcnn_sh_uc_mean'][cind] = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_uc_mask]],dim=1).mean() if valid_sh[cc_uc_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_sh.device)
                         classwise_metrics['rcnn_cls_fg_mean'][cind] = torch.stack([F.cosine_similarity(self.rcnn_cls_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_cls[cc_fg_mask]],dim=1).mean() if valid_cls[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_cls.device)                                                                      
