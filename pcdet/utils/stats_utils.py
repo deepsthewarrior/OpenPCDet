@@ -288,7 +288,7 @@ class PredQualityMetrics(Metric):
         if len(preds) == 0:
             for metric_name in self.metrics_name:
                 getattr(self, metric_name).append(sample_tensor.new_zeros(num_classes + 1).fill_(float('nan')))
-        output_dir = os.path.split(os.path.abspath(os.getcwd()))
+        output_dir = os.path.abspath(os.getcwd())
         file_path = os.path.join(output_dir, 'sim_scores.pkl')
         pickle.dump(self.val_dict, open(file_path, 'wb'))
 
