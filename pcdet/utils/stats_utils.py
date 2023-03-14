@@ -206,7 +206,7 @@ class PredQualityMetrics(Metric):
                             classwise_metrics['rcnn_sh_bg_mean'][cind] = torch.full((1,), float(0),device=valid_sh.device)
                         uc_sh = []
                         if valid_sh[cc_uc_mask].shape[0] != 0:
-                            for sh in valid_sh[cls_bg_mask]:
+                            for sh in valid_sh[cls_uc_mask]:
                                uc_sh.append(F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)))
                             classwise_metrics['rcnn_sh_uc_mean'][cind] = torch.stack(uc_sh,dim=1).mean()
                         else:
