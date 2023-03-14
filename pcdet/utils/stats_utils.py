@@ -41,10 +41,10 @@ class PredQualityMetrics(Metric):
                              "pred_weight_uc", "pred_fn_rate", "pred_tp_rate", "pred_fp_ratio", "pred_ious_wrt_pl_fg",
                              "pred_ious_wrt_pl_fn", "pred_ious_wrt_pl_fp", "pred_ious_wrt_pl_tp", "score_fgs_tp",
                              "score_fgs_fn", "score_fgs_fp", "target_score_fn", "target_score_tp", "target_score_fp",
-                             "pred_weight_fn", "pred_weight_tp", "pred_weight_fp", "rcnn_sh_fg_mean","rcnn_sh_uc_mean","rcnn_sh_bg_mean","rcnn_sh_fg_mean_Car","rcnn_sh_fg_mean_Ped","rcnn_cls_fg_mean","rcnn_cls_uc_mean","rcnn_cls_bg_mean",
-                             "rcnn_sh_fg_mean_Cyc","rcnn_sh_uc_mean_Car","rcnn_sh_uc_mean_Ped","rcnn_sh_uc_mean_Cyc","rcnn_sh_bg_mean_Ped","rcnn_sh_bg_mean_Cyc","rcnn_cls_fg_mean_Car","rcnn_cls_fg_mean_Ped",
-                             "rcnn_cls_fg_mean_Cyc","rcnn_cls_uc_mean_Car","rcnn_cls_uc_mean_Ped","rcnn_cls_uc_mean_Cyc","rcnn_cls_bg_mean_Ped","rcnn_cls_bg_mean_Cyc","rcnn_reg_fg_mean_Car","rcnn_reg_fg_mean_Ped",
-                             "rcnn_reg_fg_mean_Cyc","rcnn_reg_uc_mean_Car","rcnn_reg_uc_mean_Ped","rcnn_reg_uc_mean_Cyc","rcnn_reg_bg_mean_Ped","rcnn_reg_bg_mean_Cyc","rcnn_sh_bg_mean_Car","rcnn_cls_bg_mean_Car","rcnn_reg_bg_mean_Car"]
+                             "pred_weight_fn", "pred_weight_tp", "pred_weight_fp"] 
+                            # "rcnn_sh_fg_mean","rcnn_sh_uc_mean","rcnn_sh_bg_mean","rcnn_sh_fg_mean_Car","rcnn_sh_fg_mean_Ped","rcnn_cls_fg_mean","rcnn_cls_uc_mean","rcnn_cls_bg_mean",
+                            #  "rcnn_sh_fg_mean_Cyc","rcnn_sh_uc_mean_Car","rcnn_sh_uc_mean_Ped","rcnn_sh_uc_mean_Cyc","rcnn_sh_bg_mean_Ped","rcnn_sh_bg_mean_Cyc","rcnn_cls_fg_mean_Ped",
+                            #  "rcnn_cls_fg_mean_Cyc","rcnn_cls_uc_mean_Car","rcnn_cls_uc_mean_Ped","rcnn_cls_uc_mean_Cyc","rcnn_cls_bg_mean_Ped","rcnn_cls_bg_mean_Cyc","rcnn_cls_fg_mean_Car","rcnn_cls_bg_mean_Car","rcnn_sh_bg_mean_Car"]
         
         self.min_overlaps = np.array([0.7, 0.5, 0.5, 0.7, 0.5, 0.7])
         self.class_agnostic_fg_thresh = 0.7
@@ -78,10 +78,9 @@ class PredQualityMetrics(Metric):
         self.rcnn_cls_mean = torch.stack(rcnn_cls_mean)
         self.rcnn_reg_mean = torch.stack(rcnn_reg_mean)
         self.rcnn_sh_mean = torch.stack(rcnn_sh_mean)
-        self.vals_to_store = ['rcnn_sh_fg_mean','rcnn_sh_uc_mean','rcnn_sh_bg_mean','rcnn_sh_fg_mean_Car','rcnn_sh_fg_mean_Ped','rcnn_cls_fg_mean','rcnn_cls_uc_mean','rcnn_cls_bg_mean',
-                             'rcnn_sh_fg_mean_Cyc','rcnn_sh_uc_mean_Car','rcnn_sh_uc_mean_Ped','rcnn_sh_uc_mean_Cyc','rcnn_sh_bg_mean_Ped','rcnn_sh_bg_mean_Cyc','rcnn_cls_fg_mean_Car','rcnn_cls_fg_mean_Ped',
-                             'rcnn_cls_fg_mean_Cyc','rcnn_cls_uc_mean_Car','rcnn_cls_uc_mean_Ped','rcnn_cls_uc_mean_Cyc','rcnn_cls_bg_mean_Ped','rcnn_cls_bg_mean_Cyc','rcnn_reg_fg_mean_Car','rcnn_reg_fg_mean_Ped',
-                             'rcnn_reg_fg_mean_Cyc','rcnn_reg_uc_mean_Car','rcnn_reg_uc_mean_Ped','rcnn_reg_uc_mean_Cyc','rcnn_reg_bg_mean_Ped','rcnn_reg_bg_mean_Cyc','rcnn_sh_bg_mean_Car','rcnn_cls_bg_mean_Car','rcnn_reg_bg_mean_Car']
+        # self.vals_to_store = ['rcnn_sh_fg_mean','rcnn_sh_uc_mean','rcnn_sh_bg_mean','rcnn_sh_fg_mean_Car','rcnn_sh_fg_mean_Ped','rcnn_cls_fg_mean','rcnn_cls_uc_mean','rcnn_cls_bg_mean',
+        #                      'rcnn_sh_fg_mean_Cyc','rcnn_sh_uc_mean_Car','rcnn_sh_uc_mean_Ped','rcnn_sh_uc_mean_Cyc','rcnn_sh_bg_mean_Ped','rcnn_sh_bg_mean_Cyc','rcnn_cls_fg_mean_Car','rcnn_cls_fg_mean_Ped',
+        #                      'rcnn_cls_fg_mean_Cyc','rcnn_cls_uc_mean_Car','rcnn_cls_uc_mean_Ped','rcnn_cls_uc_mean_Cyc','rcnn_cls_bg_mean_Ped',"rcnn_cls_bg_mean_Cyc","rcnn_cls_bg_mean_Car","rcnn_sh_bg_mean_Car"]
         self.val_dict = {val: [] for val in self.vals_to_store}
 
     def update(self, preds: [torch.Tensor], ground_truths: [torch.Tensor], pred_scores: [torch.Tensor],
@@ -189,58 +188,57 @@ class PredQualityMetrics(Metric):
                         cls_sem_score_uc = (valid_roi_scores * cc_uc_mask.float()).sum() / cc_uc_mask.float().sum()
                         classwise_metrics['sem_score_ucs'][cind] = cls_sem_score_uc
 
-                    if valid_sh is not None:
-                        fg_sh = []
-                        if valid_sh[cc_fg_mask].shape[0] != 0:
-                            for sh in valid_sh[cc_fg_mask]:
-                               fg_sh.append(F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)))
-                            classwise_metrics['rcnn_sh_fg_mean'][cind] = torch.stack(fg_sh,dim=1).mean()
-                        else:
-                            classwise_metrics['rcnn_sh_fg_mean'][cind] = torch.full((1,), float(0),device=valid_sh.device)
-                        bg_sh = []
-                        if valid_sh[cls_bg_mask].shape[0] != 0:
-                            for sh in valid_sh[cls_bg_mask]:
-                               bg_sh.append(F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)))
-                            classwise_metrics['rcnn_sh_bg_mean'][cind] = torch.stack(bg_sh,dim=1).mean()
-                        else:
-                            classwise_metrics['rcnn_sh_bg_mean'][cind] = torch.full((1,), float(0),device=valid_sh.device)
-                        uc_sh = []
-                        if valid_sh[cc_uc_mask].shape[0] != 0:
-                            for sh in valid_sh[cls_uc_mask]:
-                               uc_sh.append(F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)))
-                            classwise_metrics['rcnn_sh_uc_mean'][cind] = torch.stack(uc_sh,dim=1).mean()
-                        else:
-                            classwise_metrics['rcnn_sh_uc_mean'][cind] = torch.full((1,), float(0),device=valid_sh.device)
-                        # classwise_metrics['rcnn_sh_bg_mean'][cind] = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_sh[cls_bg_mask]],dim=1).mean() if valid_sh[cls_bg_mask].shape[0] != 0 else torch.full((1,), float(0),device=valid_sh.device)
-                        # classwise_metrics['rcnn_sh_uc_mean'][cind] = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_uc_mask]],dim=1).mean() if valid_sh[cc_uc_mask].shape[0] != 0 else torch.full((1,), float(0),device=valid_sh.device)
+                    # if valid_sh is not None:
+                    #     fg_sh = []
+                    #     if valid_sh[cc_fg_mask].shape[0] != 0:
+                    #         for sh in valid_sh[cc_fg_mask]:
+                    #            fg_sh.append(F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)))
+                    #         classwise_metrics['rcnn_sh_fg_mean'][cind] = torch.stack(fg_sh,dim=1).mean()
+                    #     else:
+                    #         classwise_metrics['rcnn_sh_fg_mean'][cind] = torch.full((1,), float(0),device=valid_sh.device)
+                    #     bg_sh = []
+                    #     if valid_sh[cls_bg_mask].shape[0] != 0:
+                    #         for sh in valid_sh[cls_bg_mask]:
+                    #            bg_sh.append(F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)))
+                    #         classwise_metrics['rcnn_sh_bg_mean'][cind] = torch.stack(bg_sh,dim=1).mean()
+                    #     else:
+                    #         classwise_metrics['rcnn_sh_bg_mean'][cind] = torch.full((1,), float(0),device=valid_sh.device)
+                    #     uc_sh = []
+                    #     if valid_sh[cc_uc_mask].shape[0] != 0:
+                    #         for sh in valid_sh[cc_uc_mask]:
+                    #            uc_sh.append(F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)))
+                    #         classwise_metrics['rcnn_sh_uc_mean'][cind] = torch.stack(uc_sh,dim=1).mean()
+                    #     else:
+                    #         classwise_metrics['rcnn_sh_uc_mean'][cind] = torch.full((1,), float(0),device=valid_sh.device)
+                       
 
-                        # classwise_metrics['rcnn_cls_fg_mean'][cind] = torch.stack([F.cosine_similarity(self.rcnn_cls_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_cls[cc_fg_mask]],dim=1).mean() if valid_cls[cc_fg_mask].shape[0] != 0 else torch.full((1,), float(0),device=valid_cls.device)                                                                      
-                        # classwise_metrics['rcnn_cls_bg_mean'][cind] = torch.stack([F.cosine_similarity(self.rcnn_cls_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_cls[cls_bg_mask]],dim=1).mean() if valid_cls[cls_bg_mask].shape[0] != 0 else torch.full((1,), float(0),device=valid_cls.device)
-                        # classwise_metrics['rcnn_cls_uc_mean'][cind] =  torch.stack([F.cosine_similarity(self.rcnn_cls_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_cls[cc_uc_mask]],dim=1).mean() if valid_cls[cc_uc_mask].shape[0] != 0 else torch.full((1,), float(0),device=valid_cls.device)
+                    #     classwise_metrics['rcnn_cls_fg_mean'][cind] = torch.stack([F.cosine_similarity(self.rcnn_cls_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_cls[cc_fg_mask]],dim=1).mean() if valid_cls[cc_fg_mask].shape[0] != 0 else torch.full((1,), float(0),device=valid_cls.device)                                                                      
+                    #     classwise_metrics['rcnn_cls_bg_mean'][cind] = torch.stack([F.cosine_similarity(self.rcnn_cls_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_cls[cls_bg_mask]],dim=1).mean() if valid_cls[cls_bg_mask].shape[0] != 0 else torch.full((1,), float(0),device=valid_cls.device)
+                    #     classwise_metrics['rcnn_cls_uc_mean'][cind] =  torch.stack([F.cosine_similarity(self.rcnn_cls_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_cls[cc_uc_mask]],dim=1).mean() if valid_cls[cc_uc_mask].shape[0] != 0 else torch.full((1,), float(0),device=valid_cls.device)
 
-                        # classwise_metrics['rcnn_sh_fg_mean_Car'][cind] = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[0],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_fg_mask]],dim=1).mean() if valid_sh[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_sh.device)
-                        # classwise_metrics['rcnn_sh_fg_mean_Ped'][cind] = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[1],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_fg_mask]],dim=1).mean() if valid_sh[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_sh.device)                                               
-                        # classwise_metrics['rcnn_sh_fg_mean_Cyc'][cind] = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[2],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_fg_mask]],dim=1).mean() if valid_sh[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_sh.device)
+                    #     classwise_metrics['rcnn_sh_fg_mean_Car'][cind] = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[0],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_fg_mask]],dim=1).mean() if valid_sh[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_sh.device)
+                    #     classwise_metrics['rcnn_sh_fg_mean_Ped'][cind] = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[1],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_fg_mask]],dim=1).mean() if valid_sh[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_sh.device)                                               
+                    #     classwise_metrics['rcnn_sh_fg_mean_Cyc'][cind] = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[2],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_fg_mask]],dim=1).mean() if valid_sh[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_sh.device)
 
-                        # classwise_metrics['rcnn_sh_bg_mean_Car'][cind] = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[0],sh.unsqueeze(dim=0)) for sh in valid_sh[cls_bg_mask]],dim=1).mean() if valid_sh[cls_bg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_sh.device)
-                        # classwise_metrics['rcnn_sh_bg_mean_Ped'][cind] = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[1],sh.unsqueeze(dim=0)) for sh in valid_sh[cls_bg_mask]],dim=1).mean() if valid_sh[cls_bg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_sh.device)
-                        # classwise_metrics['rcnn_sh_bg_mean_Cyc'][cind] = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[2],sh.unsqueeze(dim=0)) for sh in valid_sh[cls_bg_mask]],dim=1).mean() if valid_sh[cls_bg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_sh.device)
+                    #     classwise_metrics['rcnn_sh_bg_mean_Car'][cind] = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[0],sh.unsqueeze(dim=0)) for sh in valid_sh[cls_bg_mask]],dim=1).mean() if valid_sh[cls_bg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_sh.device)
+                    #     classwise_metrics['rcnn_sh_bg_mean_Ped'][cind] = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[1],sh.unsqueeze(dim=0)) for sh in valid_sh[cls_bg_mask]],dim=1).mean() if valid_sh[cls_bg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_sh.device)
+                    #     classwise_metrics['rcnn_sh_bg_mean_Cyc'][cind] = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[2],sh.unsqueeze(dim=0)) for sh in valid_sh[cls_bg_mask]],dim=1).mean() if valid_sh[cls_bg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_sh.device)
 
-                        # classwise_metrics['rcnn_sh_uc_mean_Car'][cind] = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[0],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_uc_mask]],dim=1).mean() if valid_sh[cc_uc_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_sh.device)
-                        # classwise_metrics['rcnn_sh_uc_mean_Ped'][cind] = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[1],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_uc_mask]],dim=1).mean() if valid_sh[cc_uc_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_sh.device)
-                        # classwise_metrics['rcnn_sh_uc_mean_Cyc'][cind] = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[2],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_uc_mask]],dim=1).mean() if valid_sh[cc_uc_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_sh.device)
+                    #     classwise_metrics['rcnn_sh_uc_mean_Car'][cind] = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[0],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_uc_mask]],dim=1).mean() if valid_sh[cc_uc_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_sh.device)
+                    #     classwise_metrics['rcnn_sh_uc_mean_Ped'][cind] = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[1],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_uc_mask]],dim=1).mean() if valid_sh[cc_uc_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_sh.device)
+                    #     classwise_metrics['rcnn_sh_uc_mean_Cyc'][cind] = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[2],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_uc_mask]],dim=1).mean() if valid_sh[cc_uc_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_sh.device)
 
-                        # classwise_metrics['rcnn_cls_fg_mean_Car'][cind] = torch.stack([F.cosine_similarity(self.rcnn_cls_mean[0],sh.unsqueeze(dim=0)) for sh in valid_cls[cc_fg_mask]],dim=1).mean() if valid_cls[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_cls.device)                                                                      
-                        # classwise_metrics['rcnn_cls_fg_mean_Ped'][cind] = torch.stack([F.cosine_similarity(self.rcnn_cls_mean[1],sh.unsqueeze(dim=0)) for sh in valid_cls[cc_fg_mask]],dim=1).mean() if valid_cls[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_cls.device)                                                                      
-                        # classwise_metrics['rcnn_cls_fg_mean_Cyc'][cind] = torch.stack([F.cosine_similarity(self.rcnn_cls_mean[2],sh.unsqueeze(dim=0)) for sh in valid_cls[cc_fg_mask]],dim=1).mean() if valid_cls[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_cls.device)                                                                      
+                    #     classwise_metrics['rcnn_cls_fg_mean_Car'][cind] = torch.stack([F.cosine_similarity(self.rcnn_cls_mean[0],sh.unsqueeze(dim=0)) for sh in valid_cls[cc_fg_mask]],dim=1).mean() if valid_cls[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_cls.device)                                                                      
+                    #     classwise_metrics['rcnn_cls_fg_mean_Ped'][cind] = torch.stack([F.cosine_similarity(self.rcnn_cls_mean[1],sh.unsqueeze(dim=0)) for sh in valid_cls[cc_fg_mask]],dim=1).mean() if valid_cls[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_cls.device)                                                                      
+                    #     classwise_metrics['rcnn_cls_fg_mean_Cyc'][cind] = torch.stack([F.cosine_similarity(self.rcnn_cls_mean[2],sh.unsqueeze(dim=0)) for sh in valid_cls[cc_fg_mask]],dim=1).mean() if valid_cls[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_cls.device)                                                                      
 
-                        # classwise_metrics['rcnn_cls_bg_mean_Car'][cind] = torch.stack([F.cosine_similarity(self.rcnn_cls_mean[0],sh.unsqueeze(dim=0)) for sh in valid_cls[cls_bg_mask]],dim=1).mean() if valid_cls[cls_bg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_cls.device)
-                        # classwise_metrics['rcnn_cls_bg_mean_Ped'][cind] = torch.stack([F.cosine_similarity(self.rcnn_cls_mean[1],sh.unsqueeze(dim=0)) for sh in valid_cls[cls_bg_mask]],dim=1).mean() if valid_cls[cls_bg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_cls.device)
-                        # classwise_metrics['rcnn_cls_bg_mean_Cyc'][cind] = torch.stack([F.cosine_similarity(self.rcnn_cls_mean[2],sh.unsqueeze(dim=0)) for sh in valid_cls[cls_bg_mask]],dim=1).mean() if valid_cls[cls_bg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_cls.device)
+                    #     classwise_metrics['rcnn_cls_bg_mean_Car'][cind] = torch.stack([F.cosine_similarity(self.rcnn_cls_mean[0],sh.unsqueeze(dim=0)) for sh in valid_cls[cls_bg_mask]],dim=1).mean() if valid_cls[cls_bg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_cls.device)
+                    #     classwise_metrics['rcnn_cls_bg_mean_Ped'][cind] = torch.stack([F.cosine_similarity(self.rcnn_cls_mean[1],sh.unsqueeze(dim=0)) for sh in valid_cls[cls_bg_mask]],dim=1).mean() if valid_cls[cls_bg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_cls.device)
+                    #     classwise_metrics['rcnn_cls_bg_mean_Cyc'][cind] = torch.stack([F.cosine_similarity(self.rcnn_cls_mean[2],sh.unsqueeze(dim=0)) for sh in valid_cls[cls_bg_mask]],dim=1).mean() if valid_cls[cls_bg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_cls.device)
 
-                        # classwise_metrics['rcnn_cls_uc_mean_Car'][cind] =  torch.stack([F.cosine_similarity(self.rcnn_cls_mean[0],sh.unsqueeze(dim=0)) for sh in valid_cls[cc_uc_mask]],dim=1).mean() if valid_cls[cc_uc_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_cls.device)
-                        # classwise_metrics['rcnn_cls_uc_mean_Ped'][cind] =  torch.stack([F.cosine_similarity(self.rcnn_cls_mean[1],sh.unsqueeze(dim=0)) for sh in valid_cls[cc_uc_mask]],dim=1).mean() if valid_cls[cc_uc_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_cls.device)
-                        # classwise_metrics['rcnn_cls_uc_mean_Cyc'][cind] =  torch.stack([F.cosine_similarity(self.rcnn_cls_mean[2],sh.unsqueeze(dim=0)) for sh in valid_cls[cc_uc_mask]],dim=1).mean() if valid_cls[cc_uc_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_cls.device)
+                    #     classwise_metrics['rcnn_cls_uc_mean_Car'][cind] =  torch.stack([F.cosine_similarity(self.rcnn_cls_mean[0],sh.unsqueeze(dim=0)) for sh in valid_cls[cc_uc_mask]],dim=1).mean() if valid_cls[cc_uc_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_cls.device)
+                    #     classwise_metrics['rcnn_cls_uc_mean_Ped'][cind] =  torch.stack([F.cosine_similarity(self.rcnn_cls_mean[1],sh.unsqueeze(dim=0)) for sh in valid_cls[cc_uc_mask]],dim=1).mean() if valid_cls[cc_uc_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_cls.device)
+                    #     classwise_metrics['rcnn_cls_uc_mean_Cyc'][cind] =  torch.stack([F.cosine_similarity(self.rcnn_cls_mean[2],sh.unsqueeze(dim=0)) for sh in valid_cls[cc_uc_mask]],dim=1).mean() if valid_cls[cc_uc_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=valid_cls.device)
 
                         
                     if valid_target_scores is not None:
@@ -304,16 +302,16 @@ class PredQualityMetrics(Metric):
                 # Note that unsqueeze is necessary because torchmetric performs the dist cat on dim 0.
                 getattr(self, key).append(val.unsqueeze(dim=0))
 
-            for key in self.vals_to_store:
-                self.val_dict[key].append(classwise_metrics[key])
+            # for key in self.vals_to_store:
+            #     self.val_dict[key].append(classwise_metrics[key])
 
         # If no prediction is given all states are filled with nan tensors
         if len(preds) == 0:
             for metric_name in self.metrics_name:
                 getattr(self, metric_name).append(sample_tensor.new_zeros(num_classes + 1).fill_(float('nan')))
-        output_dir = os.path.abspath(os.getcwd())
-        file_path = os.path.join(output_dir, 'sim_scores.pkl')
-        pickle.dump(self.val_dict, open(file_path, 'wb'))
+        # output_dir = os.path.abspath(os.getcwd())
+        # file_path = os.path.join(output_dir, 'sim_scores.pkl')
+        # pickle.dump(self.val_dict, open(file_path, 'wb'))
 
     def compute(self):
         final_results = {}
