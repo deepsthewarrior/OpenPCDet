@@ -46,9 +46,8 @@ class PredQualityMetrics(Metric):
         
         self.min_overlaps = np.array([0.7, 0.5, 0.5, 0.7, 0.5, 0.7])
         self.class_agnostic_fg_thresh = 0.7
-        self.rcnn_cls_mean = []
-        self.rcnn_reg_mean = []
-        self.rcnn_sh_mean = []
+
+        rcnn_sh_mean = []
 
         for metric_name in self.metrics_name:
             self.add_state(metric_name, default=[], dist_reduce_fx='cat')
@@ -56,12 +55,12 @@ class PredQualityMetrics(Metric):
             self.rcnn_features = pickle.loads(f.read())
 
         Cls = ['Car','Ped','Cyc']
-        rcnn_cls_mean = []
+        rcnn_sh_mean = []
         for cls in Cls:
             avg = "mean"
-            param = "cls"
-            rcnn_cls_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0))
-        self.rcnn_cls_mean = torch.stack(rcnn_cls_mean)
+            param = "sh"
+            rcnn_sh_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0))
+        self.rcnn_sh_mean = torch.stack(rcnn_sh_mean)
 
     def update(self, preds: [torch.Tensor], ground_truths: [torch.Tensor], pred_scores: [torch.Tensor],
                rois=None, roi_scores=None, targets=None, target_scores=None, pred_weights=None,
@@ -80,7 +79,7 @@ class PredQualityMetrics(Metric):
         ground_truths = [gt_box.clone().detach() for gt_box in ground_truths]
         pseudo_labels = [pl_box.clone().detach() for pl_box in pseudo_labels] if pseudo_labels is not None else None
         pred_weights = [pred_weight.clone().detach() for pred_weight in pred_weights] if pred_weights is not None else None
-        self.rcnn_cls_mean = self.rcnn_cls_mean.to(preds[0].device)
+        self.rcnn_sh_mean = self.rcnn_sh_mean.to(preds[0].device)
         sample_tensor = preds[0] if len(preds) else ground_truths[0]
         num_classes = len(self.dataset.class_names)
         for i in range(len(preds)):
