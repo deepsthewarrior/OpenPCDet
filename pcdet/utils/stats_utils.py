@@ -51,7 +51,7 @@ class PredQualityMetrics(Metric):
 
         for metric_name in self.metrics_name:
             self.add_state(metric_name, default=[], dist_reduce_fx='cat')
-        with open('ema_16900.9.pkl','rb') as f:
+        with open('ema_sh4468_0.9.pkl','rb') as f:
             self.rcnn_features = pickle.loads(f.read())
 
         Cls = ['Car','Ped','Cyc']
