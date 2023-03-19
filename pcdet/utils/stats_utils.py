@@ -278,7 +278,9 @@ class PredQualityMetrics(Metric):
 
             if valid_sh is not None:
                 self.val_dict['ens'].append(self.store_dict)
-
+                
+                with open('recorded_cos.pkl','wb') as f:
+                    pickle.dump(self.val_dict,f)
         # If no prediction is given all states are filled with nan tensors
         if len(preds) == 0:
             for metric_name in self.metrics_name:
