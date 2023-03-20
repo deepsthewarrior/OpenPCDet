@@ -187,7 +187,7 @@ class PVRCNNHead(RoIHeadTemplate):
         if (self.training or self.print_loss_when_eval) and not disable_gt_roi_when_pseudo_labeling:
             labels = batch_dict['roi_labels'].view(shared_features.shape[0],-1).squeeze(1) - 1
             cos_scores = []
-            temp = self.rcnn_sh_mean.squeeze(1).unsqueeze(-1)
+            temp = self.rcnn_sh_mean.squeeze(1).unsqueeze(-1).to(shared_features.device)
             for i,sh in enumerate(shared_features):
                 cos_scores.append(F.cosine_similarity(temp[labels[i]].transpose(1,0),sh.transpose(1,0)))   
         # cos_sh_fg = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_fg_mask]],dim=1) if valid_sh[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=preds[0].device)                                               
