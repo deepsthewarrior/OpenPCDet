@@ -581,7 +581,7 @@ class RoIHeadTemplate(nn.Module):
 
                 self.forward_ret_dict['rcnn_cls_labels'][unlabeled_inds] = gt_iou_of_rois
                 self.forward_ret_dict['interval_mask'][unlabeled_inds] = ulb_interval_mask
-
+                
             self.forward_ret_dict['rcnn_cls_weights'] = torch.ones_like(self.forward_ret_dict['rcnn_cls_labels'])
             if self.model_cfg.TARGET_CONFIG.DISABLE_ST_WEIGHTS :
                 return
@@ -610,6 +610,13 @@ class RoIHeadTemplate(nn.Module):
                     ulb_fg_mask = self.forward_ret_dict['rcnn_cls_labels'][unlabeled_inds] == 1
                     unlabeled_rcnn_cls_weights[ulb_fg_mask] = self.forward_ret_dict['rcnn_cls_score_teacher'][unlabeled_inds][ulb_fg_mask]
                     unlabeled_rcnn_cls_weights[~ulb_fg_mask] = rcnn_bg_score_teacher[unlabeled_inds][~ulb_fg_mask]
+                elif self.model_cfg['LOSS_CONFIG']['UL_RCNN_CLS_WEIGHT_TYPE'] == 'cos-uc':
+                    unlabeled_rcnn_cls_weights = torch.zeros_like(self.forward_ret_dict['rcnn_cls_labels'][unlabeled_inds])
+                    ulb_interval_mask = self.forward_ret_dict['interval_mask'][unlabeled_inds]
+                    ulb_fg_mask = self.forward_ret_dict['rcnn_cls_labels'][unlabeled_inds] == 1
+                    unlabeled_rcnn_cls_weights[ulb_interval_mask] = self.forward_ret_dict['cos_scores'][unlabeled_inds][ulb_interval_mask]
+                    unlabeled_rcnn_cls_weights[ulb_fg_mask] = 1
+                
                 else:
                     raise ValueError
 

@@ -1,5 +1,7 @@
 import torch.nn as nn
-
+import torch
+import pickle
+import torch.nn.functional as F
 from ...ops.pointnet2.pointnet2_stack import pointnet2_modules as pointnet2_stack_modules
 from ...utils import common_utils
 from .roi_head_template import RoIHeadTemplate
@@ -41,6 +43,16 @@ class PVRCNNHead(RoIHeadTemplate):
             output_channels=self.box_coder.code_size * self.num_class,
             fc_list=self.model_cfg.REG_FC
         )
+        with open('ema_sh4468_0.9.pkl','rb') as f:
+            self.rcnn_features = pickle.loads(f.read())
+        Cls = ['Car','Ped','Cyc']
+        rcnn_sh_mean = []
+        for cls in Cls:
+            avg = "mean"
+            param = "sh"
+            rcnn_sh_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0))
+
+        self.rcnn_sh_mean = torch.stack(rcnn_sh_mean)
         self.init_weights(weight_init='xavier')
 
         self.print_loss_when_eval = False
@@ -172,6 +184,20 @@ class PVRCNNHead(RoIHeadTemplate):
         shared_features = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
         rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
         rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)
+        if (self.training or self.print_loss_when_eval) and not disable_gt_roi_when_pseudo_labeling:
+            labels = batch_dict['roi_labels'].view(shared_features.shape[0],-1).squeeze(1) - 1
+            cos_scores = []
+            temp = self.rcnn_sh_mean.squeeze(1).unsqueeze(-1)
+            for i,sh in enumerate(shared_features):
+                cos_scores.append(F.cosine_similarity(temp[labels[i]].transpose(1,0),sh.transpose(1,0)))   
+        # cos_sh_fg = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_fg_mask]],dim=1) if valid_sh[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=preds[0].device)                                               
+        # classwise_metrics['rcnn_sh_fg_mean'][cind] = cos_sh_fg.mean()
+        # # cos_sh_ = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_fg_mask]],dim=1) if valid_sh[cc_fg_mask].shape[0] != 0 else 'nan'                                                 
+        # cos_sh_bg = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_sh[cls_bg_mask]],dim=1) if valid_sh[cls_bg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=preds[0].device)
+        # classwise_metrics['rcnn_sh_bg_mean'][cind] = cos_sh_bg.mean()
+        # cos_sh_uc =  torch.stack([F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_uc_mask]],dim=1) if valid_sh[cc_uc_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=preds[0].device)
+        # classwise_metrics['rcnn_sh_uc_mean'][cind] = cos_sh_uc.mean()
+        
         if not self.training or self.predict_boxes_when_training:
             batch_cls_preds, batch_box_preds = self.generate_predicted_boxes(
                 batch_size=batch_dict['batch_size'], rois=batch_dict['rois'], cls_preds=rcnn_cls, box_preds=rcnn_reg
@@ -186,7 +212,8 @@ class PVRCNNHead(RoIHeadTemplate):
             targets_dict['rcnn_cls'] = rcnn_cls
             targets_dict['rcnn_reg'] = rcnn_reg
             targets_dict['shared_features'] = shared_features.view(batch_dict['roi_labels'].shape[0],-1,shared_features.shape[1])
-
+            if (self.training or self.print_loss_when_eval) and not disable_gt_roi_when_pseudo_labeling:
+                targets_dict['cos_scores'] = torch.Tensor([cos_scores]).to(rcnn_cls.device).view(batch_dict['roi_labels'].shape[0],-1,1).squeeze(-1)
             self.forward_ret_dict = targets_dict
 
         return batch_dict
