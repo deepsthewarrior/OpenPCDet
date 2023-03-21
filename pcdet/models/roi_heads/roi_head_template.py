@@ -309,7 +309,7 @@ class RoIHeadTemplate(nn.Module):
                              'ground_truths': sample_gts, 'targets': sample_targets,
                              'pseudo_labels': sample_pls, 'pseudo_label_scores': sample_pl_scores,
                              'target_scores': sample_target_scores, 'pred_weights': sample_pred_weights,
-                             'pred_iou_wrt_pl': sample_gt_iou_of_rois,'shared_features':shared_features}
+                             'pred_iou_wrt_pl': sample_gt_iou_of_rois,'shared_features':shared_features,'ckpt_save_dir':self.forward_ret_dict['ckpt_save_dir']}
             metrics.update(**metric_inputs)
 
     def assign_targets(self, batch_dict):

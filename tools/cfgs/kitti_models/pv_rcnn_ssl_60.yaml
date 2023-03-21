@@ -170,6 +170,7 @@ MODEL:
         CLS_FC: [256, 256]
         REG_FC: [256, 256]
         DP_RATIO: 0.3
+        STORE_SCORES_IN_PKL: False
 
         NMS_CONFIG:
             TRAIN:
@@ -216,6 +217,7 @@ MODEL:
             UNLABELED_TEACHER_SCORES_FOR_RVM: False
             USE_ULB_CLS_FG_THRESH_FOR_LB: False
             DISABLE_ST_WEIGHTS: False
+            
 
         LOSS_CONFIG:
             UL_RCNN_CLS_WEIGHT_TYPE: 'interval-only' # two options: `all` or `interval-only`
