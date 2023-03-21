@@ -122,8 +122,7 @@ class PredQualityMetrics(Metric):
             classwise_metrics = {}
             for metric_name in self.metrics_name:
                 classwise_metrics[metric_name] = sample_tensor.new_zeros(num_classes + 1).fill_(float('nan'))
-            if self.config.ROI_HEAD.STORE_SCORES_IN_PKL:
-                self.store_dict={val: [] for val in self.vals_to_store}
+                
             for cind in range(num_classes):
                 pred_cls_mask = pred_labels == cind
                 gt_cls_mask = valid_gt_boxes[:, -1] == cind
@@ -287,7 +286,8 @@ class PredQualityMetrics(Metric):
             output_dir = os.path.split(os.path.abspath(ckpt_save_dir))[0]
             file_path = os.path.join(output_dir, 'cos_scores.pkl')
             pickle.dump(self.val_dict, open(file_path, 'wb'))
-
+            self.store_dict={val: [] for val in self.vals_to_store}
+            
     def compute(self):
         final_results = {}
         if len(self.pred_ious) >= self.reset_state_interval:
