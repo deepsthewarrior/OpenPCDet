@@ -78,7 +78,7 @@ class PredQualityMetrics(Metric):
         assert all([pred.shape[-1] == 8 for pred in preds]) and all([gt.shape[-1] == 8 for gt in ground_truths])
         if roi_scores is not None:
             assert len(pred_scores) == len(roi_scores)
-
+        
         roi_scores = [score.clone().detach() for score in roi_scores] if roi_scores is not None else None
         preds = [pred_box.clone().detach() for pred_box in preds]
         pred_scores = [ps_score.clone().detach() for ps_score in pred_scores]
@@ -115,16 +115,15 @@ class PredQualityMetrics(Metric):
 
             # Adding predicted scores as the last column
             valid_pred_boxes = torch.cat([valid_pred_boxes, valid_pred_scores.unsqueeze(dim=-1)], dim=-1)
-
             pred_labels = valid_pred_boxes[:, -2]
-
             num_gts = valid_gts_mask.sum()
             num_preds = valid_preds_mask.sum()
 
             classwise_metrics = {}
             for metric_name in self.metrics_name:
                 classwise_metrics[metric_name] = sample_tensor.new_zeros(num_classes + 1).fill_(float('nan'))
-
+            if self.config.ROI_HEAD.STORE_SCORES_IN_PKL:
+                self.store_dict={val: [] for val in self.vals_to_store}
             for cind in range(num_classes):
                 pred_cls_mask = pred_labels == cind
                 gt_cls_mask = valid_gt_boxes[:, -1] == cind
@@ -201,9 +200,9 @@ class PredQualityMetrics(Metric):
                             self.store_dict['rcnn_sh_bg_mean'].append(cos_sh_bg)
                             cos_sh_uc =  torch.stack([F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_uc_mask]],dim=1) if valid_sh[cc_uc_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=preds[0].device)
                             self.store_dict['rcnn_sh_uc_mean'].append(cos_sh_uc)
-                            self.store_dict['rcnn_sh_template_fg'].append(torch.stack([F.cosine_similarity(self.rcnn_sh_mean_template,sh.unsqueeze(dim=0)) for sh in valid_sh[cc_fg_mask]],dim=1) if valid_sh[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=preds[0].device))
-                            self.store_dict['rcnn_sh_template_bg'].append(torch.stack([F.cosine_similarity(self.rcnn_sh_mean_template,sh.unsqueeze(dim=0)) for sh in valid_sh[cls_bg_mask]],dim=1) if valid_sh[cls_bg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=preds[0].device))
-                            self.store_dict['rcnn_sh_template_uc'].append(torch.stack([F.cosine_similarity(self.rcnn_sh_mean_template,sh.unsqueeze(dim=0)) for sh in valid_sh[cc_uc_mask]],dim=1) if valid_sh[cc_uc_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=preds[0].device))
+                            # self.store_dict['rcnn_sh_template_fg'].append(torch.stack([F.cosine_similarity(self.rcnn_sh_mean_template,sh.unsqueeze(dim=0)) for sh in valid_sh[cc_fg_mask]],dim=1) if valid_sh[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=preds[0].device))
+                            # self.store_dict['rcnn_sh_template_bg'].append(torch.stack([F.cosine_similarity(self.rcnn_sh_mean_template,sh.unsqueeze(dim=0)) for sh in valid_sh[cls_bg_mask]],dim=1) if valid_sh[cls_bg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=preds[0].device))
+                            # self.store_dict['rcnn_sh_template_uc'].append(torch.stack([F.cosine_similarity(self.rcnn_sh_mean_template,sh.unsqueeze(dim=0)) for sh in valid_sh[cc_uc_mask]],dim=1) if valid_sh[cc_uc_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=preds[0].device))
 
                             self.store_dict['rcnn_sh_fg_mean_Car'].append(torch.stack([F.cosine_similarity(self.rcnn_sh_mean[0],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_fg_mask]],dim=1) if valid_sh[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=preds[0].device))
                             self.store_dict['rcnn_sh_fg_mean_Ped'].append(torch.stack([F.cosine_similarity(self.rcnn_sh_mean[1],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_fg_mask]],dim=1) if valid_sh[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=preds[0].device))
