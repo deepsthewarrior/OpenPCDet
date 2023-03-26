@@ -30,10 +30,14 @@ class AnchorHeadTemplate(nn.Module):
         )
         self.anchors = [x.cuda() for x in anchors]
         self.target_assigner = self.get_target_assigner(anchor_target_cfg)
-
+        self.label_hist = (1/self.num_class) + 1e-6
+        self.hist_bar = (1/self.num_class) + 1e-6
         self.forward_ret_dict = {}
         self.build_losses(self.model_cfg.LOSS_CONFIG)
-
+        self.global_thresh = (1/self.num_class) + 1e-6
+        self.local_thresh = torch.full((1,3),(1/self.num_class) + 1e-6).squeeze(0) 
+        self.gt_lamba = 0.9
+        self.lamda = 0.9
     @staticmethod
     def generate_anchors(anchor_generator_cfg, grid_size, point_cloud_range, anchor_ndim=7):
         anchor_generator = AnchorGenerator(
@@ -97,7 +101,61 @@ class AnchorHeadTemplate(nn.Module):
             self.anchors, gt_boxes
         )
         return targets_dict
+    
+    def replace_inf_to_zero(self,val):
+        val[val == float('inf')] = 0.0
+        return val
+    
+    def get_ulb_layer_loss(self,scalar=True):
+        loss_weight =  self.model_cfg.LOSS_CONFIG.LOSS_WEIGHTS['ulb_dist_weight']
+        unlabeled_inds = self.forward_ret_dict['unlabeled_inds']
+        unlabeled_mask = torch.zeros(self.forward_ret_dict['batch_cls_all'].shape[0],dtype=torch.bool)
+        unlabeled_mask[unlabeled_inds] = True
+        box_cls_preds = self.forward_ret_dict['batch_cls_all'][unlabeled_inds].sigmoid()
+        max_prob,labels = box_cls_preds.max(dim=-1)
+        self.local_thresh = self.local_thresh.to(max_prob.device)  
 
+        
+        #global threshold
+        mean_max_prob = max_prob.view(-1).mean()
+        self.global_thresh = (self.gt_lamba*self.global_thresh) + ((1-self.gt_lamba)*mean_max_prob)
+
+        #local_threshold_norm
+        prob_model = box_cls_preds.view(-1,self.num_class).mean(dim=0)
+        self.local_thresh = (self.gt_lamba*self.local_thresh) + ((1-self.gt_lamba)*prob_model)
+        self.max_norm = self.local_thresh/self.local_thresh.max(dim=-1)[0]
+
+        #adaptive_threshold is self.global_thresh*self.max_norm[labels]
+        p_bar_mask = max_prob.ge(self.global_thresh*self.max_norm[labels])
+        p_bar = box_cls_preds[p_bar_mask]
+        p_bar_labels = labels[p_bar_mask]
+
+        #histogram of thresholded preds
+        self.hist_bar =  torch.bincount(p_bar_labels.view(-1),minlength=self.max_norm.shape[0]).to(labels.device)
+        self.hist_bar = self.hist_bar/self.hist_bar.sum()
+
+        #histogram_all_preds
+        hist = torch.bincount(labels.view(-1),minlength=self.max_norm.shape[0]).to(labels.device)
+        self.label_hist = self.label_hist * self.lamda + (1 - self.lamda) * (hist / hist.sum())
+        #sum_norm
+        sum_norm_bar = self.replace_inf_to_zero(p_bar.mean(dim=0)/self.hist_bar)
+        self.sum_norm_bar = sum_norm_bar/ sum_norm_bar.sum()
+
+        sum_norm_tld = self.replace_inf_to_zero(self.local_thresh/self.label_hist)
+        self.sum_norm_tld = sum_norm_tld / sum_norm_tld.sum()
+        self.sum_norm_bar = torch.nan_to_num(self.sum_norm_bar,nan=0.0)
+        self.sum_norm_tld = torch.nan_to_num(self.sum_norm_tld,nan=0.0)
+        clswise_dist = self.sum_norm_tld * torch.log(self.sum_norm_bar + 1e-12)
+        ulb_dist_loss = (loss_weight*clswise_dist).sum()
+        ulb_dist_loss = torch.clamp(ulb_dist_loss,min=0.0,max=2.50)
+        
+        tb_dict = {
+            'ulb_cls_dist_loss_rpn': ulb_dist_loss.unsqueeze(0).repeat(self.forward_ret_dict['cls_preds'].shape[0], 1),
+            'rpn_freem_cls':{'Car':clswise_dist[0].item(), 'Pedestrian':clswise_dist[1].item(), 'Cyclist': clswise_dist[2].item() }
+        }
+   
+        return ulb_dist_loss,tb_dict
+    
     def get_cls_layer_loss(self, scalar=True):
         cls_preds = self.forward_ret_dict['cls_preds']
         box_cls_labels = self.forward_ret_dict['box_cls_labels']
@@ -232,10 +290,15 @@ class AnchorHeadTemplate(nn.Module):
         return box_loss, tb_dict
 
     def get_loss(self, scalar=True):
+        ulb_dist_loss = 0.000
+        if self.model_cfg.ENABLE_ULB_DIST_LOSS:
+            ulb_dist_loss,tb_dict_ulb = self.get_ulb_layer_loss(scalar=scalar)
+
         cls_loss, tb_dict = self.get_cls_layer_loss(scalar=scalar)
         box_loss, tb_dict_box = self.get_box_reg_layer_loss(scalar=scalar)
         tb_dict.update(tb_dict_box)
-        rpn_loss = cls_loss + box_loss
+        tb_dict.update(tb_dict_ulb)
+        rpn_loss = cls_loss + box_loss + ulb_dist_loss
 
         if scalar:
             tb_dict['rpn_loss'] = rpn_loss.item()

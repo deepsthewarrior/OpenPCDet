@@ -1,6 +1,6 @@
 import numpy as np
 import torch.nn as nn
-
+import torch
 from .anchor_head_template import AnchorHeadTemplate
 
 
@@ -51,7 +51,10 @@ class AnchorHeadSingle(AnchorHeadTemplate):
 
         self.forward_ret_dict['cls_preds'] = cls_preds
         self.forward_ret_dict['box_preds'] = box_preds
-
+        anchors = torch.cat(self.anchors, dim=-3)
+        num_anchors = anchors.view(-1, anchors.shape[-1]).shape[0]
+        self.forward_ret_dict['batch_cls_all']=cls_preds.view(data_dict['batch_size'], num_anchors, -1).float()
+        
         if self.conv_dir_cls is not None:
             dir_cls_preds = self.conv_dir_cls(spatial_features_2d)
             dir_cls_preds = dir_cls_preds.permute(0, 2, 3, 1).contiguous()
@@ -64,7 +67,8 @@ class AnchorHeadSingle(AnchorHeadTemplate):
                 gt_boxes=data_dict['gt_boxes']
             )
             self.forward_ret_dict.update(targets_dict)
-
+            self.forward_ret_dict['unlabeled_inds'] = data_dict['unlabeled_inds']
+            
         if not self.training or self.predict_boxes_when_training:
             batch_cls_preds, batch_box_preds = self.generate_predicted_boxes(
                 batch_size=data_dict['batch_size'],
@@ -73,5 +77,5 @@ class AnchorHeadSingle(AnchorHeadTemplate):
             data_dict['batch_cls_preds'] = batch_cls_preds
             data_dict['batch_box_preds'] = batch_box_preds
             data_dict['cls_preds_normalized'] = False
-
+            
         return data_dict

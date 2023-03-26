@@ -52,7 +52,7 @@ class PVRCNN_SSL(Detector3DTemplate):
                     batch_dict_ema[k[:-4]] = batch_dict[k]
                 else:
                     batch_dict_ema[k] = batch_dict[k]
-
+            batch_dict['unlabeled_inds'] = unlabeled_inds
             with torch.no_grad():
                 # self.pv_rcnn_ema.eval()  # Important! must be in train mode
                 for cur_module in self.pv_rcnn_ema.module_list:

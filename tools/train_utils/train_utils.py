@@ -6,7 +6,23 @@ import tqdm
 import time
 from torch.nn.utils import clip_grad_norm_
 from pcdet.utils import common_utils, commu_utils
+import matplotlib.pyplot as plt
 
+def log_tb_dict(tb_log, tb_dict, accumulated_iter):
+    for key, val in tb_dict.items():
+        if val is None or (isinstance(val, torch.Tensor) and torch.isnan(val)):
+            continue
+        # print(key, val)
+        subkeys = key.split("/")
+        cat, key = (subkeys[0] + "/", subkeys[1]) if len(subkeys) > 1 else ('train/', key)
+        if key in ['bs']:
+            cat = 'meta_data/'
+        if isinstance(val, dict):
+            tb_log.add_scalars(cat + key, val, accumulated_iter)
+        elif isinstance(val, plt.Figure):
+            tb_log.add_figure(cat + key, val, accumulated_iter)
+        else:
+            tb_log.add_scalar(cat + key, val, accumulated_iter)
 
 def train_one_epoch(model, optimizer, train_loader, model_func, lr_scheduler, accumulated_iter, optim_cfg,
                     rank, tbar, total_it_each_epoch, dataloader_iter, tb_log=None, leave_pbar=False):
@@ -79,9 +95,8 @@ def train_one_epoch(model, optimizer, train_loader, model_func, lr_scheduler, ac
             if tb_log is not None:
                 tb_log.add_scalar('train/loss', loss, accumulated_iter)
                 tb_log.add_scalar('meta_data/learning_rate', cur_lr, accumulated_iter)
-                for key, val in tb_dict.items():
-                    # print(key, val)
-                    tb_log.add_scalar('train/' + key, val, accumulated_iter)
+                log_tb_dict(tb_log, tb_dict, accumulated_iter)
+              
     if rank == 0:
         pbar.close()
     return accumulated_iter

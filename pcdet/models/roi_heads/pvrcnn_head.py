@@ -174,7 +174,7 @@ class PVRCNNHead(RoIHeadTemplate):
         if self.training or self.print_loss_when_eval:
             targets_dict['rcnn_cls'] = rcnn_cls
             targets_dict['rcnn_reg'] = rcnn_reg
-
+            
             self.forward_ret_dict = targets_dict
 
         return batch_dict
