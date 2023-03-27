@@ -35,9 +35,10 @@ class AnchorHeadTemplate(nn.Module):
         self.forward_ret_dict = {}
         self.build_losses(self.model_cfg.LOSS_CONFIG)
         self.global_thresh = (1/self.num_class) + 1e-6
-        self.local_thresh = torch.full((1,3),(1/self.num_class) + 1e-6).squeeze(0) 
+        self.local_thresh = torch.full((1,3),(1/self.num_class) + 1e-6).squeeze(0).cuda()
         self.gt_lamba = 0.9
         self.lamda = 0.9
+
     @staticmethod
     def generate_anchors(anchor_generator_cfg, grid_size, point_cloud_range, anchor_ndim=7):
         anchor_generator = AnchorGenerator(
@@ -113,7 +114,7 @@ class AnchorHeadTemplate(nn.Module):
         unlabeled_mask[unlabeled_inds] = True
         box_cls_preds = self.forward_ret_dict['batch_cls_all'][unlabeled_inds].sigmoid()
         max_prob,labels = box_cls_preds.max(dim=-1)
-        self.local_thresh = self.local_thresh.to(max_prob.device)  
+         
 
         
         #global threshold
@@ -290,15 +291,16 @@ class AnchorHeadTemplate(nn.Module):
         return box_loss, tb_dict
 
     def get_loss(self, scalar=True):
-        ulb_dist_loss = 0.000
-        if self.model_cfg.ENABLE_ULB_DIST_LOSS:
-            ulb_dist_loss,tb_dict_ulb = self.get_ulb_layer_loss(scalar=scalar)
-
         cls_loss, tb_dict = self.get_cls_layer_loss(scalar=scalar)
         box_loss, tb_dict_box = self.get_box_reg_layer_loss(scalar=scalar)
         tb_dict.update(tb_dict_box)
-        tb_dict.update(tb_dict_ulb)
-        rpn_loss = cls_loss + box_loss + ulb_dist_loss
+        
+        if self.model_cfg.ENABLE_ULB_DIST_LOSS:
+            ulb_dist_loss,tb_dict_ulb = self.get_ulb_layer_loss(scalar=scalar)
+            tb_dict.update(tb_dict_ulb)
+            rpn_loss = cls_loss + box_loss + ulb_dist_loss
+        else:
+            rpn_loss = cls_loss + box_loss 
 
         if scalar:
             tb_dict['rpn_loss'] = rpn_loss.item()
