@@ -191,7 +191,7 @@ class PVRCNN_SSL(Detector3DTemplate):
                     try:
                         batch_dict= cur_module(batch_dict, disable_gt_roi_when_pseudo_labeling=True)
                     except:
-                        batch_dict_gap = cur_module(batch_dict)
+                        batch_dict = cur_module(batch_dict)
             pred_dicts_gap, recall_dicts = self.pv_rcnn_ema.post_processing(batch_dict, no_recall_dict=True,
                                                                                 override_thresh=0.0,
                                                                             no_nms_for_unlabeled=self.no_nms)
