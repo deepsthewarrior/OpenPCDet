@@ -150,6 +150,17 @@ class PVRCNN_SSL(Detector3DTemplate):
         self.metric_registry = MetricRegistry(dataset=self.dataset, model_cfg=model_cfg)
         vals_to_store = ['iou_roi_pl', 'iou_roi_gt', 'pred_scores', 'weights', 'class_labels', 'iteration']
         self.val_dict = {val: [] for val in vals_to_store}
+        self.classes = ['Car','Ped','Cyc']
+        self.ema_template= {val: [] for val in self.classes}
+        self.updated_template = {val: [] for val in self.classes}
+        with open('ema_sh4468_0.9.pkl','rb') as f:
+            self.rcnn_features = pickle.loads(f.read())
+        rcnn_sh_mean = []
+        for cls in self.classes:
+            avg = "mean"
+            param = "sh"
+            rcnn_sh_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0))
+        self.rcnn_sh_mean = torch.stack(rcnn_sh_mean)
 
     def forward(self, batch_dict):
         if self.training:
@@ -157,6 +168,7 @@ class PVRCNN_SSL(Detector3DTemplate):
             labeled_inds = torch.nonzero(labeled_mask).squeeze(1).long()
             unlabeled_inds = torch.nonzero(1-labeled_mask).squeeze(1).long()
             batch_dict['unlabeled_inds'] = unlabeled_inds
+            batch_dict['labeled_inds'] = labeled_inds
             batch_dict_ema = {}
             keys = list(batch_dict.keys())
             for k in keys:
@@ -241,7 +253,7 @@ class PVRCNN_SSL(Detector3DTemplate):
 
             # apply student's augs on teacher's pseudo-labels (filtered) only (not points)
             batch_dict = self.apply_augmentation(batch_dict, batch_dict, unlabeled_inds, key='gt_boxes')
-
+            
             # if self.model_cfg.ROI_HEAD.get('ENABLE_VIS', False):
             #     for i, uind in enumerate(unlabeled_inds):
             #         mask = batch_dict['points'][:, 0] == uind
@@ -263,6 +275,8 @@ class PVRCNN_SSL(Detector3DTemplate):
 
             batch_dict['metric_registry'] = self.metric_registry
             batch_dict['ori_unlabeled_boxes'] = ori_unlabeled_boxes
+            batch_dict['rcnn_template'] = self.rcnn_sh_mean
+
             for cur_module in self.pv_rcnn.module_list:
                 if cur_module.model_cfg['NAME'] == 'PVRCNNHead' and self.model_cfg['ROI_HEAD'].get('ENABLE_RCNN_CONSISTENCY', False):
                     # Pass teacher's proposal to the student.
@@ -306,7 +320,10 @@ class PVRCNN_SSL(Detector3DTemplate):
                     #             pred_scores=pred_scores, pred_labels=pred_labels)
 
                 batch_dict = cur_module(batch_dict)
-
+            # pred_dicts_feat, recall_dicts_feat = self.pv_rcnn.post_processing_features(batch_dict, no_recall_dict=True,
+            #                                                                         override_thresh=0.0,
+            #                                                                         no_nms_for_unlabeled=self.no_nms)
+            self.update_feature_map(batch_dict)                
             # For metrics calculation
             self.pv_rcnn.roi_head.forward_ret_dict['unlabeled_inds'] = unlabeled_inds
             self.pv_rcnn.roi_head.forward_ret_dict['pl_boxes'] = batch_dict['gt_boxes']
@@ -509,6 +526,57 @@ class PVRCNN_SSL(Detector3DTemplate):
         metrics = {tag + key: val for key, val in results.items()}
 
         return metrics
+    def update_feature_map(self,batch_dict):
+        pred_dicts_feat, recall_dicts_feat = self.pv_rcnn.post_processing_features(batch_dict, no_recall_dict=True,
+                                                                                    override_thresh=0.0,
+                                                                                   no_nms_for_unlabeled=self.no_nms)
+        class_thresh = torch.tensor([0.8,0.8,0.8])
+        pred_thresh = torch.tensor([0.95,0.85,0.85])
+        for inds in batch_dict['labeled_inds']:
+            pred_scores = pred_dicts_feat[inds]['pred_scores_all']
+            pred_labels = pred_dicts_feat[inds]['label_preds']
+            iou = pred_dicts_feat[inds]['iou']
+            gt_assign = pred_dicts_feat[inds]['gt_assignment']
+            selected = pred_dicts_feat[inds]['selected']
+            shared_features = pred_dicts_feat[inds]['shared_features']
+            # temp['rcnn_cls_interim'] = (pred_dicts_feat[inds]['rcnn_cls_interim'])
+            # temp['rcnn_reg_interim'] = (pred_dicts_feat[inds]['rcnn_reg_interim'])
+            gt_labels = (pred_dicts_feat[inds]['gt_label'])
+
+            selected_gt = gt_assign[selected]
+            selected_gt_labels = gt_labels[selected_gt]
+            tp_cls = pred_labels[selected] == selected_gt_labels
+            conf_thresh = torch.tensor(class_thresh, device=tp_cls.device).unsqueeze(
+                        0).repeat(len(selected), 1).gather(dim=1, index=(pred_labels[selected]-1).unsqueeze(-1))
+            pred_thresh = torch.tensor(pred_thresh, device=tp_cls.device).unsqueeze(
+                        0).repeat(len(selected), 1).gather(dim=1, index=(pred_labels[selected]-1).unsqueeze(-1))
+            conf_thresh = conf_thresh.squeeze(dim=-1)
+            pred_thresh = pred_thresh.squeeze(dim=-1)
+            iou_selected = iou[selected] > conf_thresh
+            pred_selected = pred_scores[selected] > pred_thresh
+            final_sel = iou_selected & tp_cls
+            final_sel_a = final_sel & pred_selected
+            final_preds = pred_labels[selected][final_sel_a]
+            final_shared = shared_features[selected][final_sel_a]
+            car_sh = final_shared[final_preds == 1]
+            ped_sh = final_shared[final_preds == 2]
+            cyc_sh = final_shared[final_preds == 3]
+            
+            for i,feature in enumerate(car_sh):
+                self.updated_template['Car'].append(car_sh[i].clone().detach())
+            for i,feature in enumerate(ped_sh):
+                self.updated_template['Ped'].append(ped_sh[i].clone().detach())
+            for i,feature in enumerate(cyc_sh):
+                self.updated_template['Cyc'].append(cyc_sh[i].clone().detach())
+            
+
+        if batch_dict['cur_iteration'] % 20 == 0:
+            alpha = 0.9 
+            for i,cls in enumerate(self.classes): 
+                if len(self.updated_template[cls]) != 0:
+                    update_feat = torch.mean(torch.stack(self.updated_template[cls]),dim=0)
+                    self.rcnn_sh_mean[i] = (self.rcnn_sh_mean[i]*alpha) + ((1-alpha)*update_feat)
+                self.updated_template = {val: [] for val in self.classes}            
 
     def ensemble_post_processing(self, batch_dict_a, batch_dict_b, unlabeled_inds, ensemble_option=None):
         # TODO(farzad) what about roi_labels and roi_scores in following options?

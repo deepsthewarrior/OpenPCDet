@@ -156,10 +156,9 @@ class PVRCNNHead(RoIHeadTemplate):
 
         # use test-time nms for pseudo label generation
         nms_mode = self.model_cfg.NMS_CONFIG['TRAIN' if self.training and not disable_gt_roi_when_pseudo_labeling else 'TEST']
-
         # proposal_layer doesn't continue if the rois are already in the batch_dict.
         # However, for labeled data proposal layer should continue!
-        targets_dict = self.proposal_layer(batch_dict, nms_config=nms_mode)
+        targets_dict = self.proposal_layer(batch_dict, nms_config=nms_mode)        
         # should not use gt_roi for pseudo label generation
         if (self.training or self.print_loss_when_eval) and not disable_gt_roi_when_pseudo_labeling:
             targets_dict = self.assign_targets(batch_dict)
@@ -173,7 +172,7 @@ class PVRCNNHead(RoIHeadTemplate):
             #  accessible in different places, not via passing through batch_dict
             targets_dict['metric_registry'] = batch_dict['metric_registry']
             targets_dict['ckpt_save_dir'] = batch_dict['ckpt_save_dir']
-
+            targets_dict['cur_epoch'] = batch_dict['cur_epoch'] 
         # RoI aware pooling
         pooled_features = self.roi_grid_pool(batch_dict)  # (BxN, 6x6x6, C)
 
@@ -188,9 +187,13 @@ class PVRCNNHead(RoIHeadTemplate):
         if (self.training or self.print_loss_when_eval) and not disable_gt_roi_when_pseudo_labeling:
             labels = batch_dict['roi_labels'].view(shared_features.shape[0],-1).squeeze(1) - 1
             cos_scores = []
+            self.rcnn_sh_mean = batch_dict['rcnn_template']
             temp = self.rcnn_sh_mean.squeeze(1).unsqueeze(-1).to(shared_features.device)
             for i,sh in enumerate(shared_features):
-                cos_scores.append(F.cosine_similarity(temp[labels[i]].transpose(1,0),sh.transpose(1,0)))   
+                cos_scores.append(F.cosine_similarity(temp[labels[i]].transpose(1,0),sh.transpose(1,0)))
+            targets_dict['rcnn_template'] = batch_dict['rcnn_template'] #for metrics   
+            
+        #TODO: Refactor    
         # cos_sh_fg = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_fg_mask]],dim=1) if valid_sh[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=preds[0].device)                                               
         # classwise_metrics['rcnn_sh_fg_mean'][cind] = cos_sh_fg.mean()
         # # cos_sh_ = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_fg_mask]],dim=1) if valid_sh[cc_fg_mask].shape[0] != 0 else 'nan'                                                 
@@ -207,6 +210,7 @@ class PVRCNNHead(RoIHeadTemplate):
             batch_dict['batch_cls_preds'] = batch_cls_preds
             batch_dict['batch_box_preds'] = batch_box_preds
             batch_dict['cls_preds_normalized'] = False
+            batch_dict['shared_features'] = shared_features.view(batch_box_preds.shape[0],-1,shared_features.shape[1])
             # Temporarily add infos to targets_dict for metrics
             targets_dict['batch_box_preds'] = batch_box_preds            
         if self.training or self.print_loss_when_eval:
@@ -215,6 +219,12 @@ class PVRCNNHead(RoIHeadTemplate):
             targets_dict['shared_features'] = shared_features.view(batch_dict['roi_labels'].shape[0],-1,shared_features.shape[1])
             if (self.training or self.print_loss_when_eval) and not disable_gt_roi_when_pseudo_labeling:
                 targets_dict['cos_scores'] = torch.Tensor([cos_scores]).to(rcnn_cls.device).view(batch_dict['roi_labels'].shape[0],-1,1).squeeze(-1)
+            batch_dict['shared_features'] = targets_dict['shared_features']
+            batch_cls_preds_feat, batch_box_preds_feat = self.generate_predicted_boxes(
+                batch_size=batch_dict['batch_size'], rois=batch_dict['rois'], cls_preds=rcnn_cls, box_preds=rcnn_reg
+            )
+            batch_dict['batch_cls_preds_feat'] = batch_cls_preds_feat
+            batch_dict['batch_box_preds_feat'] = batch_box_preds_feat
             self.forward_ret_dict = targets_dict
-
+            
         return batch_dict

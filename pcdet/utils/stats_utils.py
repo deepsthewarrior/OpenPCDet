@@ -52,17 +52,17 @@ class PredQualityMetrics(Metric):
 
         for metric_name in self.metrics_name:
             self.add_state(metric_name, default=[], dist_reduce_fx='cat')
-        with open('ema_sh4468_0.9.pkl','rb') as f:
-            self.rcnn_features = pickle.loads(f.read())
+        # with open('ema_sh4468_0.9.pkl','rb') as f:
+        #     self.rcnn_features = pickle.loads(f.read())
 
-        Cls = ['Car','Ped','Cyc']
-        rcnn_sh_mean = []
-        for cls in Cls:
-            avg = "mean"
-            param = "sh"
-            rcnn_sh_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0))
-        self.rcnn_sh_mean = torch.stack(rcnn_sh_mean)
-        self.rcnn_sh_mean_template = (self.rcnn_sh_mean).mean(dim=0)
+        # Cls = ['Car','Ped','Cyc']
+        # rcnn_sh_mean = []
+        # for cls in Cls:
+        #     avg = "mean"
+        #     param = "sh"
+        #     rcnn_sh_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0))
+        # self.rcnn_sh_mean = torch.stack(rcnn_sh_mean)
+        # self.rcnn_sh_mean_template = (self.rcnn_sh_mean).mean(dim=0)
         self.vals_to_store = ['rcnn_sh_fg_mean','rcnn_sh_uc_mean','rcnn_sh_bg_mean','rcnn_sh_fg_mean_Car','rcnn_sh_fg_mean_Ped','rcnn_sh_fg_mean_Cyc','rcnn_sh_uc_mean_Car','rcnn_sh_uc_mean_Ped','rcnn_sh_uc_mean_Cyc','rcnn_sh_bg_mean_Ped','rcnn_sh_bg_mean_Cyc',
                              'rcnn_sh_bg_mean_Car','rcnn_sh_template_fg','rcnn_sh_template_bg','rcnn_sh_template_uc','3diou_fg','3diou_uc','3diou_bg','3dioupl_fg','3dioupl_uc','3dioupl_bg']
         
@@ -72,7 +72,7 @@ class PredQualityMetrics(Metric):
 
     def update(self, preds: [torch.Tensor], ground_truths: [torch.Tensor], pred_scores: [torch.Tensor],
                rois=None, roi_scores=None, targets=None, target_scores=None, pred_weights=None,
-               pseudo_labels=None, pseudo_label_scores=None, pred_iou_wrt_pl=None,shared_features=None,ckpt_save_dir=None) -> None:
+               pseudo_labels=None, pseudo_label_scores=None, pred_iou_wrt_pl=None,shared_features=None,rcnn_template=None,cur_epoch=None,ckpt_save_dir=None) -> None:
         assert isinstance(preds, list) and isinstance(ground_truths, list) and isinstance(pred_scores, list)
         assert all([pred.dim() == 2 for pred in preds]) and all([pred.dim() == 2 for pred in ground_truths]) and all([pred.dim() == 1 for pred in pred_scores])
         assert all([pred.shape[-1] == 8 for pred in preds]) and all([gt.shape[-1] == 8 for gt in ground_truths])
@@ -87,10 +87,12 @@ class PredQualityMetrics(Metric):
         ground_truths = [gt_box.clone().detach() for gt_box in ground_truths]
         pseudo_labels = [pl_box.clone().detach() for pl_box in pseudo_labels] if pseudo_labels is not None else None
         pred_weights = [pred_weight.clone().detach() for pred_weight in pred_weights] if pred_weights is not None else None
-        self.rcnn_sh_mean = self.rcnn_sh_mean.to(preds[0].device)
-        self.rcnn_sh_mean_template = self.rcnn_sh_mean_template.to(preds[0].device)
+        self.rcnn_sh_mean = rcnn_template
         sample_tensor = preds[0] if len(preds) else ground_truths[0]
         num_classes = len(self.dataset.class_names)
+        if rcnn_template is not None:
+            self.rcnn_sh_mean = rcnn_template
+            self.rcnn_sh_mean_template = (self.rcnn_sh_mean).mean(dim=0)
         for i in range(len(preds)):
             valid_preds_mask = torch.logical_not(torch.all(preds[i] == 0, dim=-1))
             valid_pred_boxes = preds[i][valid_preds_mask]
@@ -290,11 +292,12 @@ class PredQualityMetrics(Metric):
                 getattr(self, metric_name).append(sample_tensor.new_zeros(num_classes + 1).fill_(float('nan')))
 
         if valid_sh is not None and self.config.ROI_HEAD.STORE_SCORES_IN_PKL:
-            self.val_dict['ens'].append(self.store_dict)
-            output_dir = os.path.split(os.path.abspath(ckpt_save_dir))[0]
-            file_path = os.path.join(output_dir, 'cos_scores.pkl')
-            pickle.dump(self.val_dict, open(file_path, 'wb'))
-            self.store_dict={val: [] for val in self.vals_to_store}
+            if cur_epoch >= self.config.ROI_HEAD.STORE_PKL_EPOCH:
+                self.val_dict['ens'].append(self.store_dict)
+                output_dir = os.path.split(os.path.abspath(ckpt_save_dir))[0]
+                file_path = os.path.join(output_dir, 'cos_scores.pkl')
+                pickle.dump(self.val_dict, open(file_path, 'wb'))
+                self.store_dict={val: [] for val in self.vals_to_store}
             
     def compute(self):
         final_results = {}
