@@ -148,7 +148,7 @@ class PVRCNN_SSL(Detector3DTemplate):
         self.supervise_mode = model_cfg.SUPERVISE_MODE
         cls_bg_thresh = model_cfg.ROI_HEAD.TARGET_CONFIG.CLS_BG_THRESH
         self.metric_registry = MetricRegistry(dataset=self.dataset, model_cfg=model_cfg)
-        vals_to_store = ['iou_roi_pl', 'iou_roi_gt', 'pred_scores', 'weights', 'class_labels', 'iteration']
+        vals_to_store = ['iou_roi_pl', 'iou_roi_gt', 'pred_scores', 'weights', 'class_labels', 'iteration','cos_scores']
         self.val_dict = {val: [] for val in vals_to_store}
 
     def forward(self, batch_dict):
@@ -436,6 +436,8 @@ class PVRCNN_SSL(Detector3DTemplate):
                         cur_iteration = torch.ones_like(preds_iou_max) * (batch_dict['cur_iteration'])
                         self.val_dict['iteration'].extend(cur_iteration.tolist())
 
+                        cur_cos_scores = self.pv_rcnn.roi_head.forward_ret_dict['cos_scores'][cur_unlabeled_ind]
+                        self.val_dict['cos_scores'].extend(cur_cos_scores.tolist())
                 # replace old pickle data (if exists) with updated one 
                 output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]
                 file_path = os.path.join(output_dir, 'scores.pkl')
