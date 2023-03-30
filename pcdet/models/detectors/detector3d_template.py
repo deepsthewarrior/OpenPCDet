@@ -198,17 +198,17 @@ class Detector3DTemplate(nn.Module):
         pred_dicts = []
         for index in range(batch_size):
             if batch_dict.get('batch_index', None) is not None:
-                assert batch_dict['batch_box_preds'].shape.__len__() == 2
+                assert batch_dict['batch_box_preds_feat'].shape.__len__() == 2
                 batch_mask = (batch_dict['batch_index'] == index)
             else:
-                assert batch_dict['batch_box_preds'].shape.__len__() == 3
+                assert batch_dict['batch_box_preds_feat'].shape.__len__() == 3
                 batch_mask = index
 
-            box_preds = batch_dict['batch_box_preds'][batch_mask]
+            box_preds = batch_dict['batch_box_preds_feat'][batch_mask]
             src_box_preds = box_preds
 
-            if not isinstance(batch_dict['batch_cls_preds'], list):
-                cls_preds = batch_dict['batch_cls_preds'][batch_mask]
+            if not isinstance(batch_dict['batch_cls_preds_feat'], list):
+                cls_preds = batch_dict['batch_cls_preds_feat'][batch_mask]
 
                 src_cls_preds = cls_preds
                 assert cls_preds.shape[1] in [1, self.num_class]  # 1 for pvrcnn
@@ -216,7 +216,7 @@ class Detector3DTemplate(nn.Module):
                 if not batch_dict['cls_preds_normalized']:
                     cls_preds = torch.sigmoid(cls_preds)
             else:
-                cls_preds = [x[batch_mask] for x in batch_dict['batch_cls_preds']]
+                cls_preds = [x[batch_mask] for x in batch_dict['batch_cls_preds_feat']]
                 src_cls_preds = cls_preds
                 if not batch_dict['cls_preds_normalized']:
                     cls_preds = [torch.sigmoid(x) for x in cls_preds]
@@ -311,7 +311,173 @@ class Detector3DTemplate(nn.Module):
             pred_dicts.append(record_dict)
 
         return pred_dicts, recall_dict
+    
+    def post_processing_features(self, batch_dict, no_recall_dict=False, override_thresh=None, no_nms_for_unlabeled=False):
+        """
+        Args:
+            batch_dict:
+                batch_size:
+                batch_cls_preds: (B, num_boxes, num_classes | 1) or (N1+N2+..., num_classes | 1)
+                                or [(B, num_boxes, num_class1), (B, num_boxes, num_class2) ...]
+                multihead_label_mapping: [(num_class1), (num_class2), ...]
+                batch_box_preds: (B, num_boxes, 7+C) or (N1+N2+..., 7+C)
+                cls_preds_normalized: indicate whether batch_cls_preds is normalized
+                batch_index: optional (N1+N2+...)
+                has_class_labels: True/False
+                roi_labels: (B, num_rois)  1 .. num_classes
+                batch_pred_labels: (B, num_boxes, 1)
+        Returns:
 
+        """
+        post_process_cfg = self.model_cfg.POST_PROCESSING
+        batch_size = batch_dict['batch_size']
+        recall_dict = {}
+        pred_dicts = []
+        for index in range(batch_size):
+            if batch_dict.get('batch_index', None) is not None:
+                assert batch_dict['batch_box_preds_feat'].shape.__len__() == 2
+                batch_mask = (batch_dict['batch_index'] == index)
+            else:
+                assert batch_dict['batch_box_preds_feat'].shape.__len__() == 3
+                batch_mask = index
+
+            box_preds = batch_dict['batch_box_preds_feat'][batch_mask]
+            src_box_preds = box_preds
+
+            if not isinstance(batch_dict['batch_cls_preds_feat'], list):
+                cls_preds = batch_dict['batch_cls_preds_feat'][batch_mask]
+
+                src_cls_preds = cls_preds
+                assert cls_preds.shape[1] in [1, self.num_class]  # 1 for pvrcnn
+
+                if not batch_dict['cls_preds_normalized']:
+                    cls_preds = torch.sigmoid(cls_preds)
+            else:
+                cls_preds = [x[batch_mask] for x in batch_dict['batch_cls_preds_feat']]
+                src_cls_preds = cls_preds
+                if not batch_dict['cls_preds_normalized']:
+                    cls_preds = [torch.sigmoid(x) for x in cls_preds]
+
+            if post_process_cfg.NMS_CONFIG.MULTI_CLASSES_NMS:
+                if not isinstance(cls_preds, list):
+                    cls_preds = [cls_preds]
+                    multihead_label_mapping = [torch.arange(1, self.num_class, device=cls_preds[0].device)]
+                else:
+                    multihead_label_mapping = batch_dict['multihead_label_mapping']
+
+                cur_start_idx = 0
+                pred_scores, pred_labels, pred_boxes = [], [], []
+                for cur_cls_preds, cur_label_mapping in zip(cls_preds, multihead_label_mapping):
+                    assert cur_cls_preds.shape[1] == len(cur_label_mapping)
+                    cur_box_preds = box_preds[cur_start_idx: cur_start_idx + cur_cls_preds.shape[0]]
+                    cur_pred_scores, cur_pred_labels, cur_pred_boxes = model_nms_utils.multi_classes_nms(
+                        cls_scores=cur_cls_preds, box_preds=cur_box_preds,
+                        nms_config=post_process_cfg.NMS_CONFIG,
+                        score_thresh=post_process_cfg.SCORE_THRESH if override_thresh is None else override_thresh
+                    )
+                    cur_pred_labels = cur_label_mapping[cur_pred_labels]
+                    pred_scores.append(cur_pred_scores)
+                    pred_labels.append(cur_pred_labels)
+                    pred_boxes.append(cur_pred_boxes)
+                    cur_start_idx += cur_cls_preds.shape[0]
+
+                final_scores = torch.cat(pred_scores, dim=0)
+                final_labels = torch.cat(pred_labels, dim=0)
+                final_boxes = torch.cat(pred_boxes, dim=0)
+            else:
+                cls_preds, label_preds = torch.max(cls_preds, dim=-1)
+                if batch_dict.get('has_class_labels', False):
+                    label_key = 'roi_labels' if 'roi_labels' in batch_dict else 'batch_pred_labels'
+                    label_preds = batch_dict[label_key][index]
+                    if self.training:
+                        sem_scores = batch_dict['roi_scores'][index]
+                else:
+                    label_preds = label_preds + 1
+                shared_features = batch_dict['shared_features'][index]
+
+                # Should be True to preserve the order of roi's passed from the student
+                if no_nms_for_unlabeled and index in batch_dict['unlabeled_inds']:
+                    selected = torch.arange(len(cls_preds), device=cls_preds.device)
+                    selected_scores = cls_preds
+                else:
+                    if False:
+                        selected, selected_scores = model_nms_utils.class_agnostic_nms(
+                            box_scores=torch.sigmoid(sem_scores), box_preds=box_preds,
+                            nms_config=post_process_cfg.NMS_CONFIG,
+                            score_thresh=post_process_cfg.SCORE_THRESH
+                        )
+                    else:
+                        selected, selected_scores = model_nms_utils.class_agnostic_nms(
+                            box_scores=cls_preds, box_preds=box_preds,
+                            nms_config=post_process_cfg.NMS_CONFIG,
+                            score_thresh=post_process_cfg.SCORE_THRESH
+                        )
+
+                if post_process_cfg.OUTPUT_RAW_SCORE:
+                    max_cls_preds, _ = torch.max(src_cls_preds, dim=-1)
+                    selected_scores = max_cls_preds[selected]
+                cur_gt_boxes = batch_dict['gt_boxes'][index]
+                k = cur_gt_boxes.__len__() - 1
+                while k >= 0 and cur_gt_boxes[k].sum() == 0:
+                    k -= 1
+                cur_gt_boxes = cur_gt_boxes[:k + 1]
+                max_overlaps = []
+                gt_assignment = []
+                if cur_gt_boxes.shape[0] > 0:
+                    iou = iou3d_nms_utils.boxes_iou3d_gpu(src_box_preds[:, 0:7], cur_gt_boxes[:, 0:7])
+                    max_overlaps, gt_assignment = torch.max(iou, dim=1)
+
+                gt_label = cur_gt_boxes[...,-1]
+                final_scores = selected_scores
+                final_labels = label_preds[selected]
+                final_boxes = box_preds[selected]
+                # final_cls_inter = cls_inter[selected]
+                # final_reg_inter = reg_inter[selected]
+                final_shared = shared_features[selected]
+
+                final_scores = selected_scores
+                final_labels = label_preds[selected]
+                final_boxes = box_preds[selected]
+
+                if self.training:
+                    final_sem_scores = torch.sigmoid(sem_scores[selected])
+                    if 'batch_box_preds_var' in batch_dict.keys():
+                        final_box_vars = batch_dict['batch_box_preds_var'][index, selected]
+                    if 'batch_cls_preds_var' in batch_dict.keys():
+                        final_cls_vars = batch_dict['batch_cls_preds_var'][index, selected]
+
+            if not no_recall_dict:
+                recall_dict = self.generate_recall_record(
+                    box_preds=final_boxes if 'rois' not in batch_dict else src_box_preds,
+                    recall_dict=recall_dict, batch_index=index, data_dict=batch_dict,
+                    thresh_list=post_process_cfg.RECALL_THRESH_LIST
+                )
+
+            record_dict = {
+                'pred_boxes': final_boxes,
+                'pred_scores': final_scores,
+                'pred_labels': final_labels,
+                'shared_features': shared_features,
+                # 'rcnn_reg_interim': reg_inter,
+                # 'rcnn_cls_interim': cls_inter,
+                'selected' : selected,
+                'iou' : max_overlaps,
+                'gt_assignment': gt_assignment,
+                'pred_scores_all': cls_preds,
+                'label_preds': label_preds,
+                'gt_label': gt_label,
+            }
+            if self.training:
+                record_dict['pred_sem_scores'] = final_sem_scores
+                if 'batch_box_preds_var' in batch_dict.keys():
+                    record_dict['pred_boxes_var'] = final_box_vars
+                if 'batch_cls_preds_var' in batch_dict.keys():
+                    record_dict['pred_scores_var'] = final_cls_vars
+
+            pred_dicts.append(record_dict)
+
+        return pred_dicts, recall_dict
+    
     @staticmethod
     def generate_recall_record(box_preds, recall_dict, batch_index, data_dict=None, thresh_list=None):
         if 'gt_boxes' not in data_dict:

@@ -171,6 +171,7 @@ MODEL:
         REG_FC: [256, 256]
         DP_RATIO: 0.3
         STORE_SCORES_IN_PKL: False
+        STORE_PKL_EPOCH: 40
 
         NMS_CONFIG:
             TRAIN:
