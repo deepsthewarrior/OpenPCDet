@@ -151,6 +151,10 @@ class PVRCNNHead(RoIHeadTemplate):
             targets_dict = self.assign_targets(batch_dict)
             batch_dict['rois'] = targets_dict['rois']
             batch_dict['roi_labels'] = targets_dict['roi_labels']
+            targets_dict['unlabeled_inds'] = batch_dict['unlabeled_inds']
+            targets_dict['metric_registry'] = batch_dict['metric_registry']
+            targets_dict['unlabeled_inds'] = batch_dict['unlabeled_inds']
+            targets_dict['ori_unlabeled_boxes'] = batch_dict['ori_unlabeled_boxes']
 
         # RoI aware pooling
         pooled_features = self.roi_grid_pool(batch_dict)  # (BxN, 6x6x6, C)
@@ -171,6 +175,7 @@ class PVRCNNHead(RoIHeadTemplate):
             batch_dict['batch_cls_preds'] = batch_cls_preds
             batch_dict['batch_box_preds'] = batch_box_preds
             batch_dict['cls_preds_normalized'] = False
+            targets_dict['batch_box_preds'] = batch_box_preds
         if self.training or self.print_loss_when_eval:
             targets_dict['rcnn_cls'] = rcnn_cls
             targets_dict['rcnn_reg'] = rcnn_reg
