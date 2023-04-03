@@ -153,14 +153,15 @@ class PVRCNN_SSL(Detector3DTemplate):
         self.classes = ['Car','Ped','Cyc']
         self.ema_template= {val: [] for val in self.classes}
         self.updated_template = {val: [] for val in self.classes}
-        with open('ema_sh4468_0.9.pkl','rb') as f:
-            self.rcnn_features = pickle.loads(f.read())
-        rcnn_sh_mean = []
-        for cls in self.classes:
-            avg = "mean"
-            param = "sh"
-            rcnn_sh_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0))
-        self.rcnn_sh_mean = torch.stack(rcnn_sh_mean)
+
+        with open('dist.pkl','rb') as f:
+            self.rcnn_features_dist = pickle.loads(f.read())                            
+
+        rcnn_sh_mean_dist = []
+        for i in range(0,len(self.classes)):
+            rcnn_sh_mean_dist.append(torch.normal(self.rcnn_features_dist['mean'][i],self.rcnn_features_dist['std'][i]).unsqueeze(dim=0))
+        self.rcnn_sh_mean = torch.stack(rcnn_sh_mean_dist)
+
 
     def forward(self, batch_dict):
         if self.training:
