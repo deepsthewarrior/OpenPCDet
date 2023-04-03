@@ -154,13 +154,9 @@ class PVRCNN_SSL(Detector3DTemplate):
         self.ema_template= {val: [] for val in self.classes}
         self.updated_template = {val: [] for val in self.classes}
 
-        with open('dist_cpu.pkl','rb') as f:
+        with open('dist_temp_cpu.pkl','rb') as f:
             self.rcnn_features_dist = pickle.loads(f.read())                            
-
-        rcnn_sh_mean_dist = []
-        for i in range(0,len(self.classes)):
-            rcnn_sh_mean_dist.append(torch.normal(self.rcnn_features_dist['mean'][i].cuda(),self.rcnn_features_dist['std'][i].cuda()).unsqueeze(dim=0))
-        self.rcnn_sh_mean = torch.stack(rcnn_sh_mean_dist)
+        self.rcnn_sh_mean = torch.stack(self.rcnn_features_dist['template']).cuda()
 
 
     def forward(self, batch_dict):
