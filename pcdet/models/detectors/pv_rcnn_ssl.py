@@ -10,6 +10,7 @@ from.pv_rcnn import PVRCNN
 from ...utils.stats_utils import KITTIEvalMetrics, PredQualityMetrics
 from torchmetrics.collections import MetricCollection
 import torch.distributed as dist
+from pcdet.datasets.augmentor import augmentor_utils
 
 def _mean(tensor_list):
     tensor = torch.cat(tensor_list)
@@ -87,7 +88,9 @@ class PVRCNN_SSL(Detector3DTemplate):
                         batch_dict_ema = cur_module(batch_dict_ema)
                 pred_dicts, recall_dicts = self.pv_rcnn_ema.post_processing(batch_dict_ema,
                                                                             no_recall_dict=True, override_thresh=0.0, no_nms=self.no_nms)
+                
                 ori_unlabeled_boxes = batch_dict['gt_boxes'][unlabeled_inds, ...]
+
                 pseudo_boxes = []
                 pseudo_scores = []
                 pseudo_sem_scores = []
@@ -234,6 +237,7 @@ class PVRCNN_SSL(Detector3DTemplate):
             self.pv_rcnn.roi_head.forward_ret_dict['unlabeled_inds'] = unlabeled_inds
             self.pv_rcnn.roi_head.forward_ret_dict['pl_boxes'] = batch_dict['gt_boxes']
             self.pv_rcnn.roi_head.forward_ret_dict['pl_scores'] = pseudo_scores
+            self.pv_rcnn.dense_head.forward_ret_dict['gt_labels_l'] = batch_dict['gt_boxes'][labeled_mask.bool()][...,-1]
 
             disp_dict = {}
             loss_rpn_cls, loss_rpn_box, ulb_dist_loss, tb_dict = self.pv_rcnn.dense_head.get_loss(scalar=False)
@@ -312,6 +316,7 @@ class PVRCNN_SSL(Detector3DTemplate):
         metrics = {tag + key: val for key, val in results.items()}
         return metrics
     
+
     def get_supervised_training_loss(self):
         disp_dict = {}
         loss_rpn, tb_dict = self.dense_head.get_loss()
@@ -328,6 +333,7 @@ class PVRCNN_SSL(Detector3DTemplate):
         alpha = min(1 - 1 / (self.global_step + 1), alpha)
         for ema_param, param in zip(self.pv_rcnn_ema.parameters(), self.pv_rcnn.parameters()):
             ema_param.data.mul_(alpha).add_(1 - alpha, param.data)
+
 
     def load_params_from_file(self, filename, logger, to_cpu=False):
         if not os.path.isfile(filename):
@@ -363,3 +369,5 @@ class PVRCNN_SSL(Detector3DTemplate):
                 logger.info('Not updated weight %s: %s' % (key, str(state_dict[key].shape)))
 
         logger.info('==> Done (loaded %d/%d)' % (len(update_model_state), len(self.state_dict())))
+
+    

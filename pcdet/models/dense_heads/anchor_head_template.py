@@ -32,7 +32,7 @@ class AnchorHeadTemplate(nn.Module):
         self.target_assigner = self.get_target_assigner(anchor_target_cfg)
         self.forward_ret_dict = {}
         self.build_losses(self.model_cfg.LOSS_CONFIG)
-        self.dist_prior = 1 / self.num_class
+
 
     @staticmethod
     def generate_anchors(anchor_generator_cfg, grid_size, point_cloud_range, anchor_ndim=7):
@@ -109,13 +109,16 @@ class AnchorHeadTemplate(nn.Module):
         unlabeled_mask[unlabeled_inds] = True
         box_cls_preds = self.forward_ret_dict['batch_cls_all'][unlabeled_inds].sigmoid()
         prob_model = box_cls_preds.view(-1,self.num_class).mean(dim=0)
+        prior_l = torch.bincount(self.forward_ret_dict['gt_labels_l'].view(-1).int())[1:].float()
+        self.dist_prior = prior_l/prior_l.sum()
         clswise_dist = -1 * self.dist_prior * torch.log(prob_model + 1e-12)
         ulb_dist_loss_org = (loss_weight*clswise_dist).sum()
         ulb_dist_loss = torch.clamp(ulb_dist_loss_org,min=0.0,max=2.50)
         
         tb_dict = {
             'ulb_cls_dist_loss_rpn': ulb_dist_loss_org.unsqueeze(0).repeat(self.forward_ret_dict['cls_preds'].shape[0], 1),
-            'rpn_freem_cls':{'Car':clswise_dist[0].item(), 'Pedestrian':clswise_dist[1].item(), 'Cyclist': clswise_dist[2].item() }
+            'rpn_freem_cls':{'Car':clswise_dist[0].item(), 'Pedestrian':clswise_dist[1].item(), 'Cyclist': clswise_dist[2].item() },
+            'labeled_dist':{'Car':self.dist_prior[0].item(),'Ped':self.dist_prior[1].item(),'Cyc':self.dist_prior[2].item()}
         }
    
         return ulb_dist_loss,tb_dict
