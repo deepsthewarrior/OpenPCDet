@@ -43,7 +43,7 @@ class PredQualityMetrics(Metric):
                              "pred_weight_fn", "pred_weight_tp", "pred_weight_fp","rcnn_sh_fg_mean","rcnn_sh_uc_mean","rcnn_sh_bg_mean",
                              "rcnn_sh_fg_mean_Car","rcnn_sh_uc_mean_Car","rcnn_sh_bg_mean_Car","rcnn_sh_fg_mean_Ped","rcnn_sh_uc_mean_Ped",
                              "rcnn_sh_bg_mean_Ped","rcnn_sh_fg_mean_Cyc","rcnn_sh_uc_mean_Cyc","rcnn_sh_bg_mean_Cyc","rcnn_sh_template_fg","rcnn_sh_template_bg",
-                             "rcnn_sh_template_uc"]
+                             "rcnn_sh_template_uc","cos_scores_fn","cos_scores_fp","cos_scores_tp"]
         
         self.min_overlaps = np.array([0.7, 0.5, 0.5, 0.7, 0.5, 0.7])
         self.class_agnostic_fg_thresh = 0.7
@@ -72,7 +72,7 @@ class PredQualityMetrics(Metric):
 
     def update(self, preds: [torch.Tensor], ground_truths: [torch.Tensor], pred_scores: [torch.Tensor],
                rois=None, roi_scores=None, targets=None, target_scores=None, pred_weights=None,
-               pseudo_labels=None, pseudo_label_scores=None, pred_iou_wrt_pl=None,shared_features=None,rcnn_template=None,cur_epoch=None,ckpt_save_dir=None) -> None:
+               pseudo_labels=None, pseudo_label_scores=None, pred_iou_wrt_pl=None,shared_features=None,rcnn_template=None,cos_scores=None,cur_epoch=None,ckpt_save_dir=None) -> None:
         assert isinstance(preds, list) and isinstance(ground_truths, list) and isinstance(pred_scores, list)
         assert all([pred.dim() == 2 for pred in preds]) and all([pred.dim() == 2 for pred in ground_truths]) and all([pred.dim() == 1 for pred in pred_scores])
         assert all([pred.shape[-1] == 8 for pred in preds]) and all([gt.shape[-1] == 8 for gt in ground_truths])
@@ -101,6 +101,7 @@ class PredQualityMetrics(Metric):
             valid_roi_scores = roi_scores[i][valid_preds_mask.nonzero().view(-1)] if roi_scores else None
             valid_target_scores = target_scores[i][valid_preds_mask.nonzero().view(-1)] if target_scores else None
             valid_pred_weights = pred_weights[i][valid_preds_mask.nonzero().view(-1)] if pred_weights else None
+            valid_cos_scores = cos_scores[i][valid_preds_mask.nonzero().view(-1)] if cos_scores else None
             valid_pred_iou_wrt_pl = pred_iou_wrt_pl[i][valid_preds_mask.nonzero().view(-1)].squeeze() if pred_iou_wrt_pl else None
             valid_gts_mask = torch.logical_not(torch.all(ground_truths[i] == 0, dim=-1))
             valid_gt_boxes = ground_truths[i][valid_gts_mask]
@@ -279,6 +280,13 @@ class PredQualityMetrics(Metric):
                             classwise_metrics['pred_weight_tp'][cind] = cls_pred_weight_cc_tp
                             cls_pred_weight_cc_fp = (valid_pred_weights * fp_mask).sum() / fp_mask.float().sum()
                             classwise_metrics['pred_weight_fp'][cind] = cls_pred_weight_cc_fp
+                        if valid_cos_scores is not None:
+                            cls_cos_scores_fg_mc = (valid_cos_scores * fn_mask.float()).sum() / fn_mask.sum()
+                            classwise_metrics['cos_scores_fn'][cind] = cls_cos_scores_fg_mc
+                            cls_cos_scores_cc_tp = (valid_cos_scores * tp_mask).sum() / tp_mask.float().sum()
+                            classwise_metrics['cos_scores_tp'][cind] = cls_cos_scores_cc_tp
+                            cls_cos_scores_cc_fp = (valid_cos_scores * fp_mask).sum() / fp_mask.float().sum()
+                            classwise_metrics['cos_scores_fp'][cind] = cls_cos_scores_cc_fp                            
 
             for key, val in classwise_metrics.items():
                 # Note that unsqueeze is necessary because torchmetric performs the dist cat on dim 0.
