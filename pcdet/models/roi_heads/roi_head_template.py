@@ -197,6 +197,7 @@ class RoIHeadTemplate(nn.Module):
         sample_gts = []
         sample_gt_iou_of_rois = []
         shared_features = []
+        sample_cos_scores = []
         for i, uind in enumerate(unlabeled_inds):
             mask = (targets_dict['reg_valid_mask'][uind] > 0) if mask_type == 'reg' else (
                         targets_dict['rcnn_cls_labels'][uind] >= 0)
@@ -234,6 +235,9 @@ class RoIHeadTemplate(nn.Module):
             pl_scores = targets_dict['pl_scores'][i]
             sample_pls.append(pl_labeled_boxes)
             sample_pl_scores.append(pl_scores)
+            #similarity_scores
+            cos_scores = targets_dict['cos_scores'][uind][mask].detach().clone()
+            sample_cos_scores.append(cos_scores)
 
             # Teacher refinements (Preds) of student's rois
             if 'ema_gt' in pred_type and self.get('ENABLE_SOFT_TEACHER', False):
@@ -309,7 +313,7 @@ class RoIHeadTemplate(nn.Module):
             metric_inputs = {'preds': sample_rois, 'pred_scores': sample_roi_scores,
                              'ground_truths': sample_gts, 'targets': sample_targets,
                              'pseudo_labels': sample_pls, 'pseudo_label_scores': sample_pl_scores,
-                             'target_scores': sample_target_scores, 'pred_weights': sample_pred_weights,
+                             'target_scores': sample_target_scores, 'pred_weights': sample_pred_weights,'cos_scores':sample_cos_scores,
                              'pred_iou_wrt_pl': sample_gt_iou_of_rois,'shared_features':shared_features,'rcnn_template':rcnn_template,
                              'ckpt_save_dir':self.forward_ret_dict['ckpt_save_dir'], 'cur_epoch':targets_dict['cur_epoch']}
             metrics.update(**metric_inputs)
