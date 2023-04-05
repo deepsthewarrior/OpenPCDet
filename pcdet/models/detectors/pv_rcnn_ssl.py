@@ -160,8 +160,9 @@ class PVRCNN_SSL(Detector3DTemplate):
             avg = "mean"
             param = "sh"
             rcnn_sh_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0))
-        self.rcnn_sh_mean = torch.stack(rcnn_sh_mean)
-
+        self.rcnn_sh = torch.stack(rcnn_sh_mean).detach().clone()
+        self.rcnn_sh_mean = self.rcnn_sh.cuda()
+        
     def forward(self, batch_dict):
         if self.training:
             labeled_mask = batch_dict['labeled_mask'].view(-1)
@@ -253,25 +254,6 @@ class PVRCNN_SSL(Detector3DTemplate):
 
             # apply student's augs on teacher's pseudo-labels (filtered) only (not points)
             batch_dict = self.apply_augmentation(batch_dict, batch_dict, unlabeled_inds, key='gt_boxes')
-            
-            # if self.model_cfg.ROI_HEAD.get('ENABLE_VIS', False):
-            #     for i, uind in enumerate(unlabeled_inds):
-            #         mask = batch_dict['points'][:, 0] == uind
-            #         point = batch_dict['points'][mask, 1:]
-            #         pred_boxes = batch_dict['gt_boxes'][uind][:, :-1]
-            #         pred_labels = batch_dict['gt_boxes'][uind][:, -1].int()
-            #         pred_scores = torch.zeros_like(pred_labels).float()
-            #         pred_scores[:pseudo_scores[i].shape[0]] = pseudo_scores[i]
-            #         V.vis(point, gt_boxes=ori_unlabeled_boxes[i][:, :-1],
-            #             pred_boxes=pred_boxes, pred_scores=pred_scores, pred_labels=pred_labels)
-
-            # ori_unlabeled_boxes_list = [ori_box for ori_box in ori_unlabeled_boxes]
-            # pseudo_boxes_list = [ps_box for ps_box in batch_dict['gt_boxes'][unlabeled_inds]]
-            # metric_inputs = {'preds': pseudo_boxes_list,
-            #                  'targets': ori_unlabeled_boxes_list,
-            #                  'pred_scores': pseudo_scores,
-            #                  'pred_sem_scores': pseudo_sem_scores}
-            # self.metrics['after_filtering'].update(**metric_inputs)  # commented to reduce complexity.
 
             batch_dict['metric_registry'] = self.metric_registry
             batch_dict['ori_unlabeled_boxes'] = ori_unlabeled_boxes
@@ -309,15 +291,6 @@ class PVRCNN_SSL(Detector3DTemplate):
                             batch_dict['pred_scores_ema_var'][ui] = scores_var[i]
                             batch_dict['pred_boxes_ema_var'][ui] = boxes_var[i]
 
-                    # if self.model_cfg.ROI_HEAD.get('ENABLE_VIS', False):
-                    #     for i, uind in enumerate(unlabeled_inds):
-                    #         mask = batch_dict['points'][:, 0] == uind
-                    #         point = batch_dict['points'][mask, 1:]
-                    #         pred_boxes = batch_dict['gt_boxes'][uind][:, :-1]
-                    #         pred_labels = batch_dict['gt_boxes'][uind][:, -1].int()
-                    #         pred_scores = batch_dict['pred_scores_ema'][uind]
-                    #         V.vis(point, gt_boxes=ori_unlabeled_boxes[i][:, :-1], pred_boxes=pred_boxes,
-                    #             pred_scores=pred_scores, pred_labels=pred_labels)
 
                 batch_dict = cur_module(batch_dict)
             # pred_dicts_feat, recall_dicts_feat = self.pv_rcnn.post_processing_features(batch_dict, no_recall_dict=True,
