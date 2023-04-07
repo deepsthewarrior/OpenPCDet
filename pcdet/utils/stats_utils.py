@@ -87,11 +87,10 @@ class PredQualityMetrics(Metric):
         ground_truths = [gt_box.clone().detach() for gt_box in ground_truths]
         pseudo_labels = [pl_box.clone().detach() for pl_box in pseudo_labels] if pseudo_labels is not None else None
         pred_weights = [pred_weight.clone().detach() for pred_weight in pred_weights] if pred_weights is not None else None
-        self.rcnn_sh_mean = rcnn_template
         sample_tensor = preds[0] if len(preds) else ground_truths[0]
         num_classes = len(self.dataset.class_names)
         if rcnn_template is not None:
-            self.rcnn_sh_mean = rcnn_template
+            self.rcnn_sh_mean = rcnn_template.detach().clone()
             self.rcnn_sh_mean_template = (self.rcnn_sh_mean).mean(dim=0)
         for i in range(len(preds)):
             valid_preds_mask = torch.logical_not(torch.all(preds[i] == 0, dim=-1))
@@ -173,7 +172,7 @@ class PredQualityMetrics(Metric):
                         classwise_metrics['sem_score_ucs'][cind] = cls_sem_score_uc
 
                     if valid_sh is not None:
-                        cos_sh_fg = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_fg_mask]],dim=1) if valid_sh[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=preds[0].device)                                               
+                        cos_sh_fg = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_fg_mask]],dim=1) if valid_sh[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'))                                               
                         classwise_metrics['rcnn_sh_fg_mean'][cind] = cos_sh_fg.mean()
                         # cos_sh_ = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_fg_mask]],dim=1) if valid_sh[cc_fg_mask].shape[0] != 0 else 'nan'                                                 
                         cos_sh_bg = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_sh[cls_bg_mask]],dim=1) if valid_sh[cls_bg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=preds[0].device)

@@ -9,7 +9,7 @@ from ...utils import box_coder_utils, common_utils, loss_utils
 from ..model_utils.model_nms_utils import class_agnostic_nms
 from .target_assigner.proposal_target_layer import ProposalTargetLayer
 from .target_assigner.proposal_target_layer_consistency import ProposalTargetLayerConsistency
-
+from ...ops.roiaware_pool3d import roiaware_pool3d_utils
 from visual_utils import visualize_utils as V
 
 
@@ -196,7 +196,7 @@ class RoIHeadTemplate(nn.Module):
         ema_preds_of_std_rois, ema_pred_scores_of_std_rois = [], []
         sample_gts = []
         sample_gt_iou_of_rois = []
-        shared_features = []
+        sample_shared_features = []
         for i, uind in enumerate(unlabeled_inds):
             mask = (targets_dict['reg_valid_mask'][uind] > 0) if mask_type == 'reg' else (
                         targets_dict['rcnn_cls_labels'][uind] >= 0)
@@ -207,11 +207,12 @@ class RoIHeadTemplate(nn.Module):
             roi_scores = torch.sigmoid(targets_dict['roi_scores'])[uind][mask].detach().clone()
             roi_labeled_boxes = torch.cat([rois, roi_labels], dim=-1)
             gt_iou_of_rois = targets_dict['gt_iou_of_rois'][uind][mask].unsqueeze(-1).detach().clone()
+            shared_features=targets_dict['shared_features'][uind][mask].detach().clone()
             sample_rois.append(roi_labeled_boxes)
             sample_roi_scores.append(roi_scores)
             sample_gt_iou_of_rois.append(gt_iou_of_rois)
-            shared_features.append(targets_dict['shared_features'][uind][mask])
-            rcnn_template = targets_dict['rcnn_template']
+            sample_shared_features.append(shared_features)
+            rcnn_template = targets_dict['rcnn_template'].detach().clone()
             # Target info
             target_labeled_boxes = targets_dict['gt_of_rois_src'][uind][mask].detach().clone()
             target_scores = targets_dict['rcnn_cls_labels'][uind][mask].detach().clone()
@@ -310,7 +311,7 @@ class RoIHeadTemplate(nn.Module):
                              'ground_truths': sample_gts, 'targets': sample_targets,
                              'pseudo_labels': sample_pls, 'pseudo_label_scores': sample_pl_scores,
                              'target_scores': sample_target_scores, 'pred_weights': sample_pred_weights,
-                             'pred_iou_wrt_pl': sample_gt_iou_of_rois,'shared_features':shared_features,'rcnn_template':rcnn_template,
+                             'pred_iou_wrt_pl': sample_gt_iou_of_rois,'shared_features':sample_shared_features,'rcnn_template':rcnn_template,
                              'ckpt_save_dir':self.forward_ret_dict['ckpt_save_dir'], 'cur_epoch':targets_dict['cur_epoch']}
             metrics.update(**metric_inputs)
 
@@ -321,6 +322,11 @@ class RoIHeadTemplate(nn.Module):
 
         batch_size = batch_dict['batch_size']
 
+        if batch_dict['store_scores_in_pkl']:
+            num_point_in_rois = roiaware_pool3d_utils.points_in_boxes_cpu(targets_dict['points'][:, 1:4].cpu(),
+                                                                        targets_dict['rois'].view(-1,7).cpu()).squeeze(0).sum(1)
+            targets_dict['num_points_in_roi'] = num_point_in_rois.reshape(targets_dict['rois'].shape[0], \
+                                                                        targets_dict['rois'].shape[1])
         # Adding points temporarily to the targets_dict for visualization inside update_metrics
         targets_dict['points'] = batch_dict['points']
 
