@@ -32,8 +32,8 @@ class AnchorHeadTemplate(nn.Module):
         self.target_assigner = self.get_target_assigner(anchor_target_cfg)
         self.forward_ret_dict = {}
         self.build_losses(self.model_cfg.LOSS_CONFIG)
-        self.global_thresh = (1/self.num_class) + 1e-6
-        self.local_thresh = torch.full((1,3),(1/self.num_class) + 1e-6).squeeze(0) 
+        self.global_thresh = torch.tensor([1/self.num_class]).cuda() + 1e-6
+        self.local_thresh = torch.full((1,3),(1/self.num_class) + 1e-6).squeeze(0).cuda()
         self.gt_lamba = 0.9
         self.lamda = 0.9
         self.dist_prior = 1 / self.num_class
@@ -129,13 +129,14 @@ class AnchorHeadTemplate(nn.Module):
         p_bar = box_cls_preds[p_bar_mask].mean(0)
 
         if len(p_bar) == 0:
-            p_bar = torch.tensr([0.00,0.00,0.00]).to(device=p_bar_mask.device)
+            p_bar = torch.tensor([0.00,0.00,0.00]).to(device=p_bar_mask.device)
 
         clswise_dist = self.dist_prior * torch.log(p_bar + 1e-12)
         ulb_dist_loss_org = (loss_weight*clswise_dist).sum()
         ulb_dist_loss = torch.clamp(ulb_dist_loss_org,min=0.0,max=2.50)
         
         tb_dict = {
+            # For consistency with other losses
             'ulb_cls_dist_loss_rpn': ulb_dist_loss_org.unsqueeze(0).repeat(self.forward_ret_dict['cls_preds'].shape[0], 1),
             'rpn_freem_cls':{'Car':clswise_dist[0].item(), 'Pedestrian':clswise_dist[1].item(), 'Cyclist': clswise_dist[2].item() }
         }
@@ -276,10 +277,9 @@ class AnchorHeadTemplate(nn.Module):
         return box_loss, tb_dict
 
     def get_loss(self, scalar=True):
-        ulb_dist_loss = 0.000
-        if self.model_cfg.ENABLE_ULB_DIST_LOSS:
-            ulb_dist_loss,tb_dict_ulb = self.get_ulb_layer_loss(scalar=scalar)
 
+        self.model_cfg.ENABLE_ULB_DIST_LOSS
+        ulb_dist_loss,tb_dict_ulb = self.get_ulb_layer_loss(scalar=scalar)
         cls_loss, tb_dict = self.get_cls_layer_loss(scalar=scalar)
         box_loss, tb_dict_box = self.get_box_reg_layer_loss(scalar=scalar)
         tb_dict.update(tb_dict_box)
@@ -291,7 +291,7 @@ class AnchorHeadTemplate(nn.Module):
             return rpn_loss, tb_dict
         else:
             tb_dict['rpn_loss'] = rpn_loss
-            return cls_loss, box_loss, tb_dict
+            return cls_loss, box_loss, ulb_dist_loss, tb_dict
 
     def generate_predicted_boxes(self, batch_size, cls_preds, box_preds, dir_cls_preds=None):
         """
