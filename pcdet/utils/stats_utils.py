@@ -88,9 +88,10 @@ class PredQualityMetrics(Metric):
         pseudo_labels = [pl_box.clone().detach() for pl_box in pseudo_labels] if pseudo_labels is not None else None
         pred_weights = [pred_weight.clone().detach() for pred_weight in pred_weights] if pred_weights is not None else None
         sample_tensor = preds[0] if len(preds) else ground_truths[0]
+        shared_features = [features.clone().detach() for features in shared_features] if shared_features is not None else None
         num_classes = len(self.dataset.class_names)
         if rcnn_template is not None:
-            self.rcnn_sh_mean = rcnn_template.detach().clone()
+            self.rcnn_sh_mean = rcnn_template.detach().clone().to(shared_features[0].device)
             self.rcnn_sh_mean_template = (self.rcnn_sh_mean).mean(dim=0)
         for i in range(len(preds)):
             valid_preds_mask = torch.logical_not(torch.all(preds[i] == 0, dim=-1))
