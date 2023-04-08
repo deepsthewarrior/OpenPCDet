@@ -552,9 +552,11 @@ class PVRCNN_SSL(Detector3DTemplate):
             selected_gt = gt_assign[selected]
             selected_gt_labels = gt_labels[selected_gt]
             tp_cls = pred_labels[selected] == selected_gt_labels
-            conf_thresh = torch.tensor(class_thresh, device=tp_cls.device).unsqueeze(
+            class_thresh_=class_thresh.detach().clone().to(tp_cls.device)
+            pred_thresh_ = pred_thresh.detach().clone().to(tp_cls.device)
+            conf_thresh =class_thresh_.unsqueeze(
                         0).repeat(len(selected), 1).gather(dim=1, index=(pred_labels[selected]-1).unsqueeze(-1))
-            pred_thresh = torch.tensor(pred_thresh, device=tp_cls.device).unsqueeze(
+            pred_thresh = pred_thresh_.unsqueeze(
                         0).repeat(len(selected), 1).gather(dim=1, index=(pred_labels[selected]-1).unsqueeze(-1))
             conf_thresh = conf_thresh.squeeze(dim=-1)
             pred_thresh = pred_thresh.squeeze(dim=-1)
@@ -576,7 +578,7 @@ class PVRCNN_SSL(Detector3DTemplate):
                 self.updated_template['Cyc'].append(cyc_sh[i].clone().detach())
             
 
-        if batch_dict['cur_iteration'] % 20 == 0:
+        if batch_dict['cur_iteration']+1 % 20 == 0:
             alpha = 0.9 
             for i,cls in enumerate(self.classes): 
                 if len(self.updated_template[cls]) != 0:

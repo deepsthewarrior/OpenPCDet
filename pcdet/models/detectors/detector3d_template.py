@@ -198,17 +198,17 @@ class Detector3DTemplate(nn.Module):
         pred_dicts = []
         for index in range(batch_size):
             if batch_dict.get('batch_index', None) is not None:
-                assert batch_dict['batch_box_preds_feat'].shape.__len__() == 2
+                assert batch_dict['batch_box_preds'].shape.__len__() == 2
                 batch_mask = (batch_dict['batch_index'] == index)
             else:
-                assert batch_dict['batch_box_preds_feat'].shape.__len__() == 3
+                assert batch_dict['batch_box_preds'].shape.__len__() == 3
                 batch_mask = index
 
-            box_preds = batch_dict['batch_box_preds_feat'][batch_mask]
+            box_preds = batch_dict['batch_box_preds'][batch_mask]
             src_box_preds = box_preds
 
-            if not isinstance(batch_dict['batch_cls_preds_feat'], list):
-                cls_preds = batch_dict['batch_cls_preds_feat'][batch_mask]
+            if not isinstance(batch_dict['batch_cls_preds'], list):
+                cls_preds = batch_dict['batch_cls_preds'][batch_mask]
 
                 src_cls_preds = cls_preds
                 assert cls_preds.shape[1] in [1, self.num_class]  # 1 for pvrcnn
@@ -216,7 +216,7 @@ class Detector3DTemplate(nn.Module):
                 if not batch_dict['cls_preds_normalized']:
                     cls_preds = torch.sigmoid(cls_preds)
             else:
-                cls_preds = [x[batch_mask] for x in batch_dict['batch_cls_preds_feat']]
+                cls_preds = [x[batch_mask] for x in batch_dict['batch_cls_preds']]
                 src_cls_preds = cls_preds
                 if not batch_dict['cls_preds_normalized']:
                     cls_preds = [torch.sigmoid(x) for x in cls_preds]
@@ -335,17 +335,17 @@ class Detector3DTemplate(nn.Module):
         pred_dicts = []
         for index in range(batch_size):
             if batch_dict.get('batch_index', None) is not None:
-                assert batch_dict['batch_box_preds_feat'].shape.__len__() == 2
+                assert batch_dict['batch_box_preds'].shape.__len__() == 2
                 batch_mask = (batch_dict['batch_index'] == index)
             else:
-                assert batch_dict['batch_box_preds_feat'].shape.__len__() == 3
+                assert batch_dict['batch_box_preds'].shape.__len__() == 3
                 batch_mask = index
 
-            box_preds = batch_dict['batch_box_preds_feat'][batch_mask]
+            box_preds = batch_dict['batch_box_preds'][batch_mask]
             src_box_preds = box_preds
 
-            if not isinstance(batch_dict['batch_cls_preds_feat'], list):
-                cls_preds = batch_dict['batch_cls_preds_feat'][batch_mask]
+            if not isinstance(batch_dict['batch_cls_preds'], list):
+                cls_preds = batch_dict['batch_cls_preds'][batch_mask]
 
                 src_cls_preds = cls_preds
                 assert cls_preds.shape[1] in [1, self.num_class]  # 1 for pvrcnn
@@ -353,7 +353,7 @@ class Detector3DTemplate(nn.Module):
                 if not batch_dict['cls_preds_normalized']:
                     cls_preds = torch.sigmoid(cls_preds)
             else:
-                cls_preds = [x[batch_mask] for x in batch_dict['batch_cls_preds_feat']]
+                cls_preds = [x[batch_mask] for x in batch_dict['batch_cls_preds']]
                 src_cls_preds = cls_preds
                 if not batch_dict['cls_preds_normalized']:
                     cls_preds = [torch.sigmoid(x) for x in cls_preds]
