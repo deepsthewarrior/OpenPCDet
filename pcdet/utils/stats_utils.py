@@ -45,28 +45,10 @@ class PredQualityMetrics(Metric):
         self.min_overlaps = np.array([0.7, 0.5, 0.5, 0.7, 0.5, 0.7])
         self.class_agnostic_fg_thresh = 0.7
 
-        rcnn_sh_mean = []
-
         for metric_name in self.metrics_name:
             self.add_state(metric_name, default=[], dist_reduce_fx='cat')
-        with open('ema_sh4468_0.9.pkl','rb') as f:
-            self.rcnn_features = pickle.loads(f.read())
 
-        Cls = ['Car','Ped','Cyc']
-        rcnn_sh_mean = []
-        for cls in Cls:
-            avg = "mean"
-            param = "sh"
-            rcnn_sh_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0))
-        self.rcnn_sh_mean = torch.stack(rcnn_sh_mean)
-        self.rcnn_sh_mean_template = (self.rcnn_sh_mean).mean(dim=0)
-        self.vals_to_store = ['rcnn_sh_fg_mean','rcnn_sh_uc_mean','rcnn_sh_bg_mean','rcnn_sh_fg_mean_Car','rcnn_sh_fg_mean_Ped','rcnn_sh_fg_mean_Cyc','rcnn_sh_uc_mean_Car','rcnn_sh_uc_mean_Ped','rcnn_sh_uc_mean_Cyc','rcnn_sh_bg_mean_Ped','rcnn_sh_bg_mean_Cyc',
-                             'rcnn_sh_bg_mean_Car','rcnn_sh_template_fg','rcnn_sh_template_bg','rcnn_sh_template_uc','3diou_fg','3diou_uc','3diou_bg','3dioupl_fg','3dioupl_uc','3dioupl_bg']
-        
-        # self.val_dict = {val: [] for val in self.vals_to_store}    
-        self.val_dict = {'ens': []}     
-        self.store_dict={val: [] for val in self.vals_to_store}
-
+       
     def update(self, preds: [torch.Tensor], ground_truths: [torch.Tensor], pred_scores: [torch.Tensor],
                rois=None, roi_scores=None, targets=None, target_scores=None, pred_weights=None,cos_scores=None,
                pseudo_labels=None, pseudo_label_scores=None, pred_iou_wrt_pl=None,shared_features=None,ckpt_save_dir=None) -> None:
@@ -84,14 +66,11 @@ class PredQualityMetrics(Metric):
         ground_truths = [gt_box.clone().detach() for gt_box in ground_truths]
         pseudo_labels = [pl_box.clone().detach() for pl_box in pseudo_labels] if pseudo_labels is not None else None
         pred_weights = [pred_weight.clone().detach() for pred_weight in pred_weights] if pred_weights is not None else None
-        self.rcnn_sh_mean = self.rcnn_sh_mean.to(preds[0].device)
-        self.rcnn_sh_mean_template = self.rcnn_sh_mean_template.to(preds[0].device)
         sample_tensor = preds[0] if len(preds) else ground_truths[0]
         num_classes = len(self.dataset.class_names)
         for i in range(len(preds)):
             valid_preds_mask = torch.logical_not(torch.all(preds[i] == 0, dim=-1))
             valid_pred_boxes = preds[i][valid_preds_mask]
-
             valid_pred_scores = pred_scores[i][valid_preds_mask.nonzero().view(-1)]
             valid_roi_scores = roi_scores[i][valid_preds_mask.nonzero().view(-1)] if roi_scores else None
             valid_target_scores = target_scores[i][valid_preds_mask.nonzero().view(-1)] if target_scores else None
