@@ -219,13 +219,6 @@ class PredQualityMetrics(Metric):
         if len(preds) == 0:
             for metric_name in self.metrics_name:
                 getattr(self, metric_name).append(sample_tensor.new_zeros(num_classes + 1).fill_(float('nan')))
-
-        if valid_sh is not None and self.config.ROI_HEAD.STORE_SCORES_IN_PKL:
-            self.val_dict['ens'].append(self.store_dict)
-            output_dir = os.path.split(os.path.abspath(ckpt_save_dir))[0]
-            file_path = os.path.join(output_dir, 'cos_scores.pkl')
-            pickle.dump(self.val_dict, open(file_path, 'wb'))
-            self.store_dict={val: [] for val in self.vals_to_store}
             
     def compute(self):
         final_results = {}
