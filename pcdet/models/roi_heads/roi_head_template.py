@@ -9,7 +9,7 @@ from ...utils import box_coder_utils, common_utils, loss_utils
 from ..model_utils.model_nms_utils import class_agnostic_nms
 from .target_assigner.proposal_target_layer import ProposalTargetLayer
 from .target_assigner.proposal_target_layer_consistency import ProposalTargetLayerConsistency
-
+from ...ops.roiaware_pool3d import roiaware_pool3d_utils
 from visual_utils import visualize_utils as V
 
 
@@ -197,6 +197,7 @@ class RoIHeadTemplate(nn.Module):
         sample_gts = []
         sample_gt_iou_of_rois = []
         shared_features = []
+        sample_cos_scores = []
         for i, uind in enumerate(unlabeled_inds):
             mask = (targets_dict['reg_valid_mask'][uind] > 0) if mask_type == 'reg' else (
                         targets_dict['rcnn_cls_labels'][uind] >= 0)
@@ -234,6 +235,9 @@ class RoIHeadTemplate(nn.Module):
             sample_pls.append(pl_labeled_boxes)
             sample_pl_scores.append(pl_scores)
 
+            #sim scores
+            cos_scores = targets_dict['cos_scores'][uind][mask].detach().clone()
+            sample_cos_scores.append(cos_scores)
             # Teacher refinements (Preds) of student's rois
             if 'ema_gt' in pred_type and self.get('ENABLE_SOFT_TEACHER', False):
                 pred_boxes_ema = targets_dict['batch_box_preds_teacher'][uind][mask].detach().clone()
@@ -307,9 +311,9 @@ class RoIHeadTemplate(nn.Module):
             metrics = metric_registry.get(tag)
             metric_inputs = {'preds': sample_rois, 'pred_scores': sample_roi_scores,
                              'ground_truths': sample_gts, 'targets': sample_targets,
-                             'pseudo_labels': sample_pls, 'pseudo_label_scores': sample_pl_scores,
+                             'pseudo_labels': sample_pls, 'pseudo_label_scores': sample_pl_scores,'cos_scores':sample_cos_scores,
                              'target_scores': sample_target_scores, 'pred_weights': sample_pred_weights,
-                             'pred_iou_wrt_pl': sample_gt_iou_of_rois,'shared_features':shared_features,'ckpt_save_dir':self.forward_ret_dict['ckpt_save_dir']}
+                             'pred_iou_wrt_pl': sample_gt_iou_of_rois,'ckpt_save_dir':self.forward_ret_dict['ckpt_save_dir']}
             metrics.update(**metric_inputs)
 
     def assign_targets(self, batch_dict):
@@ -322,6 +326,12 @@ class RoIHeadTemplate(nn.Module):
         # Adding points temporarily to the targets_dict for visualization inside update_metrics
         targets_dict['points'] = batch_dict['points']
 
+        if batch_dict['store_scores_in_pkl']:
+            num_point_in_rois = roiaware_pool3d_utils.points_in_boxes_cpu(targets_dict['points'][:, 1:4].cpu(),
+                                                                        targets_dict['rois'].view(-1,7).cpu()).squeeze(0).sum(1)
+            targets_dict['num_points_in_roi'] = num_point_in_rois.reshape(targets_dict['rois'].shape[0], \
+                                                                        targets_dict['rois'].shape[1])
+            
         rois = targets_dict['rois']  # (B, N, 7 + C)
         gt_of_rois = targets_dict['gt_of_rois']  # (B, N, 7 + C + 1)
         targets_dict['gt_of_rois_src'] = gt_of_rois.clone().detach()

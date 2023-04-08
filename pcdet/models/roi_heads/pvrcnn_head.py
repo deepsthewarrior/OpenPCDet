@@ -190,14 +190,8 @@ class PVRCNNHead(RoIHeadTemplate):
             cos_scores = []
             temp = self.rcnn_sh_mean.squeeze(1).unsqueeze(-1).to(shared_features.device)
             for i,sh in enumerate(shared_features):
-                cos_scores.append(F.cosine_similarity(temp[labels[i]].transpose(1,0),sh.transpose(1,0)))   
-        # cos_sh_fg = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_fg_mask]],dim=1) if valid_sh[cc_fg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=preds[0].device)                                               
-        # classwise_metrics['rcnn_sh_fg_mean'][cind] = cos_sh_fg.mean()
-        # # cos_sh_ = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_fg_mask]],dim=1) if valid_sh[cc_fg_mask].shape[0] != 0 else 'nan'                                                 
-        # cos_sh_bg = torch.stack([F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_sh[cls_bg_mask]],dim=1) if valid_sh[cls_bg_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=preds[0].device)
-        # classwise_metrics['rcnn_sh_bg_mean'][cind] = cos_sh_bg.mean()
-        # cos_sh_uc =  torch.stack([F.cosine_similarity(self.rcnn_sh_mean[cind],sh.unsqueeze(dim=0)) for sh in valid_sh[cc_uc_mask]],dim=1) if valid_sh[cc_uc_mask].shape[0] != 0 else torch.full((1,), float('nan'),device=preds[0].device)
-        # classwise_metrics['rcnn_sh_uc_mean'][cind] = cos_sh_uc.mean()
+                cos_scores.append(F.cosine_similarity(temp[labels[i]].transpose(1,0),sh.transpose(1,0)))  
+            targets_dict['cos_scores'] = torch.Tensor([cos_scores]).to(rcnn_cls.device).view(batch_dict['roi_labels'].shape[0],-1,1).squeeze(-1) 
         
         if not self.training or self.predict_boxes_when_training:
             batch_cls_preds, batch_box_preds = self.generate_predicted_boxes(
@@ -213,8 +207,7 @@ class PVRCNNHead(RoIHeadTemplate):
             targets_dict['rcnn_cls'] = rcnn_cls
             targets_dict['rcnn_reg'] = rcnn_reg
             targets_dict['shared_features'] = shared_features.view(batch_dict['roi_labels'].shape[0],-1,shared_features.shape[1])
-            if (self.training or self.print_loss_when_eval) and not disable_gt_roi_when_pseudo_labeling:
-                targets_dict['cos_scores'] = torch.Tensor([cos_scores]).to(rcnn_cls.device).view(batch_dict['roi_labels'].shape[0],-1,1).squeeze(-1)
+                
             self.forward_ret_dict = targets_dict
 
         return batch_dict
