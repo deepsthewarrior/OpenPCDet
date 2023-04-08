@@ -196,7 +196,7 @@ class RoIHeadTemplate(nn.Module):
         ema_preds_of_std_rois, ema_pred_scores_of_std_rois = [], []
         sample_gts = []
         sample_gt_iou_of_rois = []
-        sample_shared_features = []
+
         sample_cos_scores = []
         for i, uind in enumerate(unlabeled_inds):
             mask = (targets_dict['reg_valid_mask'][uind] > 0) if mask_type == 'reg' else (
@@ -212,8 +212,8 @@ class RoIHeadTemplate(nn.Module):
             sample_rois.append(roi_labeled_boxes)
             sample_roi_scores.append(roi_scores)
             sample_gt_iou_of_rois.append(gt_iou_of_rois)
-            sample_shared_features.append(shared_features)
-            rcnn_template = targets_dict['rcnn_template'].detach().clone()
+
+
             # Target info
             target_labeled_boxes = targets_dict['gt_of_rois_src'][uind][mask].detach().clone()
             target_scores = targets_dict['rcnn_cls_labels'][uind][mask].detach().clone()
@@ -316,7 +316,7 @@ class RoIHeadTemplate(nn.Module):
                              'ground_truths': sample_gts, 'targets': sample_targets,
                              'pseudo_labels': sample_pls, 'pseudo_label_scores': sample_pl_scores,
                              'target_scores': sample_target_scores, 'pred_weights': sample_pred_weights,'cos_scores':sample_cos_scores,
-                             'pred_iou_wrt_pl': sample_gt_iou_of_rois,'shared_features':sample_shared_features,'rcnn_template':rcnn_template,
+                             'pred_iou_wrt_pl': sample_gt_iou_of_rois,
                              'ckpt_save_dir':self.forward_ret_dict['ckpt_save_dir'], 'cur_epoch':targets_dict['cur_epoch']}
             metrics.update(**metric_inputs)
 
