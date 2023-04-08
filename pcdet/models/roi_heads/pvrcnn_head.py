@@ -52,7 +52,7 @@ class PVRCNNHead(RoIHeadTemplate):
             param = "sh"
             rcnn_sh_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0))
 
-        self.rcnn_sh_mean = torch.stack(rcnn_sh_mean)
+        self.rcnn_sh_mean = torch.stack(rcnn_sh_mean).clone().cpu()
         self.init_weights(weight_init='xavier')
 
         self.print_loss_when_eval = False
@@ -188,7 +188,7 @@ class PVRCNNHead(RoIHeadTemplate):
         if (self.training or self.print_loss_when_eval) and not disable_gt_roi_when_pseudo_labeling:
             labels = batch_dict['roi_labels'].view(shared_features.shape[0],-1).squeeze(1) - 1
             cos_scores = []
-            temp = self.rcnn_sh_mean.squeeze(1).unsqueeze(-1).to(shared_features.device)
+            temp = self.rcnn_sh_mean.squeeze(1).unsqueeze(-1).to(labels.device)
             for i,sh in enumerate(shared_features):
                 cos_scores.append(F.cosine_similarity(temp[labels[i]].transpose(1,0),sh.transpose(1,0)))  
             targets_dict['cos_scores'] = torch.Tensor([cos_scores]).to(rcnn_cls.device).view(batch_dict['roi_labels'].shape[0],-1,1).squeeze(-1) 
