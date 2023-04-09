@@ -52,7 +52,7 @@ class PVRCNNHead(RoIHeadTemplate):
             param = "sh"
             rcnn_sh_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0))
         self.rcnn_sh_mean_ = (torch.stack(rcnn_sh_mean).clone().cpu())
-        self.rcnn_sh_mean = self.rcnn_sh_mean_.cuda()
+        self.rcnn_sh_mean = self.rcnn_sh_mean_.detach().cuda()
         
         if dist.is_available():
             initialized = dist.is_initialized()
