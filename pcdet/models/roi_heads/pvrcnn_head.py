@@ -190,15 +190,16 @@ class PVRCNNHead(RoIHeadTemplate):
         shared_features = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
         rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
         rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)
+        # if (self.training or self.print_loss_when_eval) and not disable_gt_roi_when_pseudo_labeling:
+        #     labels = batch_dict['roi_labels'].view(shared_features.shape[0],-1).squeeze(1) - 1
+        #     cos_scores = []
+        #     temp = self.rcnn_sh_mean.squeeze(1).unsqueeze(-1).to(labels.device)
+        #     for i,sh in enumerate(shared_features):
+        #         cos_scores.append(F.cosine_similarity(temp[labels[i]].transpose(1,0),sh.transpose(1,0)))  
+        #     targets_dict['cos_scores'] = torch.Tensor([cos_scores]).to(rcnn_cls.device).view(batch_dict['roi_labels'].shape[0],-1,1).squeeze(-1)
+        #     targets_dict['cos_scores'].requires_grad = False
         if (self.training or self.print_loss_when_eval) and not disable_gt_roi_when_pseudo_labeling:
-            labels = batch_dict['roi_labels'].view(shared_features.shape[0],-1).squeeze(1) - 1
-            cos_scores = []
-            temp = self.rcnn_sh_mean.squeeze(1).unsqueeze(-1).to(labels.device)
-            for i,sh in enumerate(shared_features):
-                cos_scores.append(F.cosine_similarity(temp[labels[i]].transpose(1,0),sh.transpose(1,0)))  
-            targets_dict['cos_scores'] = torch.Tensor([cos_scores]).to(rcnn_cls.device).view(batch_dict['roi_labels'].shape[0],-1,1).squeeze(-1)
-            targets_dict['cos_scores'].requires_grad = False
-
+            targets_dict['cos_scores'] = torch.zeros(batch_dict['roi_labels'].shape).to(rcnn_cls.device)
         if not self.training or self.predict_boxes_when_training:
             batch_cls_preds, batch_box_preds = self.generate_predicted_boxes(
                 batch_size=batch_dict['batch_size'], rois=batch_dict['rois'], cls_preds=rcnn_cls, box_preds=rcnn_reg
