@@ -40,7 +40,8 @@ class PredQualityMetrics(Metric):
                              "pred_weight_uc", "pred_fn_rate", "pred_tp_rate", "pred_fp_ratio", "pred_ious_wrt_pl_fg",
                              "pred_ious_wrt_pl_fn", "pred_ious_wrt_pl_fp", "pred_ious_wrt_pl_tp", "score_fgs_tp",
                              "score_fgs_fn", "score_fgs_fp", "target_score_fn", "target_score_tp", "target_score_fp",
-                             "pred_weight_fn", "pred_weight_tp", "pred_weight_fp","cos_scores_fn","cos_scores_fp","cos_scores_tp"]
+                             "pred_weight_fn", "pred_weight_tp", "pred_weight_fp"]
+                            #  ,"cos_scores_fn","cos_scores_fp","cos_scores_tp"]
         
         self.min_overlaps = np.array([0.7, 0.5, 0.5, 0.7, 0.5, 0.7])
         self.class_agnostic_fg_thresh = 0.7
@@ -201,13 +202,13 @@ class PredQualityMetrics(Metric):
                             classwise_metrics['pred_weight_tp'][cind] = cls_pred_weight_cc_tp
                             cls_pred_weight_cc_fp = (valid_pred_weights * fp_mask).sum() / fp_mask.float().sum()
                             classwise_metrics['pred_weight_fp'][cind] = cls_pred_weight_cc_fp
-                        if valid_cos_scores is not None:
-                            cls_cos_scores_fg_mc = (valid_cos_scores * fn_mask.float()).sum() / fn_mask.sum()
-                            classwise_metrics['cos_scores_fn'][cind] = cls_cos_scores_fg_mc
-                            cls_cos_scores_cc_tp = (valid_cos_scores * tp_mask).sum() / tp_mask.float().sum()
-                            classwise_metrics['cos_scores_tp'][cind] = cls_cos_scores_cc_tp
-                            cls_cos_scores_cc_fp = (valid_cos_scores * fp_mask).sum() / fp_mask.float().sum()
-                            classwise_metrics['cos_scores_fp'][cind] = cls_cos_scores_cc_fp    
+                        # if valid_cos_scores is not None:
+                        #     cls_cos_scores_fg_mc = (valid_cos_scores * fn_mask.float()).sum() / fn_mask.sum()
+                        #     classwise_metrics['cos_scores_fn'][cind] = cls_cos_scores_fg_mc
+                        #     cls_cos_scores_cc_tp = (valid_cos_scores * tp_mask).sum() / tp_mask.float().sum()
+                        #     classwise_metrics['cos_scores_tp'][cind] = cls_cos_scores_cc_tp
+                        #     cls_cos_scores_cc_fp = (valid_cos_scores * fp_mask).sum() / fp_mask.float().sum()
+                        #     classwise_metrics['cos_scores_fp'][cind] = cls_cos_scores_cc_fp    
             
             for key, val in classwise_metrics.items():
                 # Note that unsqueeze is necessary because torchmetric performs the dist cat on dim 0.

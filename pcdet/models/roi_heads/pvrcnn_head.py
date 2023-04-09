@@ -53,7 +53,7 @@ class PVRCNNHead(RoIHeadTemplate):
         #     rcnn_sh_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0))
         # self.rcnn_sh_mean_ = (torch.stack(rcnn_sh_mean).clone().cpu())
         # self.rcnn_sh_mean = self.rcnn_sh_mean_.detach().cuda()
-        self.rcnn_sh_mean = torch.zeros(3,1,256).cuda()
+        self.rcnn_sh_mean = torch.zeros(3,1,256).cuda().detach()
         if dist.is_available():
             initialized = dist.is_initialized()
             if initialized:
@@ -199,7 +199,7 @@ class PVRCNNHead(RoIHeadTemplate):
         #     targets_dict['cos_scores'] = torch.Tensor([cos_scores]).to(rcnn_cls.device).view(batch_dict['roi_labels'].shape[0],-1,1).squeeze(-1)
         #     targets_dict['cos_scores'].requires_grad = False
         if (self.training or self.print_loss_when_eval) and not disable_gt_roi_when_pseudo_labeling:
-            targets_dict['cos_scores'] = torch.zeros(batch_dict['roi_labels'].shape).to(rcnn_cls.device)
+            targets_dict['cos_scores'] = torch.zeros(batch_dict['roi_labels'].shape).to(rcnn_cls.device).detach()
         if not self.training or self.predict_boxes_when_training:
             batch_cls_preds, batch_box_preds = self.generate_predicted_boxes(
                 batch_size=batch_dict['batch_size'], rois=batch_dict['rois'], cls_preds=rcnn_cls, box_preds=rcnn_reg
