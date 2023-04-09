@@ -43,17 +43,17 @@ class PVRCNNHead(RoIHeadTemplate):
             output_channels=self.box_coder.code_size * self.num_class,
             fc_list=self.model_cfg.REG_FC
         )
-        with open('ema_sh4468_0.9.pkl','rb') as f:
-            self.rcnn_features = pickle.loads(f.read())
-        Cls = ['Car','Ped','Cyc']
-        rcnn_sh_mean = []
-        for cls in Cls:
-            avg = "mean"
-            param = "sh"
-            rcnn_sh_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0))
-        self.rcnn_sh_mean_ = (torch.stack(rcnn_sh_mean).clone().cpu())
-        self.rcnn_sh_mean = self.rcnn_sh_mean_.detach().cuda()
-        
+        # with open('ema_sh4468_0.9.pkl','rb') as f:
+        #     self.rcnn_features = pickle.loads(f.read())
+        # Cls = ['Car','Ped','Cyc']
+        # rcnn_sh_mean = []
+        # for cls in Cls:
+        #     avg = "mean"
+        #     param = "sh"
+        #     rcnn_sh_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0))
+        # self.rcnn_sh_mean_ = (torch.stack(rcnn_sh_mean).clone().cpu())
+        # self.rcnn_sh_mean = self.rcnn_sh_mean_.detach().cuda()
+        self.rcnn_sh_mean = torch.zeros(3,1,256).cuda()
         if dist.is_available():
             initialized = dist.is_initialized()
             if initialized:
