@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from ...ops.pointnet2.pointnet2_stack import pointnet2_modules as pointnet2_stack_modules
 from ...utils import common_utils
 from .roi_head_template import RoIHeadTemplate
-
+import torch.distributed as dist
 
 class PVRCNNHead(RoIHeadTemplate):
     def __init__(self, input_channels, model_cfg, num_class=1,
@@ -58,7 +58,7 @@ class PVRCNNHead(RoIHeadTemplate):
             initialized = dist.is_initialized()
             if initialized:
                 dist.broadcast(self.rcnn_sh_mean, src=0)
-                
+
         self.init_weights(weight_init='xavier')
 
         self.print_loss_when_eval = False
