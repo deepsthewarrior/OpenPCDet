@@ -33,7 +33,10 @@ class PVRCNNHead(RoIHeadTemplate):
 
         self.shared_fc_layer = nn.Sequential(*shared_fc_list)
 
-        self.cls_layers = self.make_fc_layers(
+        self.cls_layers_1 = self.make_fc_layers_1(
+            input_channels=pre_channel, output_channels=self.num_class, fc_list=self.model_cfg.CLS_FC
+        )
+        self.cls_layers_2 = self.make_fc_layers_2(
             input_channels=pre_channel, output_channels=self.num_class, fc_list=self.model_cfg.CLS_FC
         )
         self.reg_layers = self.make_fc_layers(
@@ -161,7 +164,9 @@ class PVRCNNHead(RoIHeadTemplate):
             contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxN, C, 6, 6, 6)
 
         shared_features = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
-        rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
+        rcnn_cls_interim = self.cls_layers_1(shared_features)  # (B, 1 or 2)
+        rcnn_cls = self.cls_layers_2(rcnn_cls_interim).transpose(1, 2).contiguous().squeeze(dim=1)
+        
         rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)
 
         if not self.training or self.predict_boxes_when_training:
