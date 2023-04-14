@@ -178,11 +178,16 @@ class PVRCNNHead(RoIHeadTemplate):
         pooled_features = pooled_features.permute(0, 2, 1).\
             contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxN, C, 6, 6, 6)
 
-        # x = pooled_features.view(batch_size_rcnn, -1, 1).clone().detach()
         shared_features = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
-        rcnn_cls_interim = self.cls_layers_1(shared_features)  # (B, 1 or 2)
-        rcnn_cls = self.cls_layers_2(rcnn_cls_interim).transpose(1, 2).contiguous().squeeze(dim=1)
+        rcnn_cls_interim = self.cls_layers[:-1](shared_features)
+        rcnn_cls = self.cls_layers[-1](rcnn_cls_interim).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
         rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)
+        
+        # x = pooled_features.view(batch_size_rcnn, -1, 1).clone().detach()
+        # shared_features = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
+        # rcnn_cls_interim = self.cls_layers_1(shared_features)  # (B, 1 or 2)
+        # rcnn_cls = self.cls_layers_2(rcnn_cls_interim).transpose(1, 2).contiguous().squeeze(dim=1)
+        # rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)
 
         # rcnn_reg_interim = self.reg_layers_1(shared_features)
         # rcnn_reg = self.reg_layers_2(rcnn_reg_interim).transpose(1, 2).contiguous().squeeze(dim=1)
