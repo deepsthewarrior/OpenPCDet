@@ -203,15 +203,15 @@ class PVRCNN_SSL(Detector3DTemplate):
 
             for inds in labeled_inds:
                 temp = {}
-                temp['pred_scores'] = pred_dicts_gap[inds]['pred_scores_all']
-                temp['pred_labels'] = (pred_dicts_gap[inds]['label_preds'])
-                temp['iou'] = (pred_dicts_gap[inds]['iou'])
-                temp['gt_assignment'] = (pred_dicts_gap[inds]['gt_assignment'])
-                temp['selected'] = (pred_dicts_gap[inds]['selected'])
-                temp['shared_features'] = (pred_dicts_gap[inds]['shared_features'])
-                temp['rcnn_cls_interim'] = (pred_dicts_gap[inds]['rcnn_cls_interim'])
+                temp['pred_scores'] = pred_dicts_gap[inds]['pred_scores_all'].to('cuda:0')
+                temp['pred_labels'] = (pred_dicts_gap[inds]['label_preds']).to('cuda:0')
+                temp['iou'] = (pred_dicts_gap[inds]['iou']).to('cuda:0')
+                temp['gt_assignment'] = (pred_dicts_gap[inds]['gt_assignment']).to('cuda:0')
+                temp['selected'] = (pred_dicts_gap[inds]['selected']).to('cuda:0')
+                temp['shared_features'] = (pred_dicts_gap[inds]['shared_features']).to('cuda:0')
+                temp['rcnn_cls_interim'] = (pred_dicts_gap[inds]['rcnn_cls_interim']).to('cuda:0')
                 # temp['rcnn_reg_interim'] = (pred_dicts_gap[inds]['rcnn_reg_interim'])
-                temp['gt_label'] = (pred_dicts_gap[inds]['gt_label'])
+                temp['gt_label'] = (pred_dicts_gap[inds]['gt_label']).to('cuda:0')
                 self.shared_pkl['ens'].append(temp)
 
 
