@@ -33,12 +33,12 @@ class PVRCNNHead(RoIHeadTemplate):
 
         self.shared_fc_layer = nn.Sequential(*shared_fc_list)
 
-        # self.cls_layers_1 = self.make_half_fc_layers(
-        #     input_channels=pre_channel, output_channels=self.num_class, fc_list=self.model_cfg.CLS_FC
-        # )
-        # self.cls_layers_2 = self.make_final_fc_layers(
-        #     input_channels=pre_channel, output_channels=self.num_class, fc_list=self.model_cfg.CLS_FC
-        # )
+        self.cls_layers_1 = self.make_fc_layers_1(
+            input_channels=pre_channel, output_channels=self.num_class, fc_list=self.model_cfg.CLS_FC
+        )
+        self.cls_layers_2 = self.make_fc_layers_2(
+            input_channels=pre_channel, output_channels=self.num_class, fc_list=self.model_cfg.CLS_FC
+        )
         # self.reg_layers_1 = self.make_half_fc_layers(
         #     input_channels=pre_channel,
         #     output_channels=self.box_coder.code_size * self.num_class,
@@ -180,13 +180,14 @@ class PVRCNNHead(RoIHeadTemplate):
 
         # x = pooled_features.view(batch_size_rcnn, -1, 1).clone().detach()
         shared_features = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
-        rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
+        rcnn_cls_interim = self.cls_layers_1(shared_features)  # (B, 1 or 2)
+        rcnn_cls = self.cls_layers_2(rcnn_cls_interim).transpose(1, 2).contiguous().squeeze(dim=1)
         rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)
 
-        # rcnn_cls_interim = self.cls_layers_1(shared_features)
-        # rcnn_cls = self.cls_layers_2(rcnn_cls_interim).transpose(1, 2).contiguous().squeeze(dim=1)
         # rcnn_reg_interim = self.reg_layers_1(shared_features)
         # rcnn_reg = self.reg_layers_2(rcnn_reg_interim).transpose(1, 2).contiguous().squeeze(dim=1)
+        # rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
+        # rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)
 
         if not self.training or self.predict_boxes_when_training:
             batch_cls_preds, batch_box_preds = self.generate_predicted_boxes(
@@ -197,7 +198,7 @@ class PVRCNNHead(RoIHeadTemplate):
             batch_dict['batch_box_preds'] = batch_box_preds
             batch_dict['cls_preds_normalized'] = False
             batch_dict['shared_features'] = shared_features.view(batch_box_preds.shape[0],-1,shared_features.shape[1])
-            # batch_dict['rcnn_cls_interim'] = rcnn_cls_interim.view(batch_box_preds.shape[0],-1,rcnn_cls_interim.shape[1])
+            batch_dict['rcnn_cls_interim'] = rcnn_cls_interim.view(batch_box_preds.shape[0],-1,rcnn_cls_interim.shape[1])
             # batch_dict['rcnn_reg_interim'] = rcnn_reg_interim.view(batch_box_preds.shape[0],-1,rcnn_reg_interim.shape[1])
             
             # Temporarily add infos to targets_dict for metrics

@@ -209,7 +209,7 @@ class PVRCNN_SSL(Detector3DTemplate):
                 temp['gt_assignment'] = (pred_dicts_gap[inds]['gt_assignment'])
                 temp['selected'] = (pred_dicts_gap[inds]['selected'])
                 temp['shared_features'] = (pred_dicts_gap[inds]['shared_features'])
-                # temp['rcnn_cls_interim'] = (pred_dicts_gap[inds]['rcnn_cls_interim'])
+                temp['rcnn_cls_interim'] = (pred_dicts_gap[inds]['rcnn_cls_interim'])
                 # temp['rcnn_reg_interim'] = (pred_dicts_gap[inds]['rcnn_reg_interim'])
                 temp['gt_label'] = (pred_dicts_gap[inds]['gt_label'])
                 self.shared_pkl['ens'].append(temp)
@@ -223,7 +223,7 @@ class PVRCNN_SSL(Detector3DTemplate):
             # self.shared_pkl['']
 
             output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]
-            shared_path = os.path.join(output_dir, 'only_sh.pkl')
+            shared_path = os.path.join(output_dir, 'only_sh_cls.pkl')
             pickle.dump(self.shared_pkl, open(shared_path, 'wb'))
 
             # Create new dict for weakly aug.(WA) data for teacher - Eg. flip along x axis
