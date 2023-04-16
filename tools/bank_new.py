@@ -2,7 +2,7 @@ import pickle
 import torch
 import _random
 
-file_path = "/mnt/data/deka01/debug_OpenPCDet/tools/only_sh.pkl"
+file_path = "/mnt/data/deka01/debug_OpenPCDet/tools/final_only_shcls.pkl"
 # open the file for reading in binary mode
 with open(file_path, "rb") as file:
     # load the contents of the file using pickle
@@ -36,25 +36,30 @@ for val in data['ens']:
     final_sel_a = final_sel & pred_selected
     final_preds = pred_labels[selected][final_sel_a]
     final_shared = val['shared_features'][selected][final_sel_a]
-    # cls_inter = val['rcnn_cls_interim'][selected][final_sel]
-    # reg_inter = val['rcnn_reg_interim'][selected][final_sel]
+    cls_inter = val['rcnn_cls_interim'][selected][final_sel_a]
+    # reg_inter = val['rcnn_reg_interim'][selected][final_sel_a]
 
-    # car_cls = cls_inter[final_preds == 1]
+    car_cls = cls_inter[final_preds == 1]
     # car_reg = reg_inter[final_preds == 1]
     car_sh = final_shared[final_preds == 1]
     for i,feature in enumerate(car_sh):
         features['Car_sh'].append(car_sh[i])
-        
+        features['Car_cls'].append(car_cls[i]) 
+
     ped_sh = final_shared[final_preds == 2]
+    ped_cls = cls_inter[final_preds == 2]
     for i,feature in enumerate(ped_sh):
         features['Ped_sh'].append(ped_sh[i])
+        features['Ped_cls'].append(ped_cls[i])
 
     cyc_sh = final_shared[final_preds == 3]
+    cyc_cls = cls_inter[final_preds == 3]
     for i,feature in enumerate(cyc_sh):
         features['Cyc_sh'].append(cyc_sh[i])
+        features['Cyc_cls'].append(cyc_cls[i])
 
 print("Done")
-with open('featbank_gaussian.pkl','wb') as f:
+with open('cls_bank.pkl','wb') as f:
         pickle.dump(features,f)
 
 # print("****pkl****")

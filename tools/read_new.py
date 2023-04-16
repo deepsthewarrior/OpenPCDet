@@ -7,7 +7,7 @@ import random
 # with open(file_path, 'rb') as f:
 #     serialized_object = torch.load(f, map_location=device)
 #     print(serialized_object)
-file_path = '/mnt/data/deka01/debug_OpenPCDet/tools/featbank_sh_iou_cls_0.5.pkl'
+file_path = '/mnt/data/deka01/debug_OpenPCDet/tools/cls_bank.pkl'
 # open the file for reading in binary mode
 with open(file_path, "rb") as file:
     # load the contents of the file using pickle
@@ -18,70 +18,91 @@ with open(file_path, "rb") as file:
 
 feature = {}
 
+car_cls = torch.zeros([data['Car_cls'][0].shape[0]],device=data['Car_cls'][0].device)
 car_sh = torch.zeros([data['Car_sh'][0].shape[0]],device=data['Car_sh'][0].device)
 car_sh_mean = car_sh.squeeze(dim=0)
+car_cls_mean = car_cls.squeeze(dim=0)
 
+ped_cls = torch.zeros([data['Ped_cls'][0].shape[0]],device=data['Ped_cls'][0].device)
 ped_sh = torch.zeros([data['Ped_sh'][0].shape[0]],device=data['Ped_sh'][0].device)
 ped_sh_mean = ped_sh.squeeze(dim=0)
+ped_cls_mean = ped_cls.squeeze(dim=0)
 
+cyc_cls = torch.zeros([data['Cyc_cls'][0].shape[0]],device=data['Cyc_cls'][0].device)
 cyc_sh = torch.zeros([data['Cyc_sh'][0].shape[0]],device=data['Cyc_sh'][0].device)
 cyc_sh_mean = cyc_sh.squeeze(dim=0)
-
+cyc_cls_mean = cyc_cls.squeeze(dim=0) 
 
 
 Car_sh = data['Car_sh']
 Ped_sh = data['Ped_sh']
 Cyc_sh = data['Cyc_sh']
+Car_cls = data['Car_cls']
+Ped_cls = data['Ped_cls']
+Cyc_cls = data['Cyc_cls']
 
 alpha = 0.9
 
-for i,cls_feat in enumerate(Car_sh):
+for i,cls_feat in enumerate(Car_cls):
     car_sh = Car_sh[i]*(1-alpha) + car_sh*(alpha)
+    car_cls = cls_feat*(1-alpha) + car_cls*(alpha)
 
-
-for  i,cls_feat in enumerate(Ped_sh):
+for  i,cls_feat in enumerate(Ped_cls):
     ped_sh = Ped_sh[i]*(1-alpha) + ped_sh*(alpha)
- 
+    ped_cls = cls_feat*(1-alpha) + ped_cls*(alpha)
 
-for  i,cls_feat in enumerate(Cyc_sh):
+for  i,cls_feat in enumerate(Cyc_cls):
     cyc_sh = Cyc_sh[i]*(1-alpha) + cyc_sh*(alpha)
+    cyc_cls = cls_feat*(1-alpha) + cyc_cls*(alpha)
 
-
-
+Car_cls_sq =  [t.squeeze(dim=0) for t in Car_cls]
 Car_sh_sq = [t.squeeze(dim=0) for t in Car_sh]
 Car_sh_mean = torch.mean(torch.stack(Car_sh_sq),dim=0)
+Car_cls_mean = torch.mean(torch.stack(Car_cls_sq),dim=0)
 
+Ped_cls_sq =  [t.squeeze(dim=0) for t in Ped_cls]
 Ped_sh_sq = [t.squeeze(dim=0) for t in Ped_sh]
 Ped_sh_mean = torch.mean(torch.stack(Ped_sh_sq),dim=0)
+Ped_cls_mean = torch.mean(torch.stack(Ped_cls_sq),dim=0)
 
+Cyc_cls_sq =  [t.squeeze(dim=0) for t in Cyc_cls]
 Cyc_sh_sq = [t.squeeze(dim=0) for t in Cyc_sh]
 Cyc_sh_mean = torch.mean(torch.stack(Cyc_sh_sq),dim=0)
+Cyc_cls_mean = torch.mean(torch.stack(Cyc_cls_sq),dim=0)
 
 feature['Car'] = {}
 feature['Ped'] = {}
 feature['Cyc'] = {}
 
 feature['Car']['ema'] = {
+    'cls':car_cls,
     'sh':car_sh,
     }
 feature['Car']['mean'] = {
     'sh':Car_sh_mean,
+    'cls':Car_cls_mean
 }
 
 feature['Ped']['ema'] = {
+    'cls':ped_cls,
     'sh':ped_sh,
     }
 feature['Ped']['mean'] = {
     'sh':Ped_sh_mean,
+    'cls':Ped_cls_mean
 }
 
 feature['Cyc']['ema'] = {
+    'cls':cyc_cls,
     'sh':cyc_sh,
     }
 feature['Cyc']['mean'] = {
     'sh':Cyc_sh_mean,
+    'cls':Cyc_cls_mean
 }
-fl_name = "ema_sh_0.5_ped" +str(len(data['Ped_sh']))+"_"+ str(alpha) + ".pkl"
+
+# fl_name = "ema_cls_sh_0.5_ped" +str(len(data['Ped_sh']))+"_"+ str(alpha) + ".pkl"
+fl_name = "ema_cls_sh.pkl"
 with open(fl_name, "wb") as f:
     pickle.dump(feature,f)
 
