@@ -43,22 +43,31 @@ class PVRCNNHead(RoIHeadTemplate):
             output_channels=self.box_coder.code_size * self.num_class,
             fc_list=self.model_cfg.REG_FC
         )
-        with open('ema_sh4468_0.9.pkl','rb') as f:
+        with open('ema_cls_sh.pkl','rb') as f:
             self.rcnn_features = pickle.loads(f.read())
         Cls = ['Car','Ped','Cyc']
         rcnn_sh_mean = []
+        rcnn_cls_mean = []
+        avg = "mean"
+        param = "sh"
         for cls in Cls:
-            avg = "mean"
-            param = "sh"
             rcnn_sh_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0))
+
+        avg = "mean"
+        param = "cls"
+        for cls in Cls:
+            rcnn_cls_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0))
+
         self.rcnn_sh_mean_ = (torch.stack(rcnn_sh_mean).clone().cpu())
         self.rcnn_sh_mean = self.rcnn_sh_mean_.detach().cuda()
-        
+        self.rcnn_cls_mean_ = (torch.stack(rcnn_cls_mean).clone().cpu())
+        self.rcnn_cls_mean = self.rcnn_cls_mean_.detach().cuda()    
+
         if dist.is_available():
             initialized = dist.is_initialized()
             if initialized:
                 dist.broadcast(self.rcnn_sh_mean, src=0)
-       
+                dist.broadcast(self.rcnn_cls_mean, src=0)
         self.init_weights(weight_init='xavier')
         self.print_loss_when_eval = False
 
@@ -188,16 +197,25 @@ class PVRCNNHead(RoIHeadTemplate):
             contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxN, C, 6, 6, 6) 
 
         shared_features = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
-        rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
+        rcnn_cls_interim = self.cls_layers[:-1](shared_features)
+        rcnn_cls = self.cls_layers[-1](rcnn_cls_interim).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2) 
         rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)
+
         if (self.training or self.print_loss_when_eval) and not disable_gt_roi_when_pseudo_labeling:
             labels = batch_dict['roi_labels'].view(shared_features.shape[0],-1).squeeze(1) - 1
+            cos_interim_scores = []
             cos_scores = []
             temp = self.rcnn_sh_mean.squeeze(1).unsqueeze(-1).to(labels.device)
+            cls_temp = self.rcnn_cls_mean.squeeze(1).unsqueeze(-1).to(labels.device)
+
             for i,sh in enumerate(shared_features):
-                cos_scores.append(F.cosine_similarity(temp[labels[i]].transpose(1,0),sh.transpose(1,0)))  
+                cos_scores.append(F.cosine_similarity(temp[labels[i]].transpose(1,0),sh.transpose(1,0))) 
+                cos_interim_scores.append(F.cosine_similarity(cls_temp[labels[i]].transpose(1,0),rcnn_cls_interim[i].transpose(1,0)))
+
+            targets_dict['cos_cls'] = torch.Tensor([cos_interim_scores]).to(rcnn_cls.device).view(batch_dict['roi_labels'].shape[0],-1,1).squeeze(-1)     
             targets_dict['cos_scores'] = torch.Tensor([cos_scores]).to(rcnn_cls.device).view(batch_dict['roi_labels'].shape[0],-1,1).squeeze(-1)
             targets_dict['cos_scores'].requires_grad = False
+            targets_dict['cos_cls'].requires_grad = False
 
         if not self.training or self.predict_boxes_when_training:
             batch_cls_preds, batch_box_preds = self.generate_predicted_boxes(
