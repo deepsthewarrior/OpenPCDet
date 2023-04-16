@@ -191,19 +191,30 @@ class PVRCNNHead(RoIHeadTemplate):
             contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxN, C, 6, 6, 6) 
 
         shared_features = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
-        rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
+        rcnn_cls_interim = self.cls_layers[:-1](shared_features)
+        rcnn_cls = self.cls_layers[-1](rcnn_cls_interim).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)  
+        # rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
         rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)
 
         ##(Student only. Since the shared features are available after the "IF" in line 164, we do it again)
         if (self.training or self.print_loss_when_eval) and not disable_gt_roi_when_pseudo_labeling: 
             labels = batch_dict['roi_labels'].view(shared_features.shape[0],-1).squeeze(1) - 1
             cos_scores = []
+            cos_interim_scores = []
             self.rcnn_sh_mean = batch_dict['rcnn_template']
+            self.rcnn_cls_mean = batch_dict['rcnn_cls_template']
             temp = self.rcnn_sh_mean.squeeze(1).unsqueeze(-1).to(shared_features.device)
+            cls_temp = self.rcnn_cls_mean.squeeze(1).unsqueeze(-1).to(labels.device)
             for i,sh in enumerate(shared_features):
                 cos_scores.append(F.cosine_similarity(temp[labels[i]].transpose(1,0),sh.transpose(1,0)))
+                cos_interim_scores.append(F.cosine_similarity(cls_temp[labels[i]].transpose(1,0),rcnn_cls_interim[i].transpose(1,0))) 
+
             targets_dict['rcnn_template'] = batch_dict['rcnn_template'] #for metrics   
+            targets_dict['rcnn_cls_template'] = batch_dict['rcnn_cls_template'] #for metrics   
             targets_dict['cos_scores'] = torch.Tensor([cos_scores]).to(rcnn_cls.device).view(batch_dict['roi_labels'].shape[0],-1,1).squeeze(-1)
+            targets_dict['cos_cls'] = torch.Tensor([cos_interim_scores]).to(rcnn_cls.device).view(batch_dict['roi_labels'].shape[0],-1,1).squeeze(-1) 
+            targets_dict['cos_cls'].requires_grad = False
+            targets_dict['cos_scores'].requires_grad = False
 
         if not self.training or self.predict_boxes_when_training: #(,Student)
             batch_cls_preds, batch_box_preds = self.generate_predicted_boxes(
@@ -214,13 +225,15 @@ class PVRCNNHead(RoIHeadTemplate):
             batch_dict['batch_box_preds'] = batch_box_preds
             batch_dict['cls_preds_normalized'] = False
             batch_dict['shared_features'] = shared_features.view(batch_box_preds.shape[0],-1,shared_features.shape[1])
-
+            batch_dict['rcnn_cls_interim'] = rcnn_cls_interim.view(batch_box_preds.shape[0],-1,shared_features.shape[1])
             # Temporarily add infos to targets_dict for metrics
-            targets_dict['batch_box_preds'] = batch_box_preds            
+            targets_dict['batch_box_preds'] = batch_box_preds       
+                 
         if self.training or self.print_loss_when_eval: #(Teacher,Student)
             targets_dict['rcnn_cls'] = rcnn_cls
             targets_dict['rcnn_reg'] = rcnn_reg
             targets_dict['shared_features'] = shared_features.view(batch_dict['roi_labels'].shape[0],-1,shared_features.shape[1])
+            targets_dict['rcnn_cls_interim'] = rcnn_cls_interim.view(batch_dict['roi_labels'].shape[0],-1,shared_features.shape[1])
             
             self.forward_ret_dict = targets_dict
             

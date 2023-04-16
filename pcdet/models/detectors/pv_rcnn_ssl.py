@@ -153,15 +153,22 @@ class PVRCNN_SSL(Detector3DTemplate):
         self.classes = ['Car','Ped','Cyc']
         self.ema_template= {val: [] for val in self.classes}
         self.updated_template = {val: [] for val in self.classes}
-        with open('ema_sh4468_0.9.pkl','rb') as f:
+        self.updated_cls_template ={val: [] for val in self.classes}
+        with open('ema_cls_sh.pkl','rb') as f:
             self.rcnn_features = pickle.loads(f.read())
         rcnn_sh_mean = []
+        rcnn_cls_mean = []
+        avg = "mean"
+        param = "sh"
         for cls in self.classes:
-            avg = "mean"
-            param = "sh"
             rcnn_sh_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0).detach().cpu())
         self.rcnn_sh_mean= torch.stack(rcnn_sh_mean)
-        
+        avg = "mean"
+        param = "cls"
+        for cls in self.classes:
+            rcnn_cls_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0))
+        self.rcnn_cls_mean= torch.stack(rcnn_cls_mean)
+
     def forward(self, batch_dict):
         if self.training:
             labeled_mask = batch_dict['labeled_mask'].view(-1)
@@ -276,6 +283,7 @@ class PVRCNN_SSL(Detector3DTemplate):
             batch_dict['metric_registry'] = self.metric_registry
             batch_dict['ori_unlabeled_boxes'] = ori_unlabeled_boxes
             batch_dict['rcnn_template'] = self.rcnn_sh_mean
+            batch_dict['rcnn_cls_template'] = self.rcnn_cls_mean
             batch_dict['store_scores_in_pkl'] = self.model_cfg.STORE_SCORES_IN_PKL
             for cur_module in self.pv_rcnn.module_list:
                 if cur_module.model_cfg['NAME'] == 'PVRCNNHead' and self.model_cfg['ROI_HEAD'].get('ENABLE_RCNN_CONSISTENCY', False):
@@ -545,7 +553,7 @@ class PVRCNN_SSL(Detector3DTemplate):
             gt_assign = pred_dicts_feat[inds]['gt_assignment']
             selected = pred_dicts_feat[inds]['selected']
             shared_features = pred_dicts_feat[inds]['shared_features']
-            # temp['rcnn_cls_interim'] = (pred_dicts_feat[inds]['rcnn_cls_interim'])
+            cls_features = (pred_dicts_feat[inds]['rcnn_cls_interim'])
             # temp['rcnn_reg_interim'] = (pred_dicts_feat[inds]['rcnn_reg_interim'])
             gt_labels = (pred_dicts_feat[inds]['gt_label'])
 
@@ -566,25 +574,37 @@ class PVRCNN_SSL(Detector3DTemplate):
             final_sel_a = final_sel & pred_selected
             final_preds = pred_labels[selected][final_sel_a]
             final_shared = shared_features[selected][final_sel_a]
+            final_cls = cls_features[selected][final_sel_a]
+
             car_sh = final_shared[final_preds == 1]
             ped_sh = final_shared[final_preds == 2]
             cyc_sh = final_shared[final_preds == 3]
-            
+            car_cls = final_cls[final_preds == 1]
+            ped_cls = final_cls[final_preds == 2]
+            cyc_cls = final_cls[final_preds == 3]
+
             for i,feature in enumerate(car_sh):
                 self.updated_template['Car'].append(car_sh[i].clone().detach())
+                self.updated_cls_template['Car'].append(car_cls[i].clone().detach())
+
             for i,feature in enumerate(ped_sh):
                 self.updated_template['Ped'].append(ped_sh[i].clone().detach())
+                self.updated_cls_template['Ped'].append(ped_cls[i].clone().detach())
+
             for i,feature in enumerate(cyc_sh):
                 self.updated_template['Cyc'].append(cyc_sh[i].clone().detach())
-            
+                self.updated_cls_template['Cyc'].append(cyc_cls[i].clone().detach())            
 
         if batch_dict['cur_iteration']+1 % 20 == 0:
             alpha = 0.9 
             for i,cls in enumerate(self.classes): 
                 if len(self.updated_template[cls]) != 0:
                     update_feat = torch.mean(torch.stack(self.updated_template[cls]),dim=0)
+                    update_cls_feat = torch.mean(torch.stack(self.updated_cls_template[cls]),dim=0)
                     self.rcnn_sh_mean[i] = (self.rcnn_sh_mean[i].to(update_feat.device)*alpha) + ((1-alpha)*update_feat)
-                self.updated_template = {val: [] for val in self.classes}            
+                    self.rcnn_cls_mean[i] = (self.rcnn_cls_mean[i].to(update_cls_feat.device)*alpha) + ((1-alpha)*update_cls_feat)
+                self.updated_template = {val: [] for val in self.classes}   
+                self.updated_cls_template = {val: [] for val in self.classes}   
 
     def ensemble_post_processing(self, batch_dict_a, batch_dict_b, unlabeled_inds, ensemble_option=None):
         # TODO(farzad) what about roi_labels and roi_scores in following options?
