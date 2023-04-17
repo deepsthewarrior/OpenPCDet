@@ -162,12 +162,21 @@ class PVRCNN_SSL(Detector3DTemplate):
         param = "sh"
         for cls in self.classes:
             rcnn_sh_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0).detach().cpu())
-        self.rcnn_sh_mean= torch.stack(rcnn_sh_mean)
+        self.rcnn_sh_mean_= torch.stack(rcnn_sh_mean)
         avg = "mean"
         param = "cls"
         for cls in self.classes:
             rcnn_cls_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0))
-        self.rcnn_cls_mean= torch.stack(rcnn_cls_mean)
+        self.rcnn_cls_mean_= torch.stack(rcnn_cls_mean)
+    
+        self.rcnn_sh_mean = self.rcnn_sh_mean_.detach().cuda()
+        self.rcnn_cls_mean = self.rcnn_cls_mean_.detach().cuda()
+
+        if dist.is_available():
+            initialized = dist.is_initialized()
+            if initialized:
+                dist.broadcast(self.rcnn_sh_mean, src=0)
+                dist.broadcast(self.rcnn_cls_mean,src=0)
 
     def forward(self, batch_dict):
         if self.training:
