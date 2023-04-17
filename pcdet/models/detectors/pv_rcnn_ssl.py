@@ -148,7 +148,7 @@ class PVRCNN_SSL(Detector3DTemplate):
         self.supervise_mode = model_cfg.SUPERVISE_MODE
         cls_bg_thresh = model_cfg.ROI_HEAD.TARGET_CONFIG.CLS_BG_THRESH
         self.metric_registry = MetricRegistry(dataset=self.dataset, model_cfg=model_cfg)
-        vals_to_store = ['iou_roi_pl', 'iou_roi_gt', 'pred_scores', 'weights', 'class_labels', 'iteration','cos_scores','num_points_in_roi']
+        vals_to_store = ['iou_roi_pl', 'iou_roi_gt', 'pred_scores', 'weights', 'class_labels', 'iteration','cos_scores','cos_cls','num_points_in_roi']
         self.val_dict = {val: [] for val in vals_to_store}
 
     def forward(self, batch_dict):
@@ -439,7 +439,10 @@ class PVRCNN_SSL(Detector3DTemplate):
 
                         cur_cos_scores = self.pv_rcnn.roi_head.forward_ret_dict['cos_scores'][cur_unlabeled_ind]
                         self.val_dict['cos_scores'].extend(cur_cos_scores.tolist())
- 
+                         
+                        cur_cos_cls = self.pv_rcnn.roi_head.forward_ret_dict['cos_cls'][cur_unlabeled_ind]
+                        self.val_dict['cos_cls'].extend(cur_cos_cls.tolist())
+
                         cur_num_points_roi = self.pv_rcnn.roi_head.forward_ret_dict['num_points_in_roi'][cur_unlabeled_ind]
                         self.val_dict['num_points_in_roi'].extend(cur_num_points_roi.tolist())
 
