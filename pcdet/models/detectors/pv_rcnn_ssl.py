@@ -161,7 +161,7 @@ class PVRCNN_SSL(Detector3DTemplate):
         avg = "mean"
         param = "sh"
         for cls in self.classes:
-            rcnn_sh_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0).detach().cpu())
+            rcnn_sh_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0))
         self.rcnn_sh_mean_= torch.stack(rcnn_sh_mean)
         avg = "mean"
         param = "cls"
