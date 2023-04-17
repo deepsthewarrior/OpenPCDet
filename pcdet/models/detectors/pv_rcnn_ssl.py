@@ -463,7 +463,10 @@ class PVRCNN_SSL(Detector3DTemplate):
 
                         cur_cos_scores = self.pv_rcnn.roi_head.forward_ret_dict['cos_scores'][cur_unlabeled_ind]
                         self.val_dict['cos_scores'].extend(cur_cos_scores.tolist())
- 
+                        
+                        cur_cos_cls = self.pv_rcnn.roi_head.forward_ret_dict['cos_cls'][cur_unlabeled_ind]
+                        self.val_dict['cos_cls'].extend(cur_cos_cls.tolist())
+
                         cur_num_points_roi = self.pv_rcnn.roi_head.forward_ret_dict['num_points_in_roi'][cur_unlabeled_ind]
                         self.val_dict['num_points_in_roi'].extend(cur_num_points_roi.tolist())
 
