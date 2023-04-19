@@ -639,7 +639,7 @@ class RoIHeadTemplate(nn.Module):
                     ulb_fg_mask = self.forward_ret_dict['rcnn_cls_labels'][unlabeled_inds] == 1
                     unlabeled_rcnn_cls_weights[ulb_interval_mask] = self.forward_ret_dict['cos_scores'][unlabeled_inds][ulb_interval_mask]
                     unlabeled_rcnn_cls_weights[ulb_fg_mask] = torch.clamp((self.forward_ret_dict['cos_scores'][unlabeled_inds][ulb_fg_mask] + 0.22),max=1.00)
-                    self.forward_ret_dict['rcnn_cls_labels'][ulb_interval_mask] = torch.clamp((self.forward_ret_dict['cos_scores'][ulb_interval_mask] + 0.15),max=0.80)   
+                    self.forward_ret_dict['rcnn_cls_labels'][ulb_interval_mask] = torch.clamp((self.forward_ret_dict['cos_scores'][unlabeled_inds][ulb_interval_mask] + 0.15),max=0.80)   
                     ulb_bg_mask = self.forward_ret_dict['rcnn_cls_labels'][unlabeled_inds] == 0
                     unlabeled_rcnn_cls_weights[ulb_bg_mask] = 1 - self.forward_ret_dict['cos_scores'][unlabeled_inds][ulb_bg_mask]  
                 elif self.model_cfg['LOSS_CONFIG']['UL_RCNN_CLS_WEIGHT_TYPE'] == 'cos-uc-rev-bg':
@@ -648,7 +648,7 @@ class RoIHeadTemplate(nn.Module):
                     ulb_fg_mask = self.forward_ret_dict['rcnn_cls_labels'][unlabeled_inds] == 1
                     unlabeled_rcnn_cls_weights[ulb_interval_mask] = 1 - self.forward_ret_dict['cos_scores'][unlabeled_inds][ulb_interval_mask]
                     unlabeled_rcnn_cls_weights[ulb_fg_mask] = torch.clamp((self.forward_ret_dict['cos_scores'][unlabeled_inds][ulb_fg_mask] + 0.22),max=1.00)
-                    self.forward_ret_dict['rcnn_cls_labels'][ulb_interval_mask] = torch.clamp((self.forward_ret_dict['cos_scores'][ulb_interval_mask] + 0.15),max=0.80)     
+                    self.forward_ret_dict['rcnn_cls_labels'][unlabeled_inds][ulb_interval_mask] = torch.clamp((self.forward_ret_dict['cos_scores'][unlabeled_inds][ulb_interval_mask] + 0.15),max=0.80)     
                     ulb_bg_mask = self.forward_ret_dict['rcnn_cls_labels'][unlabeled_inds] == 0
                     unlabeled_rcnn_cls_weights[ulb_bg_mask] = 1 - self.forward_ret_dict['cos_scores'][unlabeled_inds][ulb_bg_mask]
                 elif self.model_cfg['LOSS_CONFIG']['UL_RCNN_CLS_WEIGHT_TYPE'] == 'cos-fp-uc-bg':
