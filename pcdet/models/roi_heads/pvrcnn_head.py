@@ -161,25 +161,26 @@ class PVRCNNHead(RoIHeadTemplate):
         """
 
         # use test-time nms for pseudo label generation
-        nms_mode = self.model_cfg.NMS_CONFIG['TRAIN' if self.training and not disable_gt_roi_when_pseudo_labeling else 'TEST']
+        nms_mode = self.model_cfg.NMS_CONFIG['TRAIN' if self.training and not disable_gt_roi_when_pseudo_labeling else 'TEST'] #512
         # proposal_layer doesn't continue if the rois are already in the batch_dict.
         # However, for labeled data proposal layer should continue!
         targets_dict = self.proposal_layer(batch_dict, nms_config=nms_mode)        
         # should not use gt_roi for pseudo label generation
+        batch_size = batch_dict['batch_size']
 
-        if (self.training or self.print_loss_when_eval) and not disable_gt_roi_when_pseudo_labeling: #(Student Only)
-            targets_dict = self.assign_targets(batch_dict)
-            batch_dict['rois'] = targets_dict['rois']
-            batch_dict['roi_scores'] = targets_dict['roi_scores']
-            batch_dict['roi_labels'] = targets_dict['roi_labels']
-            # Temporarily add infos to targets_dict for metrics
-            targets_dict['unlabeled_inds'] = batch_dict['unlabeled_inds']
-            targets_dict['ori_unlabeled_boxes'] = batch_dict['ori_unlabeled_boxes']
-            # TODO(farzad) refactor this with global registry,
-            #  accessible in different places, not via passing through batch_dict
-            targets_dict['metric_registry'] = batch_dict['metric_registry']
-            targets_dict['ckpt_save_dir'] = batch_dict['ckpt_save_dir']
-            targets_dict['cur_epoch'] = batch_dict['cur_epoch'] 
+        # if (self.training or self.print_loss_when_eval) and not disable_gt_roi_when_pseudo_labeling: #(Student Only)
+        #     targets_dict = self.assign_targets(batch_dict) #128
+        #     batch_dict['rois'] = targets_dict['rois']
+        #     batch_dict['roi_scores'] = targets_dict['roi_scores']
+        #     batch_dict['roi_labels'] = targets_dict['roi_labels']
+        #     # Temporarily add infos to targets_dict for metrics
+        #     targets_dict['unlabeled_inds'] = batch_dict['unlabeled_inds']
+        #     targets_dict['ori_unlabeled_boxes'] = batch_dict['ori_unlabeled_boxes']
+        #     # TODO(farzad) refactor this with global registry,
+        #     #  accessible in different places, not via passing through batch_dict
+        #     targets_dict['metric_registry'] = batch_dict['metric_registry']
+        #     targets_dict['ckpt_save_dir'] = batch_dict['ckpt_save_dir']
+        #     targets_dict['cur_epoch'] = batch_dict['cur_epoch'] 
         
         # RoI aware pooling
         #(Common for both)
@@ -195,19 +196,38 @@ class PVRCNNHead(RoIHeadTemplate):
         rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)
 
         ##(Student only. Since the shared features are available after the "IF" in line 164, we do it again)
-        if (self.training or self.print_loss_when_eval) and not disable_gt_roi_when_pseudo_labeling: 
+        if (self.training or self.print_loss_when_eval) and not disable_gt_roi_when_pseudo_labeling:
             labels = batch_dict['roi_labels'].view(shared_features.shape[0],-1).squeeze(1) - 1
             cos_scores = []
             self.rcnn_sh_mean = batch_dict['rcnn_template']
             temp = self.rcnn_sh_mean.squeeze(1).unsqueeze(-1).to(shared_features.device)
             for i,sh in enumerate(shared_features):
                 cos_scores.append(F.cosine_similarity(temp[labels[i]].transpose(1,0),sh.transpose(1,0)))
+
             targets_dict['rcnn_template'] = batch_dict['rcnn_template'] #for metrics   
             targets_dict['cos_scores'] = torch.Tensor([cos_scores]).to(rcnn_cls.device).view(batch_dict['roi_labels'].shape[0],-1,1).squeeze(-1)
+            batch_dict['rcnn_cls'] = rcnn_cls.view(batch_dict['batch_size'],-1)
+            batch_dict['rcnn_reg'] = rcnn_reg.view(batch_dict['batch_size'],-1,rcnn_reg.shape[-1])
+            batch_dict['cos_scores'] = targets_dict['cos_scores']
 
+            targets_dict = self.assign_targets(batch_dict)
+
+            batch_dict['rois'] = targets_dict['rois']
+            batch_dict['roi_scores'] = targets_dict['roi_scores']
+            batch_dict['roi_labels'] = targets_dict['roi_labels']
+            # Temporarily add infos to targets_dict for metrics
+            targets_dict['unlabeled_inds'] = batch_dict['unlabeled_inds']
+            targets_dict['ori_unlabeled_boxes'] = batch_dict['ori_unlabeled_boxes']
+            # TODO(farzad) refactor this with global registry,
+            #  accessible in different places, not via passing through batch_dict
+            targets_dict['metric_registry'] = batch_dict['metric_registry']
+            targets_dict['ckpt_save_dir'] = batch_dict['ckpt_save_dir']
+            targets_dict['cur_epoch'] = batch_dict['cur_epoch']
+            # targets_dict[]  
+            
         if not self.training or self.predict_boxes_when_training: #(,Student)
             batch_cls_preds, batch_box_preds = self.generate_predicted_boxes(
-                batch_size=batch_dict['batch_size'], rois=batch_dict['rois'], cls_preds=rcnn_cls, box_preds=rcnn_reg
+                batch_size=batch_dict['batch_size'], rois=batch_dict['rois'], cls_preds=targets_dict['rcnn_cls'].view(batch_size,-1), box_preds=targets_dict['rcnn_reg'].view(batch_size,-1,rcnn_reg.shape[-1])
             )
             # note that the rpn batch_cls_preds and batch_box_preds are being overridden here by rcnn preds
             batch_dict['batch_cls_preds'] = batch_cls_preds
