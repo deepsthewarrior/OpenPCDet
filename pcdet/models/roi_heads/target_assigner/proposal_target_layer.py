@@ -54,7 +54,8 @@ class ProposalTargetLayer(nn.Module):
         batch_roi_labels = rois.new_zeros((batch_size, self.roi_sampler_cfg.ROI_PER_IMAGE), dtype=torch.long)
         batch_rcnn_cls = rois.new_zeros((batch_size, self.roi_sampler_cfg.ROI_PER_IMAGE), dtype=torch.long)
         batch_rcnn_reg = rois.new_zeros(batch_size, self.roi_sampler_cfg.ROI_PER_IMAGE, code_size)
-        batch_cos_scores = rois.new_zeros(batch_size,self.roi_sampler_cfg.ROI_PER_IMAGE,256)
+        batch_cos_scores = rois.new_zeros(batch_size,self.roi_sampler_cfg.ROI_PER_IMAGE)
+        batch_shared_features = rois.new_zeros(batch_size,self.roi_sampler_cfg.ROI_PER_IMAGE,256)
         batch_gt_of_rois = rois.new_zeros(batch_size, self.roi_sampler_cfg.ROI_PER_IMAGE, code_size + 1)
         batch_roi_ious = rois.new_zeros(batch_size, self.roi_sampler_cfg.ROI_PER_IMAGE)
         # batch_gt_scores = rois.new_zeros(batch_size, self.roi_sampler_cfg.ROI_PER_IMAGE)
@@ -84,6 +85,7 @@ class ProposalTargetLayer(nn.Module):
                 cur_rcnn_cls = batch_dict['rcnn_cls'][index][sampled_inds]
                 cur_rcnn_reg = batch_dict['rcnn_reg'][index][sampled_inds]
                 cur_cos_scores = batch_dict['cos_scores'][index][sampled_inds]
+                cur_shared_features = batch_dict['shared_features'][index][sampled_inds]
                 batch_roi_ious[index] = roi_ious
                 # batch_gt_scores[index] = batch_dict['pred_scores_ema'][index][sampled_inds]
                 batch_gt_of_rois[index] = cur_gt_boxes[gt_assignment[sampled_inds]]
@@ -95,6 +97,7 @@ class ProposalTargetLayer(nn.Module):
                 cur_rcnn_cls = batch_dict['rcnn_cls'][index][sampled_inds]
                 cur_rcnn_reg = batch_dict['rcnn_reg'][index][sampled_inds]
                 cur_cos_scores = batch_dict['cos_scores'][index][sampled_inds]
+                cur_shared_features = batch_dict['shared_features'][index][sampled_inds]
                 batch_roi_ious[index] = roi_ious
                 batch_gt_of_rois[index] = cur_gt_boxes[gt_assignment[sampled_inds]]
 
@@ -107,7 +110,8 @@ class ProposalTargetLayer(nn.Module):
             batch_rcnn_cls[index] = cur_rcnn_cls
             batch_rcnn_reg[index] = cur_rcnn_reg
             batch_cos_scores[index] = cur_cos_scores
-
+            batch_shared_features[index] = cur_shared_features
+            
         targets_dict = {'rois': batch_rois, 'gt_of_rois': batch_gt_of_rois, 'gt_iou_of_rois': batch_roi_ious,
                         'roi_scores': batch_roi_scores, 'roi_labels': batch_roi_labels,
                         'reg_valid_mask': batch_reg_valid_mask,
@@ -116,6 +120,7 @@ class ProposalTargetLayer(nn.Module):
                         'cos_scores':batch_cos_scores,
                         'rcnn_cls':batch_rcnn_cls,
                         'rcnn_reg':batch_rcnn_reg,
+
                         }
 
         return targets_dict

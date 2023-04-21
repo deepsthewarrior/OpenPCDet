@@ -209,12 +209,14 @@ class PVRCNNHead(RoIHeadTemplate):
             batch_dict['rcnn_cls'] = rcnn_cls.view(batch_dict['batch_size'],-1)
             batch_dict['rcnn_reg'] = rcnn_reg.view(batch_dict['batch_size'],-1,rcnn_reg.shape[-1])
             batch_dict['cos_scores'] = targets_dict['cos_scores']
-
+            batch_dict['shared_features'] = shared_features.view(batch_size,-1,shared_features.shape[-2])
             targets_dict = self.assign_targets(batch_dict)
 
             batch_dict['rois'] = targets_dict['rois']
             batch_dict['roi_scores'] = targets_dict['roi_scores']
             batch_dict['roi_labels'] = targets_dict['roi_labels']
+            batch_dict['shared_features'] = targets_dict['shared_features']
+            batch_dict['']
             # Temporarily add infos to targets_dict for metrics
             targets_dict['unlabeled_inds'] = batch_dict['unlabeled_inds']
             targets_dict['ori_unlabeled_boxes'] = batch_dict['ori_unlabeled_boxes']
@@ -224,23 +226,24 @@ class PVRCNNHead(RoIHeadTemplate):
             targets_dict['ckpt_save_dir'] = batch_dict['ckpt_save_dir']
             targets_dict['cur_epoch'] = batch_dict['cur_epoch']
             # targets_dict[]  
-            
-        if not self.training or self.predict_boxes_when_training: #(,Student)
+            rcnn_cls=targets_dict['rcnn_cls'].view(batch_size,-1)
+            rcnn_reg=targets_dict['rcnn_reg'].view(batch_size,-1,rcnn_reg.shape[-1])
+
+        if not self.training or self.predict_boxes_when_training: #(Teacher,Student)
             batch_cls_preds, batch_box_preds = self.generate_predicted_boxes(
-                batch_size=batch_dict['batch_size'], rois=batch_dict['rois'], cls_preds=targets_dict['rcnn_cls'].view(batch_size,-1), box_preds=targets_dict['rcnn_reg'].view(batch_size,-1,rcnn_reg.shape[-1])
-            )
+                batch_size=batch_dict['batch_size'], rois=batch_dict['rois'], cls_preds=rcnn_cls, box_preds=rcnn_reg)
+            
             # note that the rpn batch_cls_preds and batch_box_preds are being overridden here by rcnn preds
             batch_dict['batch_cls_preds'] = batch_cls_preds
             batch_dict['batch_box_preds'] = batch_box_preds
             batch_dict['cls_preds_normalized'] = False
-            batch_dict['shared_features'] = shared_features.view(batch_box_preds.shape[0],-1,shared_features.shape[1])
 
             # Temporarily add infos to targets_dict for metrics
             targets_dict['batch_box_preds'] = batch_box_preds            
         if self.training or self.print_loss_when_eval: #(Teacher,Student)
             targets_dict['rcnn_cls'] = rcnn_cls
             targets_dict['rcnn_reg'] = rcnn_reg
-            targets_dict['shared_features'] = shared_features.view(batch_dict['roi_labels'].shape[0],-1,shared_features.shape[1])
+            targets_dict['shared_features'] = shared_features.view(batch_dict['roi_labels'].shape[0],-1,shared_features.shape[-2])
             
             self.forward_ret_dict = targets_dict
             
