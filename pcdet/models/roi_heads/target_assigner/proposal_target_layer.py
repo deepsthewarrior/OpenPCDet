@@ -120,7 +120,7 @@ class ProposalTargetLayer(nn.Module):
                         'cos_scores':batch_cos_scores,
                         'rcnn_cls':batch_rcnn_cls,
                         'rcnn_reg':batch_rcnn_reg,
-
+                        'shared_features': batch_shared_features
                         }
 
         return targets_dict

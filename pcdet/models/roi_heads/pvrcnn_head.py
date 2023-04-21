@@ -216,7 +216,7 @@ class PVRCNNHead(RoIHeadTemplate):
             batch_dict['roi_scores'] = targets_dict['roi_scores']
             batch_dict['roi_labels'] = targets_dict['roi_labels']
             batch_dict['shared_features'] = targets_dict['shared_features']
-            batch_dict['']
+        
             # Temporarily add infos to targets_dict for metrics
             targets_dict['unlabeled_inds'] = batch_dict['unlabeled_inds']
             targets_dict['ori_unlabeled_boxes'] = batch_dict['ori_unlabeled_boxes']
@@ -226,8 +226,8 @@ class PVRCNNHead(RoIHeadTemplate):
             targets_dict['ckpt_save_dir'] = batch_dict['ckpt_save_dir']
             targets_dict['cur_epoch'] = batch_dict['cur_epoch']
             # targets_dict[]  
-            rcnn_cls=targets_dict['rcnn_cls'].view(batch_size,-1)
-            rcnn_reg=targets_dict['rcnn_reg'].view(batch_size,-1,rcnn_reg.shape[-1])
+            rcnn_cls=targets_dict['rcnn_cls'].view(-1,1)
+            rcnn_reg=targets_dict['rcnn_reg'].view(-1,self.box_coder.code_size)
 
         if not self.training or self.predict_boxes_when_training: #(Teacher,Student)
             batch_cls_preds, batch_box_preds = self.generate_predicted_boxes(
@@ -243,7 +243,7 @@ class PVRCNNHead(RoIHeadTemplate):
         if self.training or self.print_loss_when_eval: #(Teacher,Student)
             targets_dict['rcnn_cls'] = rcnn_cls
             targets_dict['rcnn_reg'] = rcnn_reg
-            targets_dict['shared_features'] = shared_features.view(batch_dict['roi_labels'].shape[0],-1,shared_features.shape[-2])
+            # targets_dict['shared_features'] = shared_features.view(batch_dict['roi_labels'].shape[0],-1,shared_features.shape[-2])
             
             self.forward_ret_dict = targets_dict
             
