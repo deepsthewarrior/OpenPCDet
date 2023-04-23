@@ -407,6 +407,19 @@ class PVRCNN_SSL(Detector3DTemplate):
                 batch_ori_gt_boxes = self.pv_rcnn.roi_head.forward_ret_dict['ori_unlabeled_boxes']
                 batch_ori_gt_boxes = [ori_gt_boxes.clone().detach() for ori_gt_boxes in batch_ori_gt_boxes]
 
+                batch_teachers_weights = self.pv_rcnn.roi_head.forward_ret_dict['batch_box_preds_teacher'][unlabeled_inds]
+                batch_teachers_weights = [ori_teachers_weights.clone().detach() for ori_teachers_weights in batch_teachers_weights]
+
+                batch_teacher_pl = batch_dict['gt_boxes'][unlabeled_inds]
+                batch_teacher_pl = [ori_teacher_pl.clone().detach() for ori_teacher_pl in batch_teacher_pl]
+
+                batch_ori_teacher_roi = self.pv_rcnn_ema.roi_head.forward_ret_dict['rois'][unlabeled_inds]
+                batch_ori_teacher_roi = [ori_teacher_roi.clone().detach() for ori_teacher_roi in batch_ori_teacher_roi]
+
+                batch_ori_teacher_roi_labels = self.pv_rcnn_ema.roi_head.forward_ret_dict['roi_labels'][unlabeled_inds]
+                batch_ori_teacher_roi_labels = [ori_teacher_roi_labels.clone().detach() for ori_teacher_roi_labels in batch_ori_teacher_roi_labels]
+
+
                 for i in range(len(batch_rois)):
                     valid_rois_mask = torch.logical_not(torch.all(batch_rois[i] == 0, dim=-1))
                     valid_rois = batch_rois[i][valid_rois_mask]
@@ -417,10 +430,36 @@ class PVRCNN_SSL(Detector3DTemplate):
                     valid_gt_boxes = batch_ori_gt_boxes[i][valid_gt_boxes_mask]
                     valid_gt_boxes[:, -1] -= 1                              # Starting class indices from zero
 
+                    valid_teacher_weights_mask =  torch.logical_not(torch.all(batch_teachers_weights[i] == 0, dim=-1))
+                    valid_teacher_scores_weights = batch_teachers_weights[i][valid_teacher_weights_mask]
+
+                    valid_teacher_pl_mask = torch.logical_not(torch.all(batch_teacher_pl[i] == 0, dim=-1))
+                    valid_teacher_pl = batch_teacher_pl[i][valid_teacher_pl_mask]
+
+                    valid_teacher_roi_mask = torch.logical_not(torch.all(batch_ori_teacher_roi[i] == 0, dim=-1))
+                    valid_teacher_roi = batch_ori_teacher_roi[i][valid_teacher_roi_mask]
+                    
+                    valid_teacher_roi_labels_mask = torch.logical_not(torch.all(batch_ori_teacher_roi_labels[i] == 0, dim=-1))
+                    valid_teacher_roi_labels = batch_ori_teacher_roi_labels[i][valid_teacher_roi_labels_mask]
+
                     num_gts = valid_gt_boxes_mask.sum()
                     num_preds = valid_rois_mask.sum()
+                    num_teacher_weights = valid_teacher_weights_mask.sum()
+                    num_teacher_pl = valid_teacher_pl_mask.sum()
+                    cur_unlabeled_ind = unlabeled_inds[i] 
 
-                    cur_unlabeled_ind = unlabeled_inds[i]
+                    if num_teacher_pl > 0 and num_preds > 0:
+                        # Find IoU between Teachers's ROI v/s Original GTs
+                        overlap = iou3d_nms_utils.boxes_iou3d_gpu(valid_teacher_roi[:, 0:7], valid_gt_boxes[:, 0:7])
+                        preds_iou_max, assigned_gt_inds = overlap.max(dim=1)
+                        self.val_dict['iou_teacher_roi_gt'].extend(preds_iou_max.tolist())            
+
+                        cur_roi_label = self.pv_rcnn_ema.roi_head.forward_ret_dict['roi_labels'][cur_unlabeled_ind].squeeze()
+                        self.val_dict['class_labels_teacher_roi'].extend(cur_roi_label.tolist())            
+                        
+                        cur_cls_preds = torch.sigmoid(self.pv_rcnn_ema.roi_head.forward_ret_dict['batch_cls_preds'][cur_unlabeled_ind].squeeze())
+                        self.val_dict['cls_preds_teacher_roi'].extend(cur_cls_preds.tolist())
+
                     if num_gts > 0 and num_preds > 0:
                         # Find IoU between Student's ROI v/s Original GTs
                         overlap = iou3d_nms_utils.boxes_iou3d_gpu(valid_rois[:, 0:7], valid_gt_boxes[:, 0:7])
