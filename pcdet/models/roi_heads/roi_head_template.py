@@ -15,9 +15,6 @@ from visual_utils import visualize_utils as V
 
 
 
-
-
-
 class RoIHeadTemplate(nn.Module):
     def __init__(self, num_class, model_cfg, predict_boxes_when_training=True):
         super().__init__()
@@ -109,7 +106,7 @@ class RoIHeadTemplate(nn.Module):
             rois[index, :len(selected), :] = box_preds[selected]
             roi_scores[index, :len(selected)] = cur_roi_scores[selected]
             roi_labels[index, :len(selected)] = cur_roi_labels[selected]
-
+        
         batch_dict['rois'] = rois
         batch_dict['roi_scores'] = roi_scores
         batch_dict['roi_labels'] = roi_labels + 1
@@ -310,7 +307,7 @@ class RoIHeadTemplate(nn.Module):
                              'target_scores': sample_target_scores, 'pred_weights': sample_pred_weights,
                              'pred_iou_wrt_pl': sample_gt_iou_of_rois}
             metrics.update(**metric_inputs)
-
+    
     def assign_targets(self, batch_dict):
 
         with torch.no_grad():

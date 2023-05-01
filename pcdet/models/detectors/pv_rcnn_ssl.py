@@ -15,6 +15,7 @@ from ...utils.stats_utils import KITTIEvalMetrics, PredQualityMetrics
 from torchmetrics.collections import MetricCollection
 import torch.distributed as dist
 from visual_utils import visualize_utils as V
+from ...utils.softmatch import AdaptiveThresholding
 
 def _to_dict_of_tensors(list_of_dicts, agg_mode='stack'):
     new_dict = {}
@@ -120,6 +121,21 @@ class MetricRegistry(object):
     def tags(self):
         return self._tag_metrics.keys()
 
+class Adaptive_Thresh(object):
+    def __init__(self, **kwargs):
+        self._tag_metrics = {}
+        self.dataset = kwargs.get('dataset', None)
+        self.model_cfg = kwargs.get('model_cfg', None)
+
+    def get(self, tag=None):
+        if tag is None:
+            tag = 'default'
+        if tag in self._tag_metrics.keys():
+            metric = self._tag_metrics[tag]
+        else:
+            metric = AdaptiveThresholding(tag=tag, dataset=self.dataset, config=self.model_cfg)
+            self._tag_metrics[tag] = metric
+        return metric
 
 
 class PVRCNN_SSL(Detector3DTemplate):
@@ -148,6 +164,7 @@ class PVRCNN_SSL(Detector3DTemplate):
         self.supervise_mode = model_cfg.SUPERVISE_MODE
         cls_bg_thresh = model_cfg.ROI_HEAD.TARGET_CONFIG.CLS_BG_THRESH
         self.metric_registry = MetricRegistry(dataset=self.dataset, model_cfg=model_cfg)
+        self.adaptive_thresholding = Adaptive_Thresh(dataset=self.dataset, model_cfg=model_cfg)
         vals_to_store = ['iou_roi_pl', 'iou_roi_gt', 'pred_scores', 'teacher_pred_scores', 
                         'weights', 'roi_scores', 'pcv_scores', 'num_points_in_roi', 'class_labels',
                         'iteration']
@@ -262,7 +279,7 @@ class PVRCNN_SSL(Detector3DTemplate):
             #                  'pred_scores': pseudo_scores,
             #                  'pred_sem_scores': pseudo_sem_scores}
             # self.metrics['after_filtering'].update(**metric_inputs)  # commented to reduce complexity.
-
+            batch_dict['adaptive_thresh'] = self.adaptive_thresholding
             batch_dict['metric_registry'] = self.metric_registry
             batch_dict['ori_unlabeled_boxes'] = ori_unlabeled_boxes
             batch_dict['store_scores_in_pkl'] = self.model_cfg.STORE_SCORES_IN_PKL
@@ -463,6 +480,8 @@ class PVRCNN_SSL(Detector3DTemplate):
             for key in self.metric_registry.tags():
                 metrics = self.compute_metrics(tag=key)
                 tb_dict_.update(metrics)
+            adaptive_metrics = self.adaptive_thresholding.get(tag=f'softmatch')
+            tb_dict_.update(adaptive_metrics.compute())
 
             if dist.is_initialized():
                 rank = os.getenv('RANK')
