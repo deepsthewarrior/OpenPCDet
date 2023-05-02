@@ -478,10 +478,10 @@ class PVRCNN_SSL(Detector3DTemplate):
                 pickle.dump(self.val_dict, open(file_path, 'wb'))
 
             for key in self.metric_registry.tags():
-                metrics = self.compute_metrics(tag=key)
+                metrics = self.compute_metrics(registry=self.metric_registry,tag=key)
                 tb_dict_.update(metrics)
-            adaptive_metrics = self.adaptive_thresholding.get(tag=f'softmatch')
-            tb_dict_.update(adaptive_metrics.compute())
+            adaptive_metrics = self.compute_metrics(registry=self.adaptive_thresholding,tag=f'softmatch')
+            tb_dict_.update(adaptive_metrics)
 
             if dist.is_initialized():
                 rank = os.getenv('RANK')
@@ -541,13 +541,14 @@ class PVRCNN_SSL(Detector3DTemplate):
             metrics.update(**metric_inputs)
             batch_dict.pop('pseudo_boxes_prefilter')
 
-    def compute_metrics(self, tag):
-        results = self.metric_registry.get(tag).compute()
+    def compute_metrics(self, registry ,tag):
+        results = registry.get(tag).compute()
         tag = tag + "/" if tag else ''
         metrics = {tag + key: val for key, val in results.items()}
-
         return metrics
+    
 
+    
     def ensemble_post_processing(self, batch_dict_a, batch_dict_b, unlabeled_inds, ensemble_option=None):
         # TODO(farzad) what about roi_labels and roi_scores in following options?
         ens_pred_dicts = None

@@ -36,8 +36,8 @@ class AdaptiveThresholding(Metric):
         self.st_mean = torch.ones((self.num_classes)) / self.num_classes     
         self.st_var = torch.ones(self.num_classes)
         self.momentum = 0.9
-        self.batch_mean = self.st_mean
-        self.batch_var = self.st_var
+        # self.batch_mean = self.st_mean
+        # self.batch_var = self.st_var
         
 
     def update(self, roi_labels: torch.Tensor, iou_wrt_pl: torch.Tensor) -> None:
@@ -59,8 +59,6 @@ class AdaptiveThresholding(Metric):
             cls_wise_iou_var_ = []
             all_iou = [i.detach().cpu() for i in self.iou_scores]
             all_label = [i.detach().cpu() for i in self.labels]
-            print("all iou",all_iou[0])
-            print("all label",all_label[0])
             ious = torch.cat(all_iou, dim=0)
             labels = torch.cat(all_label, dim=0)
             valid_mask = ious != 0
@@ -82,10 +80,10 @@ class AdaptiveThresholding(Metric):
 
             classwise_metrics={}
             for metric_name in self.metrics_name:
-                classwise_metrics[metric_name] = all_iou[0].new_zeros(self.num_classes + 1).fill_(float('nan'))
+                classwise_metrics[metric_name] = all_iou[0].new_zeros(self.num_classes).fill_(float('nan'))
             for cind in range(num_classes):
-                classwise_metrics['batchwise_mean'][cind] = self.batch_mean[cind].item()
-                classwise_metrics['batchwise_variance'][cind] = self.batch_var[cind].item()
+                classwise_metrics['batchwise_mean'][cind] = cls_wise_iou_mean[cind].item()
+                classwise_metrics['batchwise_variance'][cind] = cls_wise_iou_var[cind].item()
                 classwise_metrics['ema_mean'][cind] = self.st_mean[cind].item()
                 classwise_metrics['ema_variance'][cind] = self.st_var[cind].item()
             self.reset()
@@ -93,7 +91,7 @@ class AdaptiveThresholding(Metric):
         else:
             classwise_metrics = {}
             for metric_name in self.metrics_name:
-               classwise_metrics[metric_name] = self.iou_scores[0].new_zeros(num_classes + 1).fill_(float('nan'))
+               classwise_metrics[metric_name] = self.iou_scores[0].new_zeros(num_classes).fill_(float('nan'))
 
         classwise_results = {}
         
