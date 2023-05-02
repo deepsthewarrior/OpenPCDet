@@ -12,7 +12,7 @@ class AdaptiveThresholding(Metric):
     def __init__(self, **kwargs):
 
         super().__init__(**kwargs)
-        self.reset_state_interval = kwargs.get('RESET_STATE_INTERVAL', 64)
+        self.reset_state_interval = kwargs.get('RESET_STATE_INTERVAL', 8)
         self.percent = kwargs.get('PERCENT', 0.1)
         self.pre_filter_thresh = kwargs.get('PRE_FILTERING_THRESH', 0.25)
         self.tag = kwargs.get('tag', None)
