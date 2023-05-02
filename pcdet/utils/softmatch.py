@@ -36,8 +36,8 @@ class AdaptiveThresholding(Metric):
         self.st_mean = torch.ones((self.num_classes)) / self.num_classes     
         self.st_var = torch.ones(self.num_classes)
         self.momentum = 0.9
-        # self.batch_mean = self.st_mean
-        # self.batch_var = self.st_var
+
+
         
 
     def update(self, roi_labels: torch.Tensor, iou_wrt_pl: torch.Tensor) -> None:
@@ -71,19 +71,17 @@ class AdaptiveThresholding(Metric):
             for i in  range(len(cls_wise_ious)):
                 cls_wise_iou_mean_.append(cls_wise_ious[i].mean())
                 cls_wise_iou_var_.append(cls_wise_ious[i].var())
-            cls_wise_iou_mean = torch.stack(cls_wise_iou_mean_)
-            cls_wise_iou_var = torch.stack(cls_wise_iou_var_)
-            self.batch_mean = cls_wise_iou_mean
-            self.batch_var = cls_wise_iou_var
-            self.st_mean = self.momentum*(self.st_mean) + (1-self.momentum)*cls_wise_iou_mean
-            self.st_var = self.momentum*(self.st_var) + (1-self.momentum)*cls_wise_iou_var
+            self.batch_mean = torch.stack(cls_wise_iou_mean_)
+            self.batch_var = torch.stack(cls_wise_iou_var_)
+            self.st_mean = self.momentum*(self.st_mean) + (1-self.momentum)*self.batch_mean
+            self.st_var = self.momentum*(self.st_var) + (1-self.momentum)*self.batch_var
 
             classwise_metrics={}
             for metric_name in self.metrics_name:
                 classwise_metrics[metric_name] = all_iou[0].new_zeros(self.num_classes).fill_(float('nan'))
             for cind in range(num_classes):
-                classwise_metrics['batchwise_mean'][cind] = cls_wise_iou_mean[cind].item()
-                classwise_metrics['batchwise_variance'][cind] = cls_wise_iou_var[cind].item()
+                classwise_metrics['batchwise_mean'][cind] = self.batch_mean[cind].item()
+                classwise_metrics['batchwise_variance'][cind] = self.batch_var[cind].item()
                 classwise_metrics['ema_mean'][cind] = self.st_mean[cind].item()
                 classwise_metrics['ema_variance'][cind] = self.st_var[cind].item()
             self.reset()
