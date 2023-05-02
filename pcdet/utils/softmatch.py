@@ -12,7 +12,7 @@ class AdaptiveThresholding(Metric):
     def __init__(self, **kwargs):
 
         super().__init__(**kwargs)
-        self.reset_state_interval = kwargs.get('RESET_STATE_INTERVAL', 8)
+        self.reset_state_interval = kwargs.get('RESET_STATE_INTERVAL', 64)
         self.percent = kwargs.get('PERCENT', 0.1)
         self.pre_filter_thresh = kwargs.get('PRE_FILTERING_THRESH', 0.25)
         self.tag = kwargs.get('tag', None)
@@ -41,10 +41,10 @@ class AdaptiveThresholding(Metric):
         
 
     def update(self, roi_labels: torch.Tensor, iou_wrt_pl: torch.Tensor) -> None:
-        # if roi_labels.ndim == 1: # Unsqueeze for DDP
-        #     roi_labels=roi_labels.unsqueeze(dim=0)
-        # if iou_wrt_pl.ndim == 1: # Unsqueeze for DDP
-        #     iou_wrt_pl=iou_wrt_pl.unsqueeze(dim=0)
+        if roi_labels.ndim == 1: # Unsqueeze for DDP
+            roi_labels=roi_labels.unsqueeze(dim=0)
+        if iou_wrt_pl.ndim == 1: # Unsqueeze for DDP
+            iou_wrt_pl=iou_wrt_pl.unsqueeze(dim=0)
         self.iou_scores.append(iou_wrt_pl)
         self.labels.append(roi_labels)    
 
@@ -59,6 +59,8 @@ class AdaptiveThresholding(Metric):
             cls_wise_iou_var_ = []
             all_iou = [i.detach().cpu() for i in self.iou_scores]
             all_label = [i.detach().cpu() for i in self.labels]
+            print("all iou",all_iou[0])
+            print("all label",all_label[0])
             ious = torch.cat(all_iou, dim=0)
             labels = torch.cat(all_label, dim=0)
             valid_mask = ious != 0

@@ -208,56 +208,6 @@ class ProposalTargetLayer(nn.Module):
         cur_roi = batch_dict['rois'][index]
         cur_gt_boxes = batch_dict['gt_boxes'][index]
         cur_roi_labels = batch_dict['roi_labels'][index]
-        self.adaptive_thresh = batch_dict['adaptive_thresh'].get(tag=f'softmatch')
-        
-        reg_fg_thresh = cur_roi.new_tensor(self.roi_sampler_cfg.UNLABELED_REG_FG_THRESH).view(1, -1).repeat(len(cur_roi), 1)
-        reg_fg_thresh = reg_fg_thresh.gather(dim=-1, index=(cur_roi_labels - 1).unsqueeze(-1)).squeeze(-1)
-
-        cls_fg_thresh = cur_roi.new_tensor(self.adaptive_thresh.st_mean).view(1, -1).repeat(len(cur_roi), 1)
-        cls_fg_thresh = cls_fg_thresh.gather(dim=-1, index=(cur_roi_labels - 1).unsqueeze(-1)).squeeze(-1)
-
-        if self.roi_sampler_cfg.get('SAMPLE_ROI_BY_EACH_CLASS', False):
-            max_overlaps, gt_assignment = self.get_max_iou_with_same_class(
-                rois=cur_roi, roi_labels=cur_roi_labels,
-                gt_boxes=cur_gt_boxes[:, 0:7], gt_labels=cur_gt_boxes[:, -1].long()
-            )
-        else:
-            iou3d = iou3d_nms_utils.boxes_iou3d_gpu(cur_roi, cur_gt_boxes[:, 0:7])  # (M, N)
-            max_overlaps, gt_assignment = torch.max(iou3d, dim=1)
-
-        sampled_inds = self.subsample_rois(max_overlaps=max_overlaps,
-                                           reg_fg_thresh=reg_fg_thresh,
-                                           cls_fg_thresh=cls_fg_thresh)
-        roi_ious = max_overlaps[sampled_inds]
-
-        if isinstance(reg_fg_thresh, torch.Tensor):
-            reg_fg_thresh = reg_fg_thresh[sampled_inds]
-        if isinstance(cls_fg_thresh, torch.Tensor):
-            cls_fg_thresh = cls_fg_thresh[sampled_inds]
-
-        # regression valid mask
-        reg_valid_mask = (roi_ious > reg_fg_thresh).long()
-
-        # classification label
-        iou_bg_thresh = self.roi_sampler_cfg.CLS_BG_THRESH
-
-        iou_fg_thresh = cls_fg_thresh
-
-        fg_mask = roi_ious > iou_fg_thresh
-        bg_mask = roi_ious < iou_bg_thresh
-        interval_mask = (fg_mask == 0) & (bg_mask == 0)
-        cls_labels = (fg_mask > 0).float()
-        cls_labels[interval_mask] = (roi_ious[interval_mask] - iou_bg_thresh) / (iou_fg_thresh[interval_mask] - iou_bg_thresh)
-
-        ignore_mask = torch.eq(cur_gt_boxes[gt_assignment[sampled_inds]], 0).all(dim=-1)
-        cls_labels[ignore_mask] = -1
-
-        return sampled_inds, reg_valid_mask, cls_labels, roi_ious, gt_assignment, interval_mask
-
-    def subsample_unlabeled_rois_tr_gaussian(self, batch_dict, index):
-        cur_roi = batch_dict['rois'][index]
-        cur_gt_boxes = batch_dict['gt_boxes'][index]
-        cur_roi_labels = batch_dict['roi_labels'][index]
         reg_fg_thresh = cur_roi.new_tensor(self.roi_sampler_cfg.UNLABELED_REG_FG_THRESH).view(1, -1).repeat(len(cur_roi), 1)
         reg_fg_thresh = reg_fg_thresh.gather(dim=-1, index=(cur_roi_labels - 1).unsqueeze(-1)).squeeze(-1)
         self.adaptive_thresh = batch_dict['adaptive_thresh'].get(tag=f'softmatch')
@@ -265,7 +215,7 @@ class ProposalTargetLayer(nn.Module):
         self.st_var = self.adaptive_thresh.st_var.to(cur_roi.device)
         cls_fg_thresh = cur_roi.new_tensor(self.adaptive_thresh.st_mean.to(cur_roi.device)).view(1, -1).repeat(len(cur_roi), 1)
         cls_fg_thresh = cls_fg_thresh.gather(dim=-1, index=(cur_roi_labels - 1).unsqueeze(-1)).squeeze(-1)
-        
+      
         
         if self.roi_sampler_cfg.get('SAMPLE_ROI_BY_EACH_CLASS', False):
             max_overlaps, gt_assignment = self.get_max_iou_with_same_class(
