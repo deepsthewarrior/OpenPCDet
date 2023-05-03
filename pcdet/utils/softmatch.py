@@ -33,13 +33,12 @@ class AdaptiveThresholding(Metric):
 
         self.add_state("iou_scores", default=[], dist_reduce_fx='cat')
         self.add_state("labels", default=[], dist_reduce_fx='cat')
-        self.st_mean = torch.ones((self.num_classes)) / self.num_classes     
+        self.st_mean = torch.ones(self.num_classes) / self.num_classes     
         self.st_var = torch.ones(self.num_classes)
         self.momentum = 0.9
-
-
+        self.batch_mean = torch.zeros(self.num_classes) 
+        self.batch_var = torch.zeros(self.num_classes)
         
-
     def update(self, roi_labels: torch.Tensor, iou_wrt_pl: torch.Tensor) -> None:
         if roi_labels.ndim == 1: # Unsqueeze for DDP
             roi_labels=roi_labels.unsqueeze(dim=0)
@@ -69,10 +68,11 @@ class AdaptiveThresholding(Metric):
             labels -= 1
             cls_wise_ious = [ious[labels == cind] for cind in range(self.num_classes)]
             for i in  range(len(cls_wise_ious)):
-                cls_wise_iou_mean_.append(cls_wise_ious[i].mean())
-                cls_wise_iou_var_.append(cls_wise_ious[i].var())
-            self.batch_mean = torch.stack(cls_wise_iou_mean_)
-            self.batch_var = torch.stack(cls_wise_iou_var_)
+                    cls_wise_iou_mean_.append(cls_wise_ious[i].mean())
+                    cls_wise_iou_var_.append(cls_wise_ious[i].var())
+            self.batch_mean = torch.stack(cls_wise_iou_mean_).nan_to_num(nan=0.0)
+            self.batch_var = torch.stack(cls_wise_iou_var_).nan_to_num(nan=1.0)
+
             self.st_mean = self.momentum*(self.st_mean) + (1-self.momentum)*self.batch_mean
             self.st_var = self.momentum*(self.st_var) + (1-self.momentum)*self.batch_var
 
