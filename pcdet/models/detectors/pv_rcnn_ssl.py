@@ -167,7 +167,7 @@ class PVRCNN_SSL(Detector3DTemplate):
         self.adaptive_thresholding = Adaptive_Thresh(dataset=self.dataset, model_cfg=model_cfg)
         vals_to_store = ['iou_roi_pl', 'iou_roi_gt', 'pred_scores', 'teacher_pred_scores', 
                         'weights', 'roi_scores', 'pcv_scores', 'num_points_in_roi', 'class_labels',
-                        'iteration','batch_mean','batch_var','ema_mean','ema_var']
+                        'iteration','batch_mean','batch_var','ema_mean','ema_var','rcnn_cls_targets']
         self.val_dict = {val: [] for val in vals_to_store}
 
     def forward(self, batch_dict):
@@ -419,8 +419,8 @@ class PVRCNN_SSL(Detector3DTemplate):
                 self.val_dict['batch_mean'].extend(softmatch.batch_mean.clone().detach())
                 self.val_dict['batch_var'].extend(softmatch.batch_var.clone().detach())
                 self.val_dict['ema_mean'].extend(softmatch.st_mean.clone().detach())
-                self.val_dict['ema_var'].extend(softmatch.st_var.clone().detach())              
-                
+                self.val_dict['ema_var'].extend(softmatch.st_var.clone().detach())     
+
                 batch_roi_labels = self.pv_rcnn.roi_head.forward_ret_dict['roi_labels'][unlabeled_inds]
                 batch_roi_labels = [roi_labels.clone().detach() for roi_labels in batch_roi_labels]
 
@@ -440,6 +440,7 @@ class PVRCNN_SSL(Detector3DTemplate):
                     valid_gt_boxes = batch_ori_gt_boxes[i][valid_gt_boxes_mask]
                     valid_gt_boxes[:, -1] -= 1                              # Starting class indices from zero
 
+                    
                     num_gts = valid_gt_boxes_mask.sum()
                     num_preds = valid_rois_mask.sum()
 
@@ -455,6 +456,9 @@ class PVRCNN_SSL(Detector3DTemplate):
 
                         cur_pred_score = torch.sigmoid(batch_dict['batch_cls_preds'][cur_unlabeled_ind]).squeeze()
                         self.val_dict['pred_scores'].extend(cur_pred_score.tolist())
+
+                        cur_rcnn_cls_labels = self.pv_rcnn.roi_head.forward_ret_dict['rcnn_cls_labels'][cur_unlabeled_ind]
+                        self.val_dict['rcnn_cls_targets'].extend(cur_rcnn_cls_labels.tolist())
 
                         if 'rcnn_cls_score_teacher' in self.pv_rcnn.roi_head.forward_ret_dict:
                             cur_teacher_pred_score = self.pv_rcnn.roi_head.forward_ret_dict['rcnn_cls_score_teacher'][cur_unlabeled_ind]

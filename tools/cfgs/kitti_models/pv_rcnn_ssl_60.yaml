@@ -206,7 +206,7 @@ MODEL:
             UNLABELED_CLS_BG_THRESH: 0.25
             CLS_BG_THRESH_LO: 0.1
             HARD_BG_RATIO: 0.8
-
+            SOFTMATCH_SCALER: 4
             REG_FG_THRESH: 0.55
             UNLABELED_REG_FG_THRESH: [0.55, 0.55, 0.55]
             UNLABELED_SAMPLER_TYPE: subsample_unlabeled_rois_classwise
