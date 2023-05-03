@@ -15,6 +15,7 @@ from ...utils.stats_utils import KITTIEvalMetrics, PredQualityMetrics
 from torchmetrics.collections import MetricCollection
 import torch.distributed as dist
 from visual_utils import visualize_utils as V
+from ...utils.dynamic_template import Prototype
 
 def _to_dict_of_tensors(list_of_dicts, agg_mode='stack'):
     new_dict = {}
@@ -98,6 +99,26 @@ def _max_score_replacement(batch_dict_a, batch_dict_b, unlabeled_inds, score_key
         batch_dict_a[key][unlabeled_inds] = batch_dict_cat[key][unlabeled_inds, ..., max_inds]
 
 # TODO(farzad) refactor this with global registry, accessible in different places, not via passing through batch_dict
+class DynamicTemplate(object):
+    def __init__(self, **kwargs):
+        self._tag_metrics = {}
+        self.dataset = kwargs.get('dataset', None)
+        self.cls_bg_thresh = kwargs.get('cls_bg_thresh', None)
+        self.model_cfg = kwargs.get('model_cfg', None)
+
+    def get(self, tag=None):
+        if tag is None:
+            tag = 'default'
+        if tag in self._tag_metrics.keys():
+            metric = self._tag_metrics[tag]
+        else:
+            metric = Prototype(tag=tag, dataset=self.dataset, config=self.model_cfg)
+            self._tag_metrics[tag] = metric
+        return metric
+    
+    def tags(self):
+        return self._tag_metrics.keys()
+
 class MetricRegistry(object):
     def __init__(self, **kwargs):
         self._tag_metrics = {}
@@ -148,6 +169,7 @@ class PVRCNN_SSL(Detector3DTemplate):
         self.supervise_mode = model_cfg.SUPERVISE_MODE
         cls_bg_thresh = model_cfg.ROI_HEAD.TARGET_CONFIG.CLS_BG_THRESH
         self.metric_registry = MetricRegistry(dataset=self.dataset, model_cfg=model_cfg)
+        self.dynamic_template = DynamicTemplate(dataset=self.dataset, model_cfg=model_cfg).get(tag=f'prototype')  
         vals_to_store = ['iou_roi_pl', 'iou_roi_gt', 'pred_scores', 'weights', 'class_labels', 'iteration','cos_scores','cos_cls','num_points_in_roi']
         self.val_dict = {val: [] for val in vals_to_store}
         self.classes = ['Car','Ped','Cyc']
@@ -168,10 +190,9 @@ class PVRCNN_SSL(Detector3DTemplate):
         for cls in self.classes:
             rcnn_cls_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0).detach().cpu())
         self.rcnn_cls_mean_ = torch.stack(rcnn_cls_mean)
-    
         self.rcnn_sh_mean = self.rcnn_sh_mean_.detach().cuda()
         self.rcnn_cls_mean = self.rcnn_cls_mean_.detach().cuda()
-
+        
         if dist.is_available():
             initialized = dist.is_initialized()
             if initialized:
@@ -558,6 +579,8 @@ class PVRCNN_SSL(Detector3DTemplate):
                                                                                    no_nms_for_unlabeled=self.no_nms)
         class_thresh = torch.tensor([0.8,0.8,0.8])
         pred_thresh = torch.tensor([0.95,0.85,0.85])
+        # class_thresh = torch.tensor([0.5,0.5,0.5])
+        # pred_thresh = torch.tensor([0.5,0.55,0.55])
         for inds in batch_dict['labeled_inds']:
             pred_scores = pred_dicts_feat[inds]['pred_scores_all']
             pred_labels = pred_dicts_feat[inds]['label_preds']
@@ -594,29 +617,42 @@ class PVRCNN_SSL(Detector3DTemplate):
             car_cls = final_cls[final_preds == 1]
             ped_cls = final_cls[final_preds == 2]
             cyc_cls = final_cls[final_preds == 3]
-
+            
+            
             for i,feature in enumerate(car_sh):
-                self.updated_template['Car'].append(car_sh[i].clone().detach())
+                if len(car_sh) != 0:
+                    self.updated_template['Car'].append(car_sh[i].clone().detach())
                 self.updated_cls_template['Car'].append(car_cls[i].clone().detach())
 
             for i,feature in enumerate(ped_sh):
-                self.updated_template['Ped'].append(ped_sh[i].clone().detach())
-                self.updated_cls_template['Ped'].append(ped_cls[i].clone().detach())
+                if len(ped_sh) != 0:
+                    self.updated_template['Ped'].append(ped_sh[i].clone().detach()) 
+                self.updated_cls_template['Ped'].append(ped_cls[i].clone().detach())  
 
             for i,feature in enumerate(cyc_sh):
-                self.updated_template['Cyc'].append(cyc_sh[i].clone().detach())
-                self.updated_cls_template['Cyc'].append(cyc_cls[i].clone().detach())            
+                if len(cyc_sh) != 0:
+                    self.updated_template['Cyc'].append(cyc_sh[i].clone().detach())  
+                self.updated_cls_template['Cyc'].append(cyc_cls[i].clone().detach()) 
 
-        if batch_dict['cur_iteration']+1 % 20 == 0:
-            alpha = 0.9 
-            for i,cls in enumerate(self.classes): 
-                if len(self.updated_template[cls]) != 0:
-                    update_feat = torch.mean(torch.stack(self.updated_template[cls]),dim=0)
-                    update_cls_feat = torch.mean(torch.stack(self.updated_cls_template[cls]),dim=0)
-                    self.rcnn_sh_mean[i] = (self.rcnn_sh_mean[i].to(update_feat.device)*alpha) + ((1-alpha)*update_feat)
-                    self.rcnn_cls_mean[i] = (self.rcnn_cls_mean[i].to(update_cls_feat.device)*alpha) + ((1-alpha)*update_cls_feat)
-                self.updated_template = {val: [] for val in self.classes}   
-                self.updated_cls_template = {val: [] for val in self.classes}   
+#TODO:Deepika
+            template = {
+                'car_template':self.updated_template['Car'],
+                'ped_template':self.updated_template['Ped'],
+                'cyc_template':self.updated_template['Cyc']
+            }
+            self.dynamic_template.update(**template)
+            self.rcnn_cls_mean = self.dynamic_template.compute()
+
+        # if batch_dict['cur_iteration']+1 % 20 == 0:
+        #     alpha = 0.9 
+        #     for i,cls in enumerate(self.classes): 
+        #         if len(self.updated_template[cls]) != 0:
+        #             update_feat = torch.mean(torch.stack(self.updated_template[cls]),dim=0)
+        #             update_cls_feat = torch.mean(torch.stack(self.updated_cls_template[cls]),dim=0)
+        #             self.rcnn_sh_mean[i] = (self.rcnn_sh_mean[i].to(update_feat.device)*alpha) + ((1-alpha)*update_feat)
+        #             self.rcnn_cls_mean[i] = (self.rcnn_cls_mean[i].to(update_cls_feat.device)*alpha) + ((1-alpha)*update_cls_feat)
+        #         self.updated_template = {val: [] for val in self.classes}   
+        #         self.updated_cls_template = {val: [] for val in self.classes}   
 
     def ensemble_post_processing(self, batch_dict_a, batch_dict_b, unlabeled_inds, ensemble_option=None):
         # TODO(farzad) what about roi_labels and roi_scores in following options?
