@@ -56,6 +56,7 @@ class AdaptiveThresholding(Metric):
         # cls_wise_ious = get_cls_wise_ious(self.iou_scores, self.labels, fill_value=0.0, num_classes=self.num_classes)
             cls_wise_iou_mean_ = []
             cls_wise_iou_var_ = []
+            cls_wise_thresholded = []
             all_iou = [i.detach().cpu() for i in self.iou_scores]
             all_label = [i.detach().cpu() for i in self.labels]
             ious = torch.cat(all_iou, dim=0)
@@ -67,9 +68,11 @@ class AdaptiveThresholding(Metric):
             labels = labels[valid_mask]
             labels -= 1
             cls_wise_ious = [ious[labels == cind] for cind in range(self.num_classes)]
+            cls_wise_thresholded = [cls_wise_ious[cind][cls_wise_ious[cind] > self.st_mean[cind]] for cind in range(self.num_classes)]            
             for i in  range(len(cls_wise_ious)):
                     cls_wise_iou_mean_.append(cls_wise_ious[i].mean())
                     cls_wise_iou_var_.append(cls_wise_ious[i].var())
+            #NOTE: mean of empty tensor is nan,common among tail classes
             self.batch_mean = torch.stack(cls_wise_iou_mean_).nan_to_num(nan=0.0)
             self.batch_var = torch.stack(cls_wise_iou_var_).nan_to_num(nan=1.0)
 
@@ -90,11 +93,11 @@ class AdaptiveThresholding(Metric):
             classwise_metrics = {}
             for metric_name in self.metrics_name:
                classwise_metrics[metric_name] = self.iou_scores[0].new_zeros(num_classes).fill_(float('nan'))
-
-        classwise_results = {}
         
+        classwise_results = {}
         for key in self.metrics_name: 
             for cind,cls in enumerate(self.dataset.class_names):
+                #if all values are nan, then return a list with nan values(gets filtered in train_utils)
                 if torch.all(classwise_metrics[key].isnan() == True):
                     results[key] = self.iou_scores[0].new_zeros(1).fill_(float('nan'))
                 else:
