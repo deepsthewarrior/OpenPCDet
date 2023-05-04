@@ -32,7 +32,7 @@ class Prototype(Metric):
         self.state_list = ['car_template','ped_template','cyc_template']
         for cls in self.state_list:
             self.add_state(cls, default=[], dist_reduce_fx='cat')
-        self.add_state("count",default=[],dist_reduce_fx='sum')
+        # self.add_state("count",default=[],dist_reduce_fx='sum')
         self.st_mean = torch.ones((self.num_classes)) / self.num_classes     
         self.st_var = torch.ones(self.num_classes)
         self.batch_mean = self.st_mean
@@ -69,28 +69,27 @@ class Prototype(Metric):
             self.ped_template.append(feature.unsqueeze(dim=0))
         for i,feature in enumerate(cyc_template):
             self.cyc_template.append(feature.unsqueeze(dim=0))
-        self.count.append(1.0)
+        # self.count.append(1.0)
 
 
     def compute(self):
-        if sum(self.count) >= self.reset_state_interval:
-            template_state = [self.car_template,self.ped_template,self.cyc_template]
-            template = {cls:[] for cls in self.classes}
-            template_list = []
-            
-            for i,templ in enumerate(template_state):
-                for temps in templ:
-                    if temps != None:
-                            template[self.classes[i]].append(temps)
 
-            for i,final_template in enumerate(template.values()):
-                cls_template  = self.rcnn_sh_mean[0].new_zeros(self.rcnn_sh_mean[0].shape).fill_(float('nan'))
-                if len(final_template):
-                    cls_template = torch.mean(torch.stack(final_template),dim=0)
-                if torch.all(~torch.isnan(cls_template)) and len(final_template):
-                    self.rcnn_sh_mean[i] = self.momentum*self.rcnn_sh_mean[i] + (1-self.momentum)*cls_template
+        template_state = [self.car_template,self.ped_template,self.cyc_template]
+        template = {cls:[] for cls in self.classes}
+        
+        for i,templ in enumerate(template_state):
+            for temps in templ:
+                if temps != None:
+                        template[self.classes[i]].append(temps)
 
-            self.reset()     
+        for i,final_template in enumerate(template.values()):
+            cls_template  = self.rcnn_sh_mean[0].new_zeros(self.rcnn_sh_mean[0].shape).fill_(float('nan'))
+            if len(final_template):
+                cls_template = torch.mean(torch.stack(final_template),dim=0)
+            if torch.all(~torch.isnan(cls_template)) and len(final_template):
+                self.rcnn_sh_mean[i] = self.momentum*self.rcnn_sh_mean[i] + (1-self.momentum)*cls_template
+
+        self.reset()     
 
 
         return self.rcnn_sh_mean
