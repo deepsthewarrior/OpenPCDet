@@ -31,7 +31,7 @@ class Prototype(Metric):
             self.num_classes = 3
         self.state_list = ['car_template','ped_template','cyc_template']
         for cls in self.state_list:
-            self.add_state(cls, default=[], dist_reduce_fx='cat')
+            self.add_state(cls, default=[])
         # self.add_state("count",default=[],dist_reduce_fx='sum')
         self.st_mean = torch.ones((self.num_classes)) / self.num_classes     
         self.st_var = torch.ones(self.num_classes)
@@ -62,18 +62,18 @@ class Prototype(Metric):
         # if iou_wrt_pl.ndim == 1: # Unsqueeze for DDP
         #     iou_wrt_pl=iou_wrt_pl.unsqueeze(dim=0)
         # for temps in self.car_template:
-
-        for i,feature in enumerate(car_template):
-            self.car_template.append(feature.unsqueeze(dim=0))
-        for i,feature in enumerate(ped_template):
-            self.ped_template.append(feature.unsqueeze(dim=0))
-        for i,feature in enumerate(cyc_template):
-            self.cyc_template.append(feature.unsqueeze(dim=0))
+            
+        if len(car_template) != 0:
+            self.car_template.append(torch.stack(car_template))
+        if len(ped_template) != 0:
+            self.ped_template.append(torch.stack(ped_template))
+        if len(cyc_template) != 0:
+            self.cyc_template.append(torch.stack(cyc_template))
         # self.count.append(1.0)
 
 
     def compute(self,iter=None):
-        if (iter+1)%20 == 0:
+        if (iter+1)%self.reset_state_interval == 0:
             template_state = [self.car_template,self.ped_template,self.cyc_template]
             template = {cls:[] for cls in self.classes}
             
@@ -85,7 +85,7 @@ class Prototype(Metric):
             for i,final_template in enumerate(template.values()):
                 cls_template  = self.rcnn_sh_mean[0].new_zeros(self.rcnn_sh_mean[0].shape).fill_(float('nan'))
                 if len(final_template):
-                    cls_template = torch.mean(torch.stack(final_template),dim=0)
+                    cls_template = torch.mean(torch.vstack(final_template),dim=0)
                 if torch.all(~torch.isnan(cls_template)) and len(final_template):
                     self.rcnn_sh_mean[i] = self.momentum*self.rcnn_sh_mean[i] + (1-self.momentum)*cls_template
 
