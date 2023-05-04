@@ -35,7 +35,7 @@ class AdaptiveThresholding(Metric):
         self.add_state("labels", default=[], dist_reduce_fx='cat')
         self.st_mean = torch.ones(self.num_classes) / self.num_classes     
         self.st_var = torch.ones(self.num_classes)
-        self.momentum = 0.9
+
         self.batch_mean = torch.zeros(self.num_classes) 
         self.batch_var = torch.zeros(self.num_classes)
         
@@ -70,8 +70,8 @@ class AdaptiveThresholding(Metric):
             cls_wise_ious = [ious[labels == cind] for cind in range(self.num_classes)]
             cls_wise_thresholded = [cls_wise_ious[cind][cls_wise_ious[cind] > self.st_mean[cind]] for cind in range(self.num_classes)]            
             for i in  range(len(cls_wise_ious)):
-                    cls_wise_iou_mean_.append(cls_wise_ious[i].mean())
-                    cls_wise_iou_var_.append(cls_wise_ious[i].var())
+                    cls_wise_iou_mean_.append(cls_wise_thresholded[i].mean())
+                    cls_wise_iou_var_.append(cls_wise_thresholded[i].var())
             #NOTE: mean of empty tensor is nan,common among tail classes
             self.batch_mean = torch.stack(cls_wise_iou_mean_).nan_to_num(nan=0.0)
             self.batch_var = torch.stack(cls_wise_iou_var_).nan_to_num(nan=1.0)
