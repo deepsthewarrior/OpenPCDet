@@ -640,10 +640,8 @@ class PVRCNN_SSL(Detector3DTemplate):
                 'ped_template':self.updated_template['Ped'],
                 'cyc_template':self.updated_template['Cyc']
             }
-            self.dynamic_template.update(**template)
-            
-            if batch_dict['cur_iteration']+1 % 20 == 0:
-                self.rcnn_cls_mean = self.dynamic_template.compute()
+            self.dynamic_template.update(**template)            
+            self.rcnn_cls_mean = self.dynamic_template.compute(iter = batch_dict['cur_iteration'])
 
         # if batch_dict['cur_iteration']+1 % 20 == 0:
         #     alpha = 0.9 

@@ -19,7 +19,7 @@ class Prototype(Metric):
         # self.template_momentum = kwargs.get('template_momentum',0.8)
         self.enable_clipping = kwargs.get('enable_clipping', True)
         self.metrics_name = ['batchwise_mean','batchwise_variance','ema_mean','ema_variance']
-        self.reset_state_interval = kwargs.get('reset_state_interval', 5)
+        self.reset_state_interval = kwargs.get('reset_state_interval', 20)
 
         if self.dataset is not None:
             self.class_names  = self.dataset.class_names
@@ -47,7 +47,7 @@ class Prototype(Metric):
         for cls in self.classes:
             rcnn_sh_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0).detach().cpu())
         self.rcnn_sh_mean_ = torch.stack(rcnn_sh_mean)
-        self.rcnn_sh_mean = self.rcnn_sh_mean_.detach().cuda()
+        self.rcnn_sh_mean = self.rcnn_sh_mean_.detach().clone().cuda()
         # avg = "mean"
         # param = "cls"
         # for cls in self.class_names.values():
@@ -72,26 +72,24 @@ class Prototype(Metric):
         # self.count.append(1.0)
 
 
-    def compute(self):
+    def compute(self,iter=None):
+        if (iter+1)%20 == 0:
+            template_state = [self.car_template,self.ped_template,self.cyc_template]
+            template = {cls:[] for cls in self.classes}
+            
+            for i,templ in enumerate(template_state):
+                for temps in templ:
+                    if temps != None:
+                            template[self.classes[i]].append(temps)
 
-        template_state = [self.car_template,self.ped_template,self.cyc_template]
-        template = {cls:[] for cls in self.classes}
-        
-        for i,templ in enumerate(template_state):
-            for temps in templ:
-                if temps != None:
-                        template[self.classes[i]].append(temps)
+            for i,final_template in enumerate(template.values()):
+                cls_template  = self.rcnn_sh_mean[0].new_zeros(self.rcnn_sh_mean[0].shape).fill_(float('nan'))
+                if len(final_template):
+                    cls_template = torch.mean(torch.stack(final_template),dim=0)
+                if torch.all(~torch.isnan(cls_template)) and len(final_template):
+                    self.rcnn_sh_mean[i] = self.momentum*self.rcnn_sh_mean[i] + (1-self.momentum)*cls_template
 
-        for i,final_template in enumerate(template.values()):
-            cls_template  = self.rcnn_sh_mean[0].new_zeros(self.rcnn_sh_mean[0].shape).fill_(float('nan'))
-            if len(final_template):
-                cls_template = torch.mean(torch.stack(final_template),dim=0)
-            if torch.all(~torch.isnan(cls_template)) and len(final_template):
-                self.rcnn_sh_mean[i] = self.momentum*self.rcnn_sh_mean[i] + (1-self.momentum)*cls_template
-
-        self.reset()     
-
-
+            self.reset()     
         return self.rcnn_sh_mean
         
         
