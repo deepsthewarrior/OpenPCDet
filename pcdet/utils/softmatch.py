@@ -18,7 +18,7 @@ class AdaptiveThresholding(Metric):
         self.tag = kwargs.get('tag', None)
         self.dataset = kwargs.get('dataset', None)
         self.quantile= kwargs.get('quantile', False)
-        self.momentum= kwargs.get('momentum', 0.99)
+        self.momentum= kwargs.get('momentum', 0.9)
         self.enable_clipping = kwargs.get('enable_clipping', True)
         self.metrics_name = ['batchwise_mean','batchwise_variance','ema_mean','ema_variance']
 
@@ -76,9 +76,10 @@ class AdaptiveThresholding(Metric):
             self.batch_mean = torch.stack(cls_wise_iou_mean_).nan_to_num(nan=0.0)
             self.batch_var = torch.stack(cls_wise_iou_var_).nan_to_num(nan=1.0)
 
-            self.st_mean = self.momentum*(self.st_mean) + (1-self.momentum)*self.batch_mean
-            self.st_var = self.momentum*(self.st_var) + (1-self.momentum)*self.batch_var
-
+            self.st_mean_ = self.momentum*(self.st_mean) + (1-self.momentum)*self.batch_mean
+            self.st_var_ = self.momentum*(self.st_var) + (1-self.momentum)*self.batch_var
+            self.st_mean = torch.clamp(self.st_mean_, min=0.25,max=0.90)
+            self.st_var = torch.clamp(self.st_var,min=0.0)
             classwise_metrics={}
             for metric_name in self.metrics_name:
                 classwise_metrics[metric_name] = all_iou[0].new_zeros(self.num_classes).fill_(float('nan'))
