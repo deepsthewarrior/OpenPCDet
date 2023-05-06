@@ -37,7 +37,7 @@ class AdaptiveThresholding(Metric):
         self.st_var = torch.ones(self.num_classes)
 
         self.batch_mean = torch.zeros(self.num_classes) 
-        self.batch_var = torch.zeros(self.num_classes)
+        self.batch_var = torch.ones(self.num_classes)
         
     def update(self, roi_labels: torch.Tensor, iou_wrt_pl: torch.Tensor) -> None:
         if roi_labels.ndim == 1: # Unsqueeze for DDP
@@ -70,16 +70,18 @@ class AdaptiveThresholding(Metric):
             cls_wise_ious = [ious[labels == cind] for cind in range(self.num_classes)]
             cls_wise_thresholded = [cls_wise_ious[cind][cls_wise_ious[cind] > self.st_mean[cind]] for cind in range(self.num_classes)]            
             for i in  range(len(cls_wise_ious)):
-                    cls_wise_iou_mean_.append(cls_wise_thresholded[i].mean())
-                    cls_wise_iou_var_.append(cls_wise_thresholded[i].var())
+                    cls_wise_iou_mean_.append(cls_wise_thresholded[i].mean().clone())
+                    cls_wise_iou_var_.append(cls_wise_thresholded[i].var(unbiased=True).clone())
             #NOTE: mean of empty tensor is nan,common among tail classes
-            self.batch_mean = torch.stack(cls_wise_iou_mean_).nan_to_num(nan=0.0)
-            self.batch_var = torch.stack(cls_wise_iou_var_).nan_to_num(nan=1.0)
+            self.batch_mean = torch.stack(cls_wise_iou_mean_).nan_to_num(nan=0.0).clone()
+            self.batch_var = torch.stack(cls_wise_iou_var_).clone()
+            for cind in range(num_classes):
+                self.batch_var[cind] = self.batch_var[cind].nan_to_num(nan=self.st_var[cind])
 
             self.st_mean = self.momentum*(self.st_mean) + (1-self.momentum)*self.batch_mean
             self.st_var = self.momentum*(self.st_var) + (1-self.momentum)*self.batch_var
-            self.st_mean = torch.clamp(self.st_mean, min=0.25,max=0.90)
-            self.st_var = torch.clamp(self.st_var,min=0.0)
+            self.st_mean = torch.clamp(self.st_mean, min=0.25,max=0.90).clone()
+            self.st_var = torch.clamp(self.st_var,min=0.0).clone()
             classwise_metrics={}
             for metric_name in self.metrics_name:
                 classwise_metrics[metric_name] = all_iou[0].new_zeros(self.num_classes).fill_(float('nan'))
