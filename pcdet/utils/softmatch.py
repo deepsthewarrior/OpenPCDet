@@ -21,6 +21,8 @@ class AdaptiveThresholding(Metric):
         self.momentum= kwargs.get('momentum', 0.9)
         self.enable_clipping = kwargs.get('enable_clipping', True)
         self.metrics_name = ['batchwise_mean','batchwise_variance','ema_mean','ema_variance']
+        self.config = kwargs['config']
+        self.bg_thresh = self.config.ROI_HEAD.TARGET_CONFIG.CLS_BG_THRESH
 
         if self.dataset is not None:
             self.class_names  = self.dataset.class_names
@@ -68,7 +70,7 @@ class AdaptiveThresholding(Metric):
             labels = labels[valid_mask]
             labels -= 1
             cls_wise_ious = [ious[labels == cind] for cind in range(self.num_classes)]
-            cls_wise_thresholded = [cls_wise_ious[cind][cls_wise_ious[cind] > self.st_mean[cind]] for cind in range(self.num_classes)]            
+            cls_wise_thresholded = [cls_wise_ious[cind][cls_wise_ious[cind] >= self.bg_thresh] for cind in range(self.num_classes)]            
             for i in  range(len(cls_wise_ious)):
                     cls_wise_iou_mean_.append(cls_wise_thresholded[i].mean().clone())
                     cls_wise_iou_var_.append(cls_wise_thresholded[i].var(unbiased=True).clone())
