@@ -481,6 +481,11 @@ class PVRCNN_SSL(Detector3DTemplate):
 
                         cur_iteration = torch.ones_like(preds_iou_max) * (batch_dict['cur_iteration'])
                         self.val_dict['iteration'].extend(cur_iteration.tolist())
+                        
+                        self.val_dict['batch_mean'].extend(softmatch.batch_mean.tolist())
+                        self.val_dict['batch_var'].extend(softmatch.batch_var.tolist())
+                        self.val_dict['ema_mean'].extend(softmatch.st_mean.tolist())
+                        self.val_dict['ema_var'].extend(softmatch.st_var.tolist()) 
 
                 # replace old pickle data (if exists) with updated one 
                 output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]
