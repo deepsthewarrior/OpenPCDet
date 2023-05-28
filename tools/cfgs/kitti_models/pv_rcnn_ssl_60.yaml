@@ -165,6 +165,7 @@ MODEL:
             PERCENT: 0.1
             PRE_FILTERING_THRESH: 0.25
             RESET_STATE_INTERVAL: 64
+            NON_LINEARITY : False
         METRICS_PRED_TYPES: [roi_pl_gt, pl_gt_metrics_before_filtering, pl_gt_metrics_after_filtering]
         SHARED_FC: [256, 256]
         CLS_FC: [256, 256]
