@@ -149,7 +149,8 @@ class PVRCNN_SSL(Detector3DTemplate):
             #         metrics.update(**metric_inputs)
 
             # batch_dict['adaptive_thresh_metric'] = self.adaptive_thresh_metric
-            batch_dict['adaptive_thresh'] = self.adaptive_thresholding
+            if self.model_cfg.ROI_HEAD.TARGET_CONFIG.UNLABELED_SAMPLER_TYPE == "subsample_unlabeled_rois_tr_gaussian":
+                batch_dict['adaptive_thresh'] = self.adaptive_thresholding
             batch_dict['metric_registry'] = self.metric_registry
             batch_dict['ori_unlabeled_boxes'] = ori_unlabeled_boxes
             batch_dict['store_scores_in_pkl'] = self.model_cfg.STORE_SCORES_IN_PKL
@@ -162,7 +163,8 @@ class PVRCNN_SSL(Detector3DTemplate):
             self.pv_rcnn.roi_head.forward_ret_dict['unlabeled_inds'] = unlabeled_inds
             self.pv_rcnn.roi_head.forward_ret_dict['pl_boxes'] = batch_dict['gt_boxes']
             self.pv_rcnn.roi_head.forward_ret_dict['pl_scores'] = pseudo_scores
-            self.pv_rcnn.roi_head.forward_ret_dict['softmatch'] = self.adaptive_thresholding.get(tag=f'softmatch')
+            if self.model_cfg.ROI_HEAD.TARGET_CONFIG.UNLABELED_SAMPLER_TYPE == "subsample_unlabeled_rois_tr_gaussian":
+                self.pv_rcnn.roi_head.forward_ret_dict['softmatch'] = self.adaptive_thresholding.get(tag=f'softmatch')
             
             disp_dict = {}
             loss_rpn_cls, loss_rpn_box, tb_dict = self.pv_rcnn.dense_head.get_loss(scalar=False)
@@ -247,8 +249,9 @@ class PVRCNN_SSL(Detector3DTemplate):
                         #     cur_teacher_pred_score = self.pv_rcnn.roi_head.forward_ret_dict['rcnn_cls_score_teacher'][cur_unlabeled_ind]
                         #     self.val_dict['teacher_pred_scores'].extend(cur_teacher_pred_score.tolist())
 
-                        cur_weight = self.pv_rcnn.roi_head.forward_ret_dict['rcnn_cls_weights'][cur_unlabeled_ind]
-                        self.val_dict['weights'].extend(cur_weight.tolist())
+                        if 'rcnn_cls_weights' in self.pv_rcnn.roi_head.forward_ret_dict.keys():
+                            cur_weight = self.pv_rcnn.roi_head.forward_ret_dict['rcnn_cls_weights'][cur_unlabeled_ind]
+                            self.val_dict['weights'].extend(cur_weight.tolist())
 
                         cur_roi_score =  torch.sigmoid(self.pv_rcnn.roi_head.forward_ret_dict['roi_scores'][cur_unlabeled_ind])
                         self.val_dict['roi_scores'].extend(cur_roi_score.tolist())

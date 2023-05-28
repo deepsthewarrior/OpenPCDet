@@ -78,7 +78,7 @@ class ProposalTargetLayer(nn.Module):
                 subsample_unlabeled_rois = getattr(self, self.roi_sampler_cfg.UNLABELED_SAMPLER_TYPE, None)
 
                 if self.roi_sampler_cfg.UNLABELED_SAMPLER_TYPE is None:
-                    sampled_inds, cur_reg_valid_mask, cur_cls_labels, roi_ious, gt_assignment, cur_interval_mask = self.subsample_labeled_rois(batch_dict, index)
+                    sampled_inds, cur_reg_valid_mask, cur_cls_labels, roi_ious, gt_assignment, cur_interval_mask,weights = self.subsample_labeled_rois(batch_dict, index)
                 else:
                     sampled_inds, cur_reg_valid_mask, cur_cls_labels, roi_ious, gt_assignment, cur_interval_mask,weights = subsample_unlabeled_rois(batch_dict, index)
                 cur_roi = batch_dict['rois'][index][sampled_inds]
@@ -90,7 +90,7 @@ class ProposalTargetLayer(nn.Module):
                 batch_gt_of_rois[index] = cur_gt_boxes[gt_assignment[sampled_inds]]
 
             else:
-                sampled_inds, cur_reg_valid_mask, cur_cls_labels, roi_ious, gt_assignment, cur_interval_mask = self.subsample_labeled_rois(batch_dict, index)
+                sampled_inds, cur_reg_valid_mask, cur_cls_labels, roi_ious, gt_assignment, cur_interval_mask,weights = self.subsample_labeled_rois(batch_dict, index)
                 cur_roi = batch_dict['rois'][index][sampled_inds]
                 cur_roi_scores = batch_dict['roi_scores'][index][sampled_inds]
                 cur_roi_labels = batch_dict['roi_labels'][index][sampled_inds]
@@ -147,12 +147,13 @@ class ProposalTargetLayer(nn.Module):
         bg_mask = roi_ious < iou_bg_thresh
         interval_mask = (fg_mask == 0) & (bg_mask == 0)
         cls_labels = (fg_mask > 0).float()
+        weights = torch.ones_like(roi_ious)
         # iou_fg_thresh = iou_fg_thresh[interval_mask] if self.roi_sampler_cfg.USE_ULB_CLS_FG_THRESH_FOR_LB else iou_fg_thresh
-
+        # weights = roi_ious.
         cls_labels[interval_mask] = \
             (roi_ious[interval_mask] - iou_bg_thresh) / (iou_fg_thresh - iou_bg_thresh)
 
-        return sampled_inds, reg_valid_mask, cls_labels, roi_ious, gt_assignment, interval_mask
+        return sampled_inds, reg_valid_mask, cls_labels, roi_ious, gt_assignment, interval_mask,weights
     
 
     def subsample_rois(self, max_overlaps,reg_fg_thresh=None,cls_fg_thresh=None):
@@ -280,7 +281,6 @@ class ProposalTargetLayer(nn.Module):
         cls_fg_thresh = cur_roi.new_tensor(self.adaptive_thresh.st_mean.to(cur_roi.device)).view(1, -1).repeat(len(cur_roi), 1)
         cls_fg_thresh = cls_fg_thresh.gather(dim=-1, index=(cur_roi_labels - 1).unsqueeze(-1)).squeeze(-1)
 
-
         if self.roi_sampler_cfg.get('SAMPLE_ROI_BY_EACH_CLASS', False):
             max_overlaps, gt_assignment = self.get_max_iou_with_same_class(
                 rois=cur_roi, roi_labels=cur_roi_labels,
@@ -315,7 +315,9 @@ class ProposalTargetLayer(nn.Module):
         diff = torch.square(roi_ious - self.st_mean[cur_roi_labels[sampled_inds]-1])
         scaler = self.roi_sampler_cfg.SOFTMATCH_SCALER
         scaled_var = scaler*torch.square(self.st_var[cur_roi_labels[sampled_inds]-1])
-        weights = torch.exp(-diff/scaled_var)
+        weights = torch.ones_like(roi_ious)
+        if self.roi_sampler_cfg.SOFTMATCH_WEIGHTS: #weight only if enabled
+            weights = torch.exp(-diff/scaled_var)
         cls_labels[interval_mask] = (roi_ious[interval_mask] - iou_bg_thresh) / (iou_fg_thresh[interval_mask] - iou_bg_thresh)
         ignore_mask = torch.eq(cur_gt_boxes[gt_assignment[sampled_inds]], 0).all(dim=-1)
         cls_labels[ignore_mask] = -1

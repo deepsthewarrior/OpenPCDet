@@ -107,7 +107,10 @@ class RoIHeadTemplate(nn.Module):
     def update_metrics(self, targets_dict, mask_type='cls', vis_type='pred_gt', pred_type=None):
         metric_registry = targets_dict['metric_registry']
         unlabeled_inds = targets_dict['unlabeled_inds']
-        softmatch = targets_dict['softmatch']
+        st_mean = None
+        if 'softmatch' in targets_dict.keys():
+            softmatch = targets_dict['softmatch']
+            st_mean = softmatch.st_mean
         sample_preds, sample_pred_scores, sample_pred_weights = [], [], []
         sample_rois, sample_roi_scores = [], []
         sample_targets, sample_target_scores = [], []
@@ -117,6 +120,9 @@ class RoIHeadTemplate(nn.Module):
         sample_gt_iou_of_rois = []
         sample_softmatch_weights,sample_objective,sample_valid_mask = [],[],[]
         sample_ori_boxes = []
+
+        # if softmatch.st_mean:
+
         for i, uind in enumerate(unlabeled_inds):
             mask = (targets_dict['reg_valid_mask'][uind] > 0) if mask_type == 'reg' else (
                         targets_dict['rcnn_cls_labels'][uind] >= 0)
@@ -155,16 +161,18 @@ class RoIHeadTemplate(nn.Module):
             sample_pls.append(pl_labeled_boxes)
             sample_pl_scores.append(pl_scores)
 
-            pred_weights = targets_dict['rcnn_cls_weights'][uind][mask].detach().clone()
-            sample_pred_weights.append(pred_weights)
+            if 'rcnn_cls_weights' in targets_dict:
+                pred_weights = targets_dict['rcnn_cls_weights'][uind][mask].detach().clone()
+                sample_pred_weights.append(pred_weights)
 
-            batch_loss_cls = F.binary_cross_entropy(pred_scores, target_scores.float(), reduction='none')
-            cls_valid_mask = (target_scores >= 0).float()
-            # rcnn_loss_cls_norm = (cls_valid_mask * pred_weights).sum(-1)
-            rcnn_loss_cls = (batch_loss_cls * pred_weights) 
-            sample_objective.append(rcnn_loss_cls)
-            sample_valid_mask.append(cls_valid_mask)
+            # batch_loss_cls = F.binary_cross_entropy(pred_scores, target_scores.float(), reduction='none')
+            # cls_valid_mask = (target_scores >= 0).float()
+            # # rcnn_loss_cls_norm = (cls_valid_mask * pred_weights).sum(-1)
+            # rcnn_loss_cls = (batch_loss_cls * pred_weights) 
 
+            # sample_valid_mask.append(cls_valid_mask)
+
+            
 
             # Teacher refinements (Preds) of student's rois
             if 'ema_gt' in pred_type and self.get('ENABLE_SOFT_TEACHER', False):
@@ -216,7 +224,7 @@ class RoIHeadTemplate(nn.Module):
                              'pseudo_labels': sample_pls, 'pseudo_label_scores': sample_pl_scores,
                              'target_scores': sample_target_scores, 'pred_weights': sample_pred_weights,
                              'pred_iou_wrt_pl': sample_gt_iou_of_rois,'softmatch_weights':sample_softmatch_weights,
-                             'softmatch_thresh':softmatch.st_mean, 'objective':sample_objective, 'loss_mask':sample_valid_mask}
+                             'softmatch_thresh':st_mean}
             metrics.update(**metric_inputs)
 
     def assign_targets(self, batch_dict):
@@ -267,15 +275,17 @@ class RoIHeadTemplate(nn.Module):
         ul_targets = self.forward_ret_dict['rcnn_cls_labels'][unlabeled_inds].clone().detach()
         gt_iou_of_rois = self.forward_ret_dict['gt_iou_of_rois'][unlabeled_inds].detach().clone()
         roi_labels = self.forward_ret_dict['roi_labels'][unlabeled_inds].detach().clone() - 1
+    
         softmatch = self.forward_ret_dict['softmatch']
-        
         fg_thresh = gt_iou_of_rois.new_tensor(softmatch.st_mean.to(gt_iou_of_rois.device)).reshape(1,1,-1).repeat(*ul_weights.shape[:2],1)
         cls_fg_thresh = torch.gather(fg_thresh, dim=-1, index=roi_labels.unsqueeze(-1)).squeeze(-1)
         
         #NOTE: Interval weighting happens here
         ul_weights[~self.forward_ret_dict['interval_mask'][unlabeled_inds]] = 1
-        self.forward_ret_dict['rcnn_cls_weights'] = torch.ones_like(self.forward_ret_dict['rcnn_cls_labels'])
-        self.forward_ret_dict['rcnn_cls_weights'][unlabeled_inds] = ul_weights
+
+        if self.model_cfg.TARGET_CONFIG.UNLABELED_SAMPLER_TYPE == "":
+            self.forward_ret_dict['rcnn_cls_weights'] = torch.ones_like(self.forward_ret_dict['rcnn_cls_labels'])
+            self.forward_ret_dict['rcnn_cls_weights'][unlabeled_inds] = ul_weights
         # iou3d = iou3d_nms_utils.boxes_iou3d_gpu(cur_roi, cur_gt_boxes[:, 0:7])  # (M, N)
         # max_overlaps, gt_assignment = torch.max(iou3d, dim=1)
         # self.forward_ret_dict['gt_iou_of_rois']
@@ -412,7 +422,8 @@ class RoIHeadTemplate(nn.Module):
 
     def get_loss(self, tb_dict=None, scalar=True):
         tb_dict = {} if tb_dict is None else tb_dict
-        self.preloss_filtering()
+        if self.model_cfg.TARGET_CONFIG.UNLABELED_SAMPLER_TYPE == "subsample_unlabeled_rois_tr_gaussian":
+            self.preloss_filtering()
         if self.model_cfg.get("ENABLE_EVAL", None):
             # self.update_metrics(self.forward_ret_dict, mask_type='reg')
             metrics_pred_types = self.model_cfg.get("METRICS_PRED_TYPES", None)
