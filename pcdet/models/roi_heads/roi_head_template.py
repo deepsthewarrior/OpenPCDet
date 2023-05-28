@@ -283,7 +283,7 @@ class RoIHeadTemplate(nn.Module):
         #NOTE: Interval weighting happens here
         ul_weights[~self.forward_ret_dict['interval_mask'][unlabeled_inds]] = 1
 
-        if self.model_cfg.TARGET_CONFIG.UNLABELED_SAMPLER_TYPE == "":
+        if self.model_cfg.TARGET_CONFIG.UNLABELED_SAMPLER_TYPE == "subsample_unlabeled_rois_tr_gaussian":
             self.forward_ret_dict['rcnn_cls_weights'] = torch.ones_like(self.forward_ret_dict['rcnn_cls_labels'])
             self.forward_ret_dict['rcnn_cls_weights'][unlabeled_inds] = ul_weights
         # iou3d = iou3d_nms_utils.boxes_iou3d_gpu(cur_roi, cur_gt_boxes[:, 0:7])  # (M, N)
