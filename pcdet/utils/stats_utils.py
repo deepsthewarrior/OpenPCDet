@@ -160,11 +160,7 @@ class PredQualityMetrics(Metric):
                     cc_mask = (pred_cls_mask & assigned_gt_cls_mask)  # correctly classified mask
                     mc_mask = (pred_cls_mask & (~assigned_gt_cls_mask)) | ((~pred_cls_mask) & assigned_gt_cls_mask)  # misclassified mask
 
-                    # Using kitti test class-wise fg threshold instead of thresholds used during train.
-                    if softmatch_thresh is not None:
-                        classwise_fg_thresh = softmatch_thresh[cind] 
-                    else:
-                        classwise_fg_thresh = self.min_overlaps[cind]   
+                    classwise_fg_thresh = self.min_overlaps[cind]   
                     fg_mask = preds_iou_max >= classwise_fg_thresh
                     bg_mask = preds_iou_max <= self.config.ROI_HEAD.TARGET_CONFIG.UNLABELED_CLS_BG_THRESH
                     uc_mask = ~(bg_mask | fg_mask)  # uncertain mask
