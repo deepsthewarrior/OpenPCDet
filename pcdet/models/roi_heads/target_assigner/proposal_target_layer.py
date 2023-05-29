@@ -71,8 +71,7 @@ class ProposalTargetLayer(nn.Module):
             while k >= 0 and cur_gt_boxes[k].sum() == 0:
                 k -= 1
             cur_gt_boxes = cur_gt_boxes[:k + 1]
-            cur_gt_boxes = cur_gt_boxes.new_zeros((1, cur_gt_boxes.shape[1])) if len(
-                cur_gt_boxes) == 0 else cur_gt_boxes
+            cur_gt_boxes = cur_gt_boxes.new_zeros((1, cur_gt_boxes.shape[1])) if len(cur_gt_boxes) == 0 else cur_gt_boxes
 
             if index in batch_dict['unlabeled_inds']:
                 subsample_unlabeled_rois = getattr(self, self.roi_sampler_cfg.UNLABELED_SAMPLER_TYPE, None)
@@ -114,6 +113,12 @@ class ProposalTargetLayer(nn.Module):
         cur_roi = batch_dict['rois'][index]
         cur_gt_boxes = batch_dict['gt_boxes'][index]
         cur_roi_labels = batch_dict['roi_labels'][index]
+        k = cur_gt_boxes.__len__() - 1
+        while k >= 0 and cur_gt_boxes[k].sum() == 0:
+                k -= 1
+        cur_gt_boxes = cur_gt_boxes[:k + 1]
+        cur_gt_boxes = cur_gt_boxes.new_zeros((1, cur_gt_boxes.shape[1])) if len(
+            cur_gt_boxes) == 0 else cur_gt_boxes
 
         if self.roi_sampler_cfg.get('SAMPLE_ROI_BY_EACH_CLASS', False):
             max_overlaps, gt_assignment = self.get_max_iou_with_same_class(
@@ -276,7 +281,11 @@ class ProposalTargetLayer(nn.Module):
         self.st_var = self.adaptive_thresh.st_var.to(cur_roi.device)
         cls_fg_thresh = cur_roi.new_tensor(self.adaptive_thresh.st_mean.to(cur_roi.device)).view(1, -1).repeat(len(cur_roi), 1)
         cls_fg_thresh = cls_fg_thresh.gather(dim=-1, index=(cur_roi_labels - 1).unsqueeze(-1)).squeeze(-1)
-
+        k = cur_gt_boxes.__len__() - 1
+        while k >= 0 and cur_gt_boxes[k].sum() == 0:
+                k -= 1
+        cur_gt_boxes = cur_gt_boxes[:k + 1]
+        cur_gt_boxes = cur_gt_boxes.new_zeros((1, cur_gt_boxes.shape[1])) if len(cur_gt_boxes) == 0 else cur_gt_boxes
 
         if self.roi_sampler_cfg.get('SAMPLE_ROI_BY_EACH_CLASS', False):
             max_overlaps, gt_assignment = self.get_max_iou_with_same_class(
