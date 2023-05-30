@@ -270,10 +270,10 @@ class PVRCNN_SSL(Detector3DTemplate):
 
                         if self.model_cfg.ROI_HEAD.TARGET_CONFIG.UNLABELED_SAMPLER_TYPE == 'subsample_unlabeled_rois_tr_gaussian':
                             softmatch = self.adaptive_thresholding.get(tag=f'softmatch')
-                            self.val_dict['batch_mean'].extend(softmatch.batch_mean.tolist())
-                            self.val_dict['batch_var'].extend(softmatch.batch_var.tolist())
-                            self.val_dict['ema_mean'].extend(softmatch.st_mean.tolist())
-                            self.val_dict['ema_var'].extend(softmatch.st_var.tolist())
+                            self.val_dict['batch_mean'].extend([softmatch.batch_mean.tolist()])
+                            self.val_dict['batch_var'].extend([softmatch.batch_var.tolist()])
+                            self.val_dict['ema_mean'].extend([softmatch.st_mean.tolist()])
+                            self.val_dict['ema_var'].extend([softmatch.st_var.tolist()])
 
                 # replace old pickle data (if exists) with updated one 
                 output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]
