@@ -403,7 +403,7 @@ class RoIHeadTemplate(nn.Module):
             else:
                 batch_size = forward_ret_dict['rcnn_cls_labels'].shape[0]
                 batch_loss_cls = batch_loss_cls.reshape(batch_size, -1)
-                cls_valid_mask = cls_valid_mask.reshape(batch_size, -1)
+                cls_valid_mask = cls_valid_mask.reshape(batch_size, -1) #TODO:Deepika check
                 if 'rcnn_cls_weights' in forward_ret_dict:
                     rcnn_cls_weights = forward_ret_dict['rcnn_cls_weights']
                     rcnn_loss_cls_norm = (cls_valid_mask * rcnn_cls_weights).sum(-1)
@@ -416,11 +416,11 @@ class RoIHeadTemplate(nn.Module):
                 rcnn_loss_cls_dict = {'Car': None, 'Pedestrian': None, 'Cyclist': None}
                 for cls_idx, cls_name in enumerate(rcnn_loss_cls_dict.keys()):
                     # Create classwise mask using ROI labels 
-                    cur_cls_mask = forward_ret_dict['roi_labels'] == (cls_idx+1)
-                    if 'rcnn_cls_weights' in forward_ret_dict:
-                        rcnn_loss_cls_dict[cls_name] = (batch_loss_cls * cur_cls_mask * rcnn_cls_weights).sum(-1) / torch.clamp(rcnn_loss_cls_norm, min=1.0)
+                    cur_cls_mask = (forward_ret_dict['roi_labels'] == (cls_idx+1))
+                    if 'rcnn_cls_weights' in forward_ret_dict: #TODO:  #TODO:Deepika check
+                        rcnn_loss_cls_dict[cls_name] = (batch_loss_cls * cur_cls_mask * rcnn_cls_weights * cls_valid_mask).sum(-1) / torch.clamp(rcnn_loss_cls_norm, min=1.0)
                     else:
-                        rcnn_loss_cls_dict[cls_name] = (batch_loss_cls * cur_cls_mask).sum(-1) / torch.clamp(cls_valid_mask.sum(-1), min=1.0)
+                        rcnn_loss_cls_dict[cls_name] = (batch_loss_cls * cur_cls_mask * cls_valid_mask).sum(-1) / torch.clamp(cls_valid_mask.sum(-1), min=1.0)
                     # Adding these individual losses should be equal to rcnn_loss_cls (just for verificaiton)
                 rcnn_loss_cls_dict['Total'] = rcnn_loss_cls_dict['Car'] + rcnn_loss_cls_dict['Pedestrian'] + rcnn_loss_cls_dict['Cyclist']
                 
