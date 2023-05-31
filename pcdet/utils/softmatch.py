@@ -36,7 +36,7 @@ class AdaptiveThresholding(Metric):
         self.add_state("iou_scores", default=[], dist_reduce_fx='cat')
         self.add_state("labels", default=[], dist_reduce_fx='cat')
         self.raw_mean = torch.ones(self.num_classes) / self.num_classes  
-        self.st_var = torch.ones(self.num_classes)
+        self.st_var = torch.zeros(self.num_classes)
         self.st_mean = self.raw_mean*(2 - self.raw_mean)
         self.batch_mean = torch.zeros(self.num_classes) 
         self.batch_var = torch.ones(self.num_classes)
@@ -97,7 +97,10 @@ class AdaptiveThresholding(Metric):
             for metric_name in self.metrics_name:
                 classwise_metrics[metric_name] = all_iou[0].new_zeros(self.num_classes).fill_(float('nan'))
             for cind in range(num_classes):
-                classwise_metrics['non_linear_mean'][cind] = self.st_mean[cind]
+                if self.config.ROI_HEAD.ADAPTIVE_THRESH_CONFIG.NON_LINEARITY:
+                    classwise_metrics['non_linear_mean'][cind] = self.st_mean[cind]
+                else:
+                    classwise_metrics['non_linear_mean'][cind] = self.st_mean[cind]*(2 - self.st_mean[cind])
                 classwise_metrics['batchwise_mean'][cind] = self.batch_mean[cind]
                 classwise_metrics['batchwise_variance'][cind] = self.batch_var[cind]
                 classwise_metrics['ema_mean'][cind] = self.raw_mean[cind]
