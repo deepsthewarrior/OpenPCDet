@@ -44,7 +44,7 @@ class AdaptiveThresholding(Metric):
         self.st_mean = self.raw_mean*(2 - self.raw_mean)
         self.batch_mean = torch.zeros(self.num_classes) 
         self.batch_var = torch.ones(self.num_classes)
-        self.enable_plots = 1
+        self.enable_plots =  self.config.ROI_HEAD.TARGET_CONFIG.ENABLE_PLOTS
 
     def update(self, roi_labels: torch.Tensor, iou_wrt_pl: torch.Tensor,weights:torch.Tensor,sampled_labels:torch.Tensor,sampled_ious:torch.Tensor) -> None:
         if roi_labels.ndim == 1: # Unsqueeze for DDP
@@ -98,25 +98,28 @@ class AdaptiveThresholding(Metric):
             cls_wise_weights = [weights[sampled_labels == cind] for cind in range(self.num_classes)]
             cls_wise_thresholded = [cls_wise_ious[cind][cls_wise_ious[cind] >= self.bg_thresh] for cind in range(self.num_classes)]
             # weights_thresholded = [cls_wise_weights[cind][cls_wise_ious[cind] >= self.bg_thresh] for cind in range(self.num_classes)] 
-            if self.enable_plots:
-                fig,axs = plt.subplots(1, 3, figsize=(12, 8))
+
             num_bins = 20
             bin_range = (0,1)           
             for i in  range(len(cls_wise_ious)):
                     cls_wise_iou_mean_.append(cls_wise_thresholded[i].mean().clone())
                     cls_wise_iou_var_.append(cls_wise_thresholded[i].var(unbiased=True).clone())
-                    sns.histplot(axs[i],x=cls_wise_thresholded[i].numpy(),bins='auto',kde=True)
-                    axs[i].plot(cls_wise_thresholded[i],label='Mean')
-                    axs[i].set_title('{}'.format(self.class_names[i]))
-                    axs[i].legend()
+
             # gaussian with previous weights
-            for cind in range(self.num_classes):
-                iou_range = np.linspace(0.0,1.0,100)
-                iou_range = torch.tensor(iou_range).to(device=ious.device)
-                range_weights = self.gaussian_weights_classwise(roi_ious = iou_range,labels = sampled_labels,cind = cind)
-                axs[cind].plot(range_weights)
-                plt.tight_layout()
-                results['threshold_weight_trend'] = fig.get_figure()
+            if self.enable_plots:
+                fig,axs = plt.subplots(1, 3, figsize=(12, 8))
+                for cind in range(self.num_classes):
+                    iou_range = np.linspace(0.0,1.0,100)
+                    iou_range = torch.tensor(iou_range).to(device=ious.device)
+                    range_weights = self.gaussian_weights_classwise(roi_ious = iou_range,labels = sampled_labels,cind = cind)
+                    sns.histplot(axs[i],x=cls_wise_thresholded[i].numpy(),bins='auto',kde=True)
+                    sns.lineplot(axs[i],x=iou_range.numpy(),y=range_weights.numpy())
+                    axs[cind].plot(cls_wise_thresholded[i],label='Mean')
+                    axs[cind].set_title('{}'.format(self.class_names[i]))
+                    axs[cind].legend()
+                    plt.tight_layout()
+                    results['threshold_weight_trend'] = fig.get_figure()
+                    plt.axvline(x=self.st_mean[cind].item(), color='red', linestyle='--')
 
             #NOTE: mean of empty tensor is nan,common among tail classes
             self.batch_mean = torch.stack(cls_wise_iou_mean_).clone()
