@@ -330,14 +330,19 @@ class ProposalTargetLayer(nn.Module):
         scaler = self.roi_sampler_cfg.SOFTMATCH_SCALER
         scaled_var = scaler*torch.square(self.st_var[cur_roi_labels[sampled_inds]-1])
         weights = torch.ones_like(roi_ious)
+        softmatch_weights = torch.exp(-diff/scaled_var)
         if self.roi_sampler_cfg.SOFTMATCH_WEIGHTS: #weight only if enabled
-            weights = torch.exp(-diff/scaled_var)
+            weights = softmatch_weights
         cls_labels[interval_mask] = (roi_ious[interval_mask] - iou_bg_thresh) / (iou_fg_thresh[interval_mask] - iou_bg_thresh)
         ignore_mask = torch.eq(cur_gt_boxes[gt_assignment[sampled_inds]], 0).all(dim=-1)
         cls_labels[ignore_mask] = -1
         metrics = {'roi_labels': cur_roi_labels,
                    'iou_wrt_pl': max_overlaps,
+                   'weights': softmatch_weights,
+                   'sampled_labels': gt_assignment[sampled_inds],
+                   'sampled_ious': roi_ious
         }
+
         self.adaptive_thresh.update(**metrics)
 
         return sampled_inds, reg_valid_mask, cls_labels, roi_ious, gt_assignment, interval_mask,weights
