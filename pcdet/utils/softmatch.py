@@ -118,8 +118,9 @@ class AdaptiveThresholding(Metric):
                     axs[cind].set_title('{}'.format(self.class_names[i]))
                     axs[cind].legend()
                     plt.tight_layout()
-                    results['threshold_weight_trend'] = fig.get_figure()
                     plt.axvline(x=self.st_mean[cind].item(), color='red', linestyle='--')
+                results['threshold_weight_trend'] = fig.get_figure()
+                plt.close()
 
             #NOTE: mean of empty tensor is nan,common among tail classes
             self.batch_mean = torch.stack(cls_wise_iou_mean_).clone()
