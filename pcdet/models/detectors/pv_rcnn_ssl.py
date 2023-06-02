@@ -270,10 +270,14 @@ class PVRCNN_SSL(Detector3DTemplate):
 
                         if self.model_cfg.ROI_HEAD.TARGET_CONFIG.UNLABELED_SAMPLER_TYPE == 'subsample_unlabeled_rois_tr_gaussian':
                             softmatch = self.adaptive_thresholding.get(tag=f'softmatch')
-                            self.val_dict['batch_mean'].extend([softmatch.batch_mean.tolist()])
-                            self.val_dict['batch_var'].extend([softmatch.batch_var.tolist()])
-                            self.val_dict['ema_mean'].extend([softmatch.st_mean.tolist()])
-                            self.val_dict['ema_var'].extend([softmatch.st_var.tolist()])
+                            ema_mean = softmatch.st_mean.to(cur_roi_label.device).unsqueeze(dim=0).repeat(len(cur_roi_label),1).gather(1,(cur_roi_label.unsqueeze(dim=0)-1)).squeeze()
+                            ema_var = softmatch.st_var.to(cur_roi_label.device).unsqueeze(dim=0).repeat(len(cur_roi_label),1).gather(1,(cur_roi_label.unsqueeze(dim=0)-1)).squeeze()
+                            batch_mean = softmatch.batch_mean.to(cur_roi_label.device).unsqueeze(dim=0).repeat(len(cur_roi_label),1).gather(1,(cur_roi_label.unsqueeze(dim=0)-1)).squeeze()
+                            batch_var = softmatch.batch_var.to(cur_roi_label.device).unsqueeze(dim=0).repeat(len(cur_roi_label),1).gather(1,(cur_roi_label.unsqueeze(dim=0)-1)).squeeze()
+                            self.val_dict['batch_mean'].extend(batch_mean)
+                            self.val_dict['batch_var'].extend(batch_var)
+                            self.val_dict['ema_mean'].extend(ema_mean)
+                            self.val_dict['ema_var'].extend(ema_var)
 
                 # replace old pickle data (if exists) with updated one 
                 output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]
