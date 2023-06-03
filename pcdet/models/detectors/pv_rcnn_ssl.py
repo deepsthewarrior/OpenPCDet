@@ -274,10 +274,10 @@ class PVRCNN_SSL(Detector3DTemplate):
                             ema_var = softmatch.st_var.to(cur_roi_label.device).unsqueeze(dim=0).repeat(len(cur_roi_label),1).gather(1,(cur_roi_label.unsqueeze(dim=0)-1)).squeeze()
                             batch_mean = softmatch.batch_mean.to(cur_roi_label.device).unsqueeze(dim=0).repeat(len(cur_roi_label),1).gather(1,(cur_roi_label.unsqueeze(dim=0)-1)).squeeze()
                             batch_var = softmatch.batch_var.to(cur_roi_label.device).unsqueeze(dim=0).repeat(len(cur_roi_label),1).gather(1,(cur_roi_label.unsqueeze(dim=0)-1)).squeeze()
-                            self.val_dict['batch_mean'].extend(batch_mean)
-                            self.val_dict['batch_var'].extend(batch_var)
-                            self.val_dict['ema_mean'].extend(ema_mean)
-                            self.val_dict['ema_var'].extend(ema_var)
+                            self.val_dict['batch_mean'].extend(batch_mean.tolist())
+                            self.val_dict['batch_var'].extend(batch_var.tolist())
+                            self.val_dict['ema_mean'].extend(ema_mean.tolist())
+                            self.val_dict['ema_var'].extend(ema_var.tolist())
 
                 # replace old pickle data (if exists) with updated one 
                 output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]
