@@ -41,7 +41,10 @@ class AdaptiveThresholding(Metric):
         self.add_state("sampled_labels",default=[], dist_reduce_fx='cat')
         self.raw_mean = torch.ones(self.num_classes) / self.num_classes  
         self.st_var = torch.zeros(self.num_classes)
-        self.st_mean = self.raw_mean*(2 - self.raw_mean)
+        if self.config.ROI_HEAD.ADAPTIVE_THRESH_CONFIG.NON_LINEARITY:
+            self.st_mean = self.raw_mean*(2 - self.raw_mean)
+        else:
+            self.st_mean = self.raw_mean
         self.batch_mean = torch.zeros(self.num_classes) 
         self.batch_var = torch.ones(self.num_classes)
         self.enable_plots =  self.config.ROI_HEAD.TARGET_CONFIG.ENABLE_PLOTS
