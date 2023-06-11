@@ -164,6 +164,8 @@ MODEL:
         ENABLE_RCNN_CONSISTENCY: False
         ENABLE_SOFT_TEACHER: False
         ENABLE_ULB_CLS_DIST_LOSS: False
+        ENABLE_BG_REPEL_LOSS: False
+        ENABLE_FG_ATTRACT_LOSS: False
         ENABLE_EVAL: True
         METRICS_PRED_TYPES: [roi_pl_gt, pl_gt_metrics_before_filtering]
         SHARED_FC: [256, 256]
@@ -231,7 +233,9 @@ MODEL:
                 'rcnn_reg_weight': 1.0,
                 'rcnn_corner_weight': 1.0,
                 'code_weights': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
-                ulb_cls_dist_weight: 0.2
+                ulb_cls_dist_weight: 0.2,
+                attract_loss_weight: 0.25,
+                repel_loss_weight: 0.25,
             }
         
         ROI_AUG:

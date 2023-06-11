@@ -529,6 +529,34 @@ class RoIHeadTemplate(nn.Module):
         }
         return rcnn_loss_cls, tb_dict
 
+    def repel_attract_loss(self,forward_ret_dict):
+        loss_cfgs = self.model_cfg.LOSS_CONFIG
+        ulb_inds = forward_ret_dict['unlabeled_inds']
+        cos_scores = (forward_ret_dict['cos_scores'][ulb_inds]).view(-1)
+        rcnn_cls_labels = (forward_ret_dict['rcnn_cls_labels'][ulb_inds]).view(-1)
+        bg_mask = rcnn_cls_labels == 0
+        fg_mask = rcnn_cls_labels == 1
+        repel_loss_ = cos_scores[bg_mask]
+        attract_loss_ = 1 - (cos_scores[fg_mask])
+        repel_loss_ulb = torch.sum(repel_loss_ * loss_cfgs.LOSS_WEIGHTS['repel_loss_weight'])
+        attract_loss_ulb = torch.sum(attract_loss_ * loss_cfgs.LOSS_WEIGHTS['attract_loss_weight'])
+        repel_loss_list = []
+        attract_loss_list = []
+        for cls_idx in range(1,4):
+            repel_cls_mask = (forward_ret_dict['roi_labels'][ulb_inds].view(-1) == cls_idx)[bg_mask]
+            attract_cls_mask = (forward_ret_dict['roi_labels'][ulb_inds].view(-1) == cls_idx)[fg_mask]
+            repel_loss_list.append(torch.sum(repel_loss_[repel_cls_mask] * loss_cfgs.LOSS_WEIGHTS['repel_loss_weight']).item())
+            attract_loss_list.append(torch.sum(attract_loss_[attract_cls_mask] * loss_cfgs.LOSS_WEIGHTS['attract_loss_weight']).item())
+        tb_dict = {
+            # For consistency with other losses
+            'repel_loss_ulb': repel_loss_ulb.unsqueeze(0).repeat(forward_ret_dict['roi_labels'].shape[0], 1),
+            'attract_loss_ulb': attract_loss_ulb.unsqueeze(0).repeat(forward_ret_dict['roi_labels'].shape[0], 1),
+            'classwise_repel': {'Car': repel_loss_list[0],'Ped':repel_loss_list[1],'Cyc': repel_loss_list[2],'total_loss': sum(repel_loss_list)},
+            'classwise_attract':{'Car': attract_loss_list[0],'Ped':attract_loss_list[1],'Cyc': attract_loss_list[2],'total_loss': sum(attract_loss_list)}   
+        }
+        return repel_loss_ulb, attract_loss_ulb, tb_dict
+    
+        
     def pre_loss_filtering(self):
 
         if self.model_cfg.ENABLE_RCNN_CONSISTENCY:
@@ -652,6 +680,7 @@ class RoIHeadTemplate(nn.Module):
                     raise ValueError
 
                 self.forward_ret_dict['rcnn_cls_weights'][unlabeled_inds] = unlabeled_rcnn_cls_weights
+                
 
     def get_loss(self, tb_dict=None, scalar=True):
         tb_dict = {} if tb_dict is None else tb_dict
@@ -667,16 +696,17 @@ class RoIHeadTemplate(nn.Module):
         rcnn_loss_cls, cls_tb_dict = self.get_box_cls_layer_loss(self.forward_ret_dict, scalar=scalar)
         rcnn_loss_reg, reg_tb_dict = self.get_box_reg_layer_loss(self.forward_ret_dict, scalar=scalar)
         ulb_loss_cls_dist, cls_dist_dict = self.get_ulb_cls_dist_loss(self.forward_ret_dict)
-        rcnn_loss = rcnn_loss_cls + rcnn_loss_reg + ulb_loss_cls_dist
-
+        bg_repel_loss,fg_attract_loss, ra_loss_dict = self.repel_attract_loss(self.forward_ret_dict)
+        rcnn_loss = rcnn_loss_cls + rcnn_loss_reg + ulb_loss_cls_dist 
         tb_dict.update(cls_tb_dict)
         tb_dict.update(reg_tb_dict)
         tb_dict.update(cls_dist_dict)
+        tb_dict.update(ra_loss_dict)
         tb_dict['rcnn_loss'] = rcnn_loss.item() if scalar else rcnn_loss
         if scalar:
             return rcnn_loss, tb_dict
         else:
-            return rcnn_loss_cls, rcnn_loss_reg, ulb_loss_cls_dist, tb_dict
+            return rcnn_loss_cls, rcnn_loss_reg, ulb_loss_cls_dist,bg_repel_loss,fg_attract_loss,tb_dict
 
     def generate_predicted_boxes(self, batch_size, rois, cls_preds, box_preds):
         """
