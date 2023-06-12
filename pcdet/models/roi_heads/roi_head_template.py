@@ -538,15 +538,15 @@ class RoIHeadTemplate(nn.Module):
         fg_mask = rcnn_cls_labels == 1
         repel_loss_ = cos_scores[bg_mask]
         attract_loss_ = 1 - (cos_scores[fg_mask])
-        repel_loss_ulb = torch.mean(repel_loss_ * loss_cfgs.LOSS_WEIGHTS['repel_loss_weight'])
-        attract_loss_ulb = torch.mean(attract_loss_ * loss_cfgs.LOSS_WEIGHTS['attract_loss_weight'])
+        repel_loss_ulb = torch.mean(repel_loss_ * loss_cfgs.LOSS_WEIGHTS['repel_loss_weight']).nan_to_num(0.0)
+        attract_loss_ulb = torch.mean(attract_loss_ * loss_cfgs.LOSS_WEIGHTS['attract_loss_weight']).nan_to_num(0.0)
         repel_loss_list = []
         attract_loss_list = []
         for cls_idx in range(1,4):
             repel_cls_mask = (forward_ret_dict['roi_labels'][ulb_inds].view(-1) == cls_idx)[bg_mask]
             attract_cls_mask = (forward_ret_dict['roi_labels'][ulb_inds].view(-1) == cls_idx)[fg_mask]
-            repel_loss_list.append(torch.mean(repel_loss_[repel_cls_mask] * loss_cfgs.LOSS_WEIGHTS['repel_loss_weight']).item())
-            attract_loss_list.append(torch.mean(attract_loss_[attract_cls_mask] * loss_cfgs.LOSS_WEIGHTS['attract_loss_weight']).item())
+            repel_loss_list.append(torch.mean(repel_loss_[repel_cls_mask] * loss_cfgs.LOSS_WEIGHTS['repel_loss_weight']).nan_to_num(0.0))
+            attract_loss_list.append(torch.mean(attract_loss_[attract_cls_mask] * loss_cfgs.LOSS_WEIGHTS['attract_loss_weight']).nan_to_num(0.0))
         tb_dict = {
             # For consistency with other losses
             'repel_loss_ulb': repel_loss_ulb.unsqueeze(0).repeat(forward_ret_dict['roi_labels'].shape[0], 1),
