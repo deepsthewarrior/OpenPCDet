@@ -210,6 +210,7 @@ class PVRCNN_SSL(Detector3DTemplate):
                 temp['selected'] = (pred_dicts_gap[inds]['selected']).to('cuda:0')
                 temp['shared_features'] = (pred_dicts_gap[inds]['shared_features']).to('cuda:0')
                 temp['rcnn_cls_interim'] = (pred_dicts_gap[inds]['rcnn_cls_interim']).to('cuda:0')
+                temp['pooled_features'] = (pred_dicts_gap[inds]['pooled_features']).to('cuda:0')
                 # temp['rcnn_reg_interim'] = (pred_dicts_gap[inds]['rcnn_reg_interim'])
                 temp['gt_label'] = (pred_dicts_gap[inds]['gt_label']).to('cuda:0')
                 self.shared_pkl['ens'].append(temp)
