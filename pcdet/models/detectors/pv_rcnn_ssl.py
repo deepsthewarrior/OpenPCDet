@@ -591,6 +591,7 @@ class PVRCNN_SSL(Detector3DTemplate):
             cls_features = (pred_dicts_feat[inds]['rcnn_cls_interim'])
             # temp['rcnn_reg_interim'] = (pred_dicts_feat[inds]['rcnn_reg_interim'])
             gt_labels = (pred_dicts_feat[inds]['gt_label'])
+            self.updated_template = {val: [] for val in self.classes}
 
             selected_gt = gt_assign[selected]
             selected_gt_labels = gt_labels[selected_gt]
@@ -622,26 +623,30 @@ class PVRCNN_SSL(Detector3DTemplate):
             for i,feature in enumerate(car_sh):
                 if len(car_sh) != 0:
                     self.updated_template['Car'].append(car_sh[i].clone().detach())
-                self.updated_cls_template['Car'].append(car_cls[i].clone().detach())
+                # self.updated_cls_template['Car'].append(car_cls[i].clone().detach())
 
             for i,feature in enumerate(ped_sh):
                 if len(ped_sh) != 0:
                     self.updated_template['Ped'].append(ped_sh[i].clone().detach()) 
-                self.updated_cls_template['Ped'].append(ped_cls[i].clone().detach())  
+                # self.updated_cls_template['Ped'].append(ped_cls[i].clone().detach())  
 
             for i,feature in enumerate(cyc_sh):
                 if len(cyc_sh) != 0:
                     self.updated_template['Cyc'].append(cyc_sh[i].clone().detach())  
-                self.updated_cls_template['Cyc'].append(cyc_cls[i].clone().detach()) 
+                # self.updated_cls_template['Cyc'].append(cyc_cls[i].clone().detach()) 
 
 #TODO:Deepika
             template = {
-                'car_template':self.updated_template['Car'],
-                'ped_template':self.updated_template['Ped'],
-                'cyc_template':self.updated_template['Cyc']
+                'car_template':torch.stack(self.updated_template['Car']).to(car_sh.device),
+                'ped_template':torch.stack(self.updated_template['Ped']).to(car_sh.device),
+                'cyc_template':torch.stack(self.updated_template['Cyc']).to(car_sh.device),
+                'iteration':torch.tensor(batch_dict['cur_iteration']).to(car_sh.device)
             }
-            self.dynamic_template.update(**template)            
-            self.rcnn_cls_mean = self.dynamic_template.compute(iter = batch_dict['cur_iteration'])
+            self.dynamic_template.update(**template)  
+            print('finished_update')
+            self.rcnn_cls_mean = self.dynamic_template.compute()
+            print('finished_compute')          
+
 
         # if batch_dict['cur_iteration']+1 % 20 == 0:
         #     alpha = 0.9 
