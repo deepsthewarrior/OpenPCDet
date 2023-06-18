@@ -625,17 +625,7 @@ class PVRCNN_SSL(Detector3DTemplate):
                 if len(final_shared) != 0:
                     self.updated_template['templates'].append(final_shared[i].clone().detach())
                     self.updated_template['labels'].append(final_preds[i].clone().detach().unsqueeze(-1)) # unsqueeze to make it compatible with the template (32,1)
-                # self.updated_cls_template['Car'].append(car_cls[i].clone().detach())
 
-            # for i,feature in enumerate(ped_sh):
-            #     if len(ped_sh) != 0:
-            #         self.updated_template['Ped'].append(ped_sh[i].clone().detach()) 
-            #     # self.updated_cls_template['Ped'].append(ped_cls[i].clone().detach())  
-
-            # for i,feature in enumerate(cyc_sh):
-            #     if len(cyc_sh) != 0:
-            #         self.updated_template['Cyc'].append(cyc_sh[i].clone().detach())  
-            #     # self.updated_cls_template['Cyc'].append(cyc_cls[i].clone().detach()) 
 
 #TODO:Deepika
 
@@ -643,28 +633,14 @@ class PVRCNN_SSL(Detector3DTemplate):
             template = {
                 'templates':self.updated_template['templates'],
                 'labels':self.updated_template['labels'],
-                # 'car_template':torch.stack(self.updated_template['Car']).to(car_sh.device),
-                # 'ped_template':torch.stack(self.updated_template['Ped']).to(car_sh.device),
-                # 'cyc_template':torch.stack(self.updated_template['Cyc']).to(car_sh.device),
-                # 'iteration':torch.tensor(batch_dict['cur_iteration']).to(car_sh.device)
             }
             self.dynamic_template.update(**template)  
             print('finished_update')
-        if (batch_dict['cur_iteration']+1) % 5 == 0:
-            self.rcnn_cls_mean = self.dynamic_template.compute()
-            print('finished_compute')          
-
-
-        # if batch_dict['cur_iteration']+1 % 20 == 0:
-        #     alpha = 0.9 
-        #     for i,cls in enumerate(self.classes): 
-        #         if len(self.updated_template[cls]) != 0:
-        #             update_feat = torch.mean(torch.stack(self.updated_template[cls]),dim=0)
-        #             update_cls_feat = torch.mean(torch.stack(self.updated_cls_template[cls]),dim=0)
-        #             self.rcnn_sh_mean[i] = (self.rcnn_sh_mean[i].to(update_feat.device)*alpha) + ((1-alpha)*update_feat)
-        #             self.rcnn_cls_mean[i] = (self.rcnn_cls_mean[i].to(update_cls_feat.device)*alpha) + ((1-alpha)*update_cls_feat)
-        #         self.updated_template = {val: [] for val in self.classes}   
-        #         self.updated_cls_template = {val: [] for val in self.classes}   
+            if (batch_dict['cur_iteration']+1) % 5 == 0:
+                self.rcnn_cls_mean = self.dynamic_template.compute()
+                print('finished_compute')          
+            else:
+                print('compute_not_called')
 
     def ensemble_post_processing(self, batch_dict_a, batch_dict_b, unlabeled_inds, ensemble_option=None):
         # TODO(farzad) what about roi_labels and roi_scores in following options?

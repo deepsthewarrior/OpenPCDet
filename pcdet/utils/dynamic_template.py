@@ -48,20 +48,11 @@ class Prototype(Metric):
             rcnn_sh_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0).detach().cpu())
         self.rcnn_sh_mean_ = torch.stack(rcnn_sh_mean)
         self.rcnn_sh_mean = self.rcnn_sh_mean_.detach().clone().cuda()
-        # avg = "mean"
-        # param = "cls"
-        # for cls in self.class_names.values():
-        #     rcnn_cls_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0).detach().cpu())
-        # self.rcnn_cls_mean_ = torch.stack(rcnn_cls_mean)
-        # self.rcnn_cls_mean = self.rcnn_cls_mean_.detach().cuda()
+
         
         
     def update(self,templates=None,labels=None) -> None:
-        # if car_template == 1: # Unsqueeze for DDP
-        #     roi_labels=roi_labels.unsqueeze(dim=0)
-        # if iou_wrt_pl.ndim == 1: # Unsqueeze for DDP
-        #     iou_wrt_pl=iou_wrt_pl.unsqueeze(dim=0)
-        # for temps in self.car_template:
+
         if len(templates) != 0: 
             templates = torch.stack(templates)
             if templates.ndim == 1: # Unsqueeze for DDP
@@ -72,21 +63,6 @@ class Prototype(Metric):
             if labels.ndim == 1:
                 labels = labels.unsqueeze(dim=0)        
             self.labels.append(labels)  
-        # if len(car_template) != 0: 
-        #     if car_template.ndim == 1: # Unsqueeze for DDP
-        #         car_template = car_template.unsqueeze(dim=0)
-        #     self.car_template.append(car_template)                
-        # if len(ped_template) != 0:
-        #     if ped_template.ndim == 1:
-        #         ped_template = ped_template.unsqueeze(dim=0)
-        #     self.ped_template.append(ped_template)
-        # if len(cyc_template) != 0:
-        #     if cyc_template.ndim == 1:
-        #         cyc_template = cyc_template.unsqueeze(dim=0)
-        #     self.cyc_template.append(cyc_template)
-        # if iteration.ndim == 1:
-        #     iteration = iteration.unsqueeze(dim=0)
-        # self.iteration.append(iteration)
 
 
     def compute(self):
