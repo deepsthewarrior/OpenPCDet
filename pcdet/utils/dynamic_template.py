@@ -29,7 +29,7 @@ class Prototype(Metric):
         else:
             self.class_names = {0: 'Car', 1: 'Pedestrian', 2: 'Cyclist'}
             self.num_classes = 3
-        self.state_list = ['car_template','ped_template','cyc_template','iteration']
+        self.state_list = ['car_template','ped_template','cyc_template','iteration','templates','labels']
         for cls in self.state_list:
             self.add_state(cls, default=[],dist_reduce_fx='cat')
         # self.add_state("count",default=[],dist_reduce_fx='sum')
@@ -56,47 +56,52 @@ class Prototype(Metric):
         # self.rcnn_cls_mean = self.rcnn_cls_mean_.detach().cuda()
         
         
-    def update(self, car_template, ped_template, cyc_template,iteration) -> None:
+    def update(self,templates=None,labels=None) -> None:
         # if car_template == 1: # Unsqueeze for DDP
         #     roi_labels=roi_labels.unsqueeze(dim=0)
         # if iou_wrt_pl.ndim == 1: # Unsqueeze for DDP
         #     iou_wrt_pl=iou_wrt_pl.unsqueeze(dim=0)
         # for temps in self.car_template:
-            
-        if len(car_template) != 0: 
-            if car_template.ndim == 1: # Unsqueeze for DDP
-                car_template = car_template.unsqueeze(dim=0)
-            self.car_template.append(car_template)                
-        if len(ped_template) != 0:
-            if ped_template.ndim == 1:
-                ped_template = ped_template.unsqueeze(dim=0)
-            self.ped_template.append(ped_template)
-        if len(cyc_template) != 0:
-            if cyc_template.ndim == 1:
-                cyc_template = cyc_template.unsqueeze(dim=0)
-            self.cyc_template.append(cyc_template)
-        if iteration.ndim == 1:
-            iteration = iteration.unsqueeze(dim=0)
-        self.iteration.append(iteration)
+        if len(templates) != 0: 
+            templates = torch.stack(templates)
+            if templates.ndim == 1: # Unsqueeze for DDP
+                templates = templates.unsqueeze(dim=0)
+            self.templates.append(templates)                
+        if len(labels) != 0:
+            labels = torch.stack(labels)
+            if labels.ndim == 1:
+                labels = labels.unsqueeze(dim=0)        
+            self.labels.append(labels)  
+        # if len(car_template) != 0: 
+        #     if car_template.ndim == 1: # Unsqueeze for DDP
+        #         car_template = car_template.unsqueeze(dim=0)
+        #     self.car_template.append(car_template)                
+        # if len(ped_template) != 0:
+        #     if ped_template.ndim == 1:
+        #         ped_template = ped_template.unsqueeze(dim=0)
+        #     self.ped_template.append(ped_template)
+        # if len(cyc_template) != 0:
+        #     if cyc_template.ndim == 1:
+        #         cyc_template = cyc_template.unsqueeze(dim=0)
+        #     self.cyc_template.append(cyc_template)
+        # if iteration.ndim == 1:
+        #     iteration = iteration.unsqueeze(dim=0)
+        # self.iteration.append(iteration)
 
 
     def compute(self):
-        # print(self.iteration)
-        # if (iter+1)%self.reset_state_interval == 0:
-        template_state = [self.car_template,self.ped_template,self.cyc_template]
-        template = {cls:[] for cls in self.classes}
-        
-        for i,templ in enumerate(template_state):
-            for temps in templ:
-                if temps != None:
-                        template[self.classes[i]].append(temps)
 
-        for i,final_template in enumerate(template.values()):
-            cls_template  = self.rcnn_sh_mean[0].new_zeros(self.rcnn_sh_mean[0].shape).fill_(float('nan'))
-            if len(final_template):
-                cls_template = torch.mean(torch.vstack(final_template),dim=0)
-            if torch.all(~torch.isnan(cls_template)) and len(final_template):
-                self.rcnn_sh_mean[i] = self.momentum*self.rcnn_sh_mean[i] + (1-self.momentum)*cls_template
+        template = {cls:None for cls in self.classes}
+        
+        templates = torch.cat(self.templates)
+        labels = torch.cat(self.labels)
+        labels = labels.squeeze(dim=1)
+        for cls in self.class_names.keys():
+            mask = labels == cls+1
+            if torch.any(mask):
+                template[self.class_names[cls]] = templates[mask]
+                self.rcnn_sh_mean[cls] = self.momentum*self.rcnn_sh_mean[cls] + (1-self.momentum)*torch.mean(templates[mask],dim=0).unsqueeze(0)
+
 
         self.reset()     
         return self.rcnn_sh_mean

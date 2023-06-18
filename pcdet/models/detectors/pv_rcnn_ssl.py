@@ -577,6 +577,7 @@ class PVRCNN_SSL(Detector3DTemplate):
         pred_dicts_feat, recall_dicts_feat = self.pv_rcnn.post_processing_features(batch_dict, no_recall_dict=True,
                                                                                     override_thresh=0.0,
                                                                                    no_nms_for_unlabeled=self.no_nms)
+        self.updated_template = {val: [] for val in ['templates','labels']}
         class_thresh = torch.tensor([0.8,0.8,0.8])
         pred_thresh = torch.tensor([0.95,0.85,0.85])
         # class_thresh = torch.tensor([0.5,0.5,0.5])
@@ -591,7 +592,7 @@ class PVRCNN_SSL(Detector3DTemplate):
             cls_features = (pred_dicts_feat[inds]['rcnn_cls_interim'])
             # temp['rcnn_reg_interim'] = (pred_dicts_feat[inds]['rcnn_reg_interim'])
             gt_labels = (pred_dicts_feat[inds]['gt_label'])
-            self.updated_template = {val: [] for val in self.classes}
+            
 
             selected_gt = gt_assign[selected]
             selected_gt_labels = gt_labels[selected_gt]
@@ -619,31 +620,37 @@ class PVRCNN_SSL(Detector3DTemplate):
             ped_cls = final_cls[final_preds == 2]
             cyc_cls = final_cls[final_preds == 3]
             
-            
-            for i,feature in enumerate(car_sh):
-                if len(car_sh) != 0:
-                    self.updated_template['Car'].append(car_sh[i].clone().detach())
+        
+            for i,feature in enumerate(final_shared):
+                if len(final_shared) != 0:
+                    self.updated_template['templates'].append(final_shared[i].clone().detach())
+                    self.updated_template['labels'].append(final_preds[i].clone().detach().unsqueeze(-1)) # unsqueeze to make it compatible with the template (32,1)
                 # self.updated_cls_template['Car'].append(car_cls[i].clone().detach())
 
-            for i,feature in enumerate(ped_sh):
-                if len(ped_sh) != 0:
-                    self.updated_template['Ped'].append(ped_sh[i].clone().detach()) 
-                # self.updated_cls_template['Ped'].append(ped_cls[i].clone().detach())  
+            # for i,feature in enumerate(ped_sh):
+            #     if len(ped_sh) != 0:
+            #         self.updated_template['Ped'].append(ped_sh[i].clone().detach()) 
+            #     # self.updated_cls_template['Ped'].append(ped_cls[i].clone().detach())  
 
-            for i,feature in enumerate(cyc_sh):
-                if len(cyc_sh) != 0:
-                    self.updated_template['Cyc'].append(cyc_sh[i].clone().detach())  
-                # self.updated_cls_template['Cyc'].append(cyc_cls[i].clone().detach()) 
+            # for i,feature in enumerate(cyc_sh):
+            #     if len(cyc_sh) != 0:
+            #         self.updated_template['Cyc'].append(cyc_sh[i].clone().detach())  
+            #     # self.updated_cls_template['Cyc'].append(cyc_cls[i].clone().detach()) 
 
 #TODO:Deepika
+
+        if len(self.updated_template['templates']) !=0:
             template = {
-                'car_template':torch.stack(self.updated_template['Car']).to(car_sh.device),
-                'ped_template':torch.stack(self.updated_template['Ped']).to(car_sh.device),
-                'cyc_template':torch.stack(self.updated_template['Cyc']).to(car_sh.device),
-                'iteration':torch.tensor(batch_dict['cur_iteration']).to(car_sh.device)
+                'templates':self.updated_template['templates'],
+                'labels':self.updated_template['labels'],
+                # 'car_template':torch.stack(self.updated_template['Car']).to(car_sh.device),
+                # 'ped_template':torch.stack(self.updated_template['Ped']).to(car_sh.device),
+                # 'cyc_template':torch.stack(self.updated_template['Cyc']).to(car_sh.device),
+                # 'iteration':torch.tensor(batch_dict['cur_iteration']).to(car_sh.device)
             }
             self.dynamic_template.update(**template)  
             print('finished_update')
+        if (batch_dict['cur_iteration']+1) % 5 == 0:
             self.rcnn_cls_mean = self.dynamic_template.compute()
             print('finished_compute')          
 
