@@ -92,7 +92,8 @@ class Prototype(Metric):
     def compute(self):
 
         template = {cls:None for cls in self.classes}
-        
+        if len(self.templates) == 0:
+            return self.rcnn_sh_mean
         templates = torch.cat(self.templates)
         labels = torch.cat(self.labels)
         labels = labels.squeeze(dim=1)
