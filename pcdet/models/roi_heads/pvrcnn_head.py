@@ -204,7 +204,18 @@ class PVRCNNHead(RoIHeadTemplate):
                 cos_scores.append(F.cosine_similarity(temp[labels[i]].transpose(1,0),sh.transpose(1,0)))
             targets_dict['rcnn_template'] = batch_dict['rcnn_template'] #for metrics   
             targets_dict['cos_scores'] = torch.Tensor([cos_scores]).to(rcnn_cls.device).view(batch_dict['roi_labels'].shape[0],-1,1).squeeze(-1)
-            
+
+            cos_scores_aggr = []
+            for sh in shared_features: 
+                cos_scores_classwise = []
+                for i in range(3):
+                    cos_scores_classwise.append(F.cosine_similarity(temp[i].transpose(1,0),sh.transpose(1,0)))
+                cos_scores_aggr.append(cos_scores_classwise)
+            cos_sem_scores = torch.Tensor([cos_scores_aggr]).to(rcnn_cls.device).view(batch_dict['roi_labels'].shape[0],-1,3).squeeze(-1)
+            targets_dict['cos_sem_scores'] = cos_sem_scores
+            targets_dict['cos_scores_softmax'] = F.softmax(cos_sem_scores,dim=-1)
+            targets_dict['cos_scores_classifier'] = torch.argmax(targets_dict['cos_scores_softmax'],dim=-1) +1
+
         if not self.training or self.predict_boxes_when_training: #(,Student)
             batch_cls_preds, batch_box_preds = self.generate_predicted_boxes(
                 batch_size=batch_dict['batch_size'], rois=batch_dict['rois'], cls_preds=rcnn_cls, box_preds=rcnn_reg

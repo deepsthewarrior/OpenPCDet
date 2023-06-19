@@ -148,7 +148,8 @@ class PVRCNN_SSL(Detector3DTemplate):
         self.supervise_mode = model_cfg.SUPERVISE_MODE
         cls_bg_thresh = model_cfg.ROI_HEAD.TARGET_CONFIG.CLS_BG_THRESH
         self.metric_registry = MetricRegistry(dataset=self.dataset, model_cfg=model_cfg)
-        vals_to_store = ['iou_roi_pl', 'iou_roi_gt', 'pred_scores', 'weights', 'class_labels', 'iteration','cos_scores','num_points_in_roi']
+        vals_to_store = ['iou_roi_pl', 'iou_roi_gt', 'pred_scores', 'weights', 'class_labels', 'iteration','cos_scores','cos_sem_scores','cos_scores_softmax','cos_scores_classifier','num_points_in_roi','iou_wrt_gt_lb'
+                         ,'pred_scores_lb','class_labels_lb','cos_scores_lb','cos_sem_scores_lb','cos_scores_softmax_lb','cos_scores_classifier_lb','gt_assigned_lb','gt_assigned']
         self.val_dict = {val: [] for val in vals_to_store}
         self.classes = ['Car','Ped','Cyc']
         self.ema_template= {val: [] for val in self.classes}
@@ -162,6 +163,7 @@ class PVRCNN_SSL(Detector3DTemplate):
             rcnn_sh_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0).detach().cpu())
         self.rcnn_sh_mean= torch.stack(rcnn_sh_mean)
         
+ 
     def forward(self, batch_dict):
         if self.training:
             labeled_mask = batch_dict['labeled_mask'].view(-1)
@@ -436,11 +438,13 @@ class PVRCNN_SSL(Detector3DTemplate):
                     num_preds = valid_rois_mask.sum()
 
                     cur_unlabeled_ind = unlabeled_inds[i]
+
                     if num_gts > 0 and num_preds > 0:
                         # Find IoU between Student's ROI v/s Original GTs
                         overlap = iou3d_nms_utils.boxes_iou3d_gpu(valid_rois[:, 0:7], valid_gt_boxes[:, 0:7])
                         preds_iou_max, assigned_gt_inds = overlap.max(dim=1)
                         self.val_dict['iou_roi_gt'].extend(preds_iou_max.tolist())
+                        self.val_dict['gt_assigned'].extend(assigned_gt_inds.tolist())
 
                         cur_iou_roi_pl = self.pv_rcnn.roi_head.forward_ret_dict['gt_iou_of_rois'][cur_unlabeled_ind]
                         self.val_dict['iou_roi_pl'].extend(cur_iou_roi_pl.tolist())
@@ -459,9 +463,71 @@ class PVRCNN_SSL(Detector3DTemplate):
 
                         cur_cos_scores = self.pv_rcnn.roi_head.forward_ret_dict['cos_scores'][cur_unlabeled_ind]
                         self.val_dict['cos_scores'].extend(cur_cos_scores.tolist())
- 
+            # targets_dict['cos_sem_scores'] = cos_sem_scores
+            # targets_dict['cos_scores_softmax'] = F.softmax(cos_sem_scores,dim=-1)
+            # targets_dict['cos_scores_classifier'] 
+                        cur_cos_sem = self.pv_rcnn.roi_head.forward_ret_dict['cos_sem_scores'][cur_unlabeled_ind]
+                        self.val_dict['cos_sem_scores'].extend(cur_cos_sem.tolist())
+
+                        cur_cos_scores_softmax = self.pv_rcnn.roi_head.forward_ret_dict['cos_scores_softmax'][cur_unlabeled_ind]
+                        self.val_dict['cos_scores_softmax'].extend(cur_cos_scores_softmax.tolist())
+
+                        cur_cos_scores_classifier = self.pv_rcnn.roi_head.forward_ret_dict['cos_scores_classifier'][cur_unlabeled_ind]
+                        self.val_dict['cos_scores_classifier'].extend(cur_cos_scores_classifier.tolist())
+
                         cur_num_points_roi = self.pv_rcnn.roi_head.forward_ret_dict['num_points_in_roi'][cur_unlabeled_ind]
                         self.val_dict['num_points_in_roi'].extend(cur_num_points_roi.tolist())
+
+                batch_roi_labels_lb = self.pv_rcnn.roi_head.forward_ret_dict['roi_labels'][labeled_inds]
+                batch_roi_labels_lb = [roi_labels.clone().detach() for roi_labels in batch_roi_labels_lb]
+
+                batch_rois_lb = self.pv_rcnn.roi_head.forward_ret_dict['rois'][labeled_inds]
+                batch_rois_lb = [rois.clone().detach() for rois in batch_rois_lb]
+
+                batch_ori_gt_boxes_lb = batch_dict['gt_boxes'][labeled_inds]
+                batch_ori_gt_boxes_lb = [ori_gt_boxes.clone().detach() for ori_gt_boxes in batch_ori_gt_boxes_lb]
+
+                #labled data
+
+                for i in range(len(batch_rois_lb)):
+                    valid_rois_mask = torch.logical_not(torch.all(batch_rois_lb[i] == 0, dim=-1))
+                    valid_rois = batch_rois_lb[i][valid_rois_mask]
+                    valid_roi_labels = batch_roi_labels[i][valid_rois_mask]
+                    valid_roi_labels -= 1                                   # Starting class indices from zero
+
+                    valid_gt_boxes_mask = torch.logical_not(torch.all(batch_ori_gt_boxes_lb[i] == 0, dim=-1))
+                    valid_gt_boxes = batch_ori_gt_boxes_lb[i][valid_gt_boxes_mask]
+                    valid_gt_boxes[:, -1] -= 1   
+
+                    num_gts = valid_gt_boxes_mask.sum()
+                    num_preds = valid_rois_mask.sum()
+
+                    cur_labeled_ind = labeled_inds[i]
+
+                    if num_gts > 0 and num_preds > 0:
+                        overlap = iou3d_nms_utils.boxes_iou3d_gpu(valid_rois[:, 0:7], valid_gt_boxes[:, 0:7])
+                        preds_iou_max, assigned_gt_inds = overlap.max(dim=1)
+                        self.val_dict['iou_wrt_gt_lb'].extend(preds_iou_max.tolist())
+                        self.val_dict['gt_assigned_lb'].extend(assigned_gt_inds.tolist())
+
+                        cur_pred_score = torch.sigmoid(batch_dict['batch_cls_preds'][cur_labeled_ind]).squeeze()
+                        self.val_dict['pred_scores_lb'].extend(cur_pred_score.tolist())
+
+                        cur_roi_label = batch_dict['roi_labels'][cur_labeled_ind].squeeze()
+                        self.val_dict['class_labels_lb'].extend(cur_roi_label.tolist())
+
+                        cur_cos_scores = self.pv_rcnn.roi_head.forward_ret_dict['cos_scores'][cur_labeled_ind]
+                        self.val_dict['cos_scores_lb'].extend(cur_cos_scores.tolist())
+
+                        cur_cos_sem = self.pv_rcnn.roi_head.forward_ret_dict['cos_sem_scores'][cur_labeled_ind]
+                        self.val_dict['cos_sem_scores_lb'].extend(cur_cos_sem.tolist())
+
+                        cur_cos_scores_softmax = self.pv_rcnn.roi_head.forward_ret_dict['cos_scores_softmax'][cur_labeled_ind]
+                        self.val_dict['cos_scores_softmax_lb'].extend(cur_cos_scores_softmax.tolist())
+
+                        cur_cos_scores_classifier = self.pv_rcnn.roi_head.forward_ret_dict['cos_scores_classifier'][cur_labeled_ind]
+                        self.val_dict['cos_scores_classifier_lb'].extend(cur_cos_scores_classifier.tolist())
+
 
                 # replace old pickle data (if exists) with updated one 
                 output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]
