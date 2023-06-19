@@ -136,15 +136,27 @@ class AnchorHeadTemplate(nn.Module):
             rpn_acc_cls = ((cls_preds.max(-1)[1] + 1) == cls_targets.long()).view(batch_size, -1).sum(-1).float() / \
                           torch.clamp((cls_targets > 0).view(batch_size, -1).sum(-1).float(), min=1.0)
             
+        cls_targets_flat = cls_targets.view(-1)
+        cls_loss_flat = cls_loss_src.sum(dim=-1).view(-1)
+        classwise_loss={'Bg': None,'Car': None,'Pedestrian':None , 'Cyclist': None}
+        dict_name = {0:'Bg',1:'Car',2:'Pedestrian',3:'Cyclist'}
+        for i in range(4):
+            mask = cls_targets_flat == i
+            if mask.any():
+                classwise_loss[dict_name[i]] = cls_loss_flat[cls_targets_flat == i].sum() * self.model_cfg.LOSS_CONFIG.LOSS_WEIGHTS['cls_weight']
+            else:
+                classwise_loss[dict_name[i]] = torch.full((1), torch.nan).item()
 
         cls_loss = cls_loss * self.model_cfg.LOSS_CONFIG.LOSS_WEIGHTS['cls_weight']
-        cls_loss_dict = {'Bg':cls_loss[0].item(), 'Car':cls_loss[1].item(), 'Pedestrian':cls_loss[2].item(), 'Cyclist':cls_loss[3].item()}
-        cls_loss_dict['Total'] = cls_loss.sum().item()
         tb_dict = {
             'rpn_loss_cls': cls_loss.item() if scalar else cls_loss,
             'rpn_acc_cls': rpn_acc_cls.item() if scalar else rpn_acc_cls,
-            # 'rpn_loss_classwise': cls_loss_dict
+            'rpn_loss_cls_Bg': classwise_loss['Bg'].repeat(batch_size).item() if scalar else classwise_loss['Bg'].repeat(batch_size),
+            'rpn_loss_cls_Car': classwise_loss['Car'].repeat(batch_size).item() if scalar else classwise_loss['Car'].repeat(batch_size),
+            'rpn_loss_cls_Pedestrian': classwise_loss['Pedestrian'].repeat(batch_size).item() if scalar else classwise_loss['Pedestrian'].repeat(batch_size),
+            'rpn_loss_cls_Cyclist': classwise_loss['Cyclist'].repeat(batch_size).item() if scalar else classwise_loss['Cyclist'].repeat(batch_size),
         }
+
 
         return cls_loss, tb_dict
 
