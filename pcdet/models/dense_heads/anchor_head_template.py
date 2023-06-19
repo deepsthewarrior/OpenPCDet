@@ -135,12 +135,15 @@ class AnchorHeadTemplate(nn.Module):
             cls_loss = cls_loss_src.reshape(batch_size, -1).sum(-1)
             rpn_acc_cls = ((cls_preds.max(-1)[1] + 1) == cls_targets.long()).view(batch_size, -1).sum(-1).float() / \
                           torch.clamp((cls_targets > 0).view(batch_size, -1).sum(-1).float(), min=1.0)
+            
 
         cls_loss = cls_loss * self.model_cfg.LOSS_CONFIG.LOSS_WEIGHTS['cls_weight']
-
+        cls_loss_dict = {'Bg':cls_loss[0].item(), 'Car':cls_loss[1].item(), 'Pedestrian':cls_loss[2].item(), 'Cyclist':cls_loss[3].item()}
+        cls_loss_dict['Total'] = cls_loss.sum().item()
         tb_dict = {
             'rpn_loss_cls': cls_loss.item() if scalar else cls_loss,
-            'rpn_acc_cls': rpn_acc_cls.item() if scalar else rpn_acc_cls
+            'rpn_acc_cls': rpn_acc_cls.item() if scalar else rpn_acc_cls,
+            # 'rpn_loss_classwise': cls_loss_dict
         }
 
         return cls_loss, tb_dict
