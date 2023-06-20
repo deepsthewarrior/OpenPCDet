@@ -154,6 +154,8 @@ class PVRCNN_SSL(Detector3DTemplate):
         self.classes = ['Car','Ped','Cyc']
         self.ema_template= {val: [] for val in self.classes}
         self.updated_template = {val: [] for val in self.classes}
+        self.proto_keys = ['Car_sh_ema','Ped_sh_ema','Cyc_sh_ema','Car_sh_lb','Ped_sh_lb','Cyc_sh_lb','Car_sh_ulb','Ped_sh_ulb','Cyc_sh_ulb','iteration','epoch']
+        self.proto_dict = {val: [] for val in self.proto_keys}
         with open('ema_sh4468_0.9.pkl','rb') as f:
             self.rcnn_features = pickle.loads(f.read())
         rcnn_sh_mean = []
@@ -463,9 +465,7 @@ class PVRCNN_SSL(Detector3DTemplate):
 
                         cur_cos_scores = self.pv_rcnn.roi_head.forward_ret_dict['cos_scores'][cur_unlabeled_ind]
                         self.val_dict['cos_scores'].extend(cur_cos_scores.tolist())
-            # targets_dict['cos_sem_scores'] = cos_sem_scores
-            # targets_dict['cos_scores_softmax'] = F.softmax(cos_sem_scores,dim=-1)
-            # targets_dict['cos_scores_classifier'] 
+ 
                         cur_cos_sem = self.pv_rcnn.roi_head.forward_ret_dict['cos_sem_scores'][cur_unlabeled_ind]
                         self.val_dict['cos_sem_scores'].extend(cur_cos_sem.tolist())
 
@@ -606,55 +606,76 @@ class PVRCNN_SSL(Detector3DTemplate):
         pred_dicts_feat, recall_dicts_feat = self.pv_rcnn.post_processing_features(batch_dict, no_recall_dict=True,
                                                                                     override_thresh=0.0,
                                                                                    no_nms_for_unlabeled=self.no_nms)
+        batch_dict_inds = [batch_dict['labeled_inds'],batch_dict['unlabeled_inds']]
         class_thresh = torch.tensor([0.8,0.8,0.8])
         pred_thresh = torch.tensor([0.95,0.85,0.85])
-        for inds in batch_dict['labeled_inds']:
-            pred_scores = pred_dicts_feat[inds]['pred_scores_all']
-            pred_labels = pred_dicts_feat[inds]['label_preds']
-            iou = pred_dicts_feat[inds]['iou']
-            gt_assign = pred_dicts_feat[inds]['gt_assignment']
-            selected = pred_dicts_feat[inds]['selected']
-            shared_features = pred_dicts_feat[inds]['shared_features']
-            # temp['rcnn_cls_interim'] = (pred_dicts_feat[inds]['rcnn_cls_interim'])
-            # temp['rcnn_reg_interim'] = (pred_dicts_feat[inds]['rcnn_reg_interim'])
-            gt_labels = (pred_dicts_feat[inds]['gt_label'])
+        for batch_dict_inds_ in batch_dict_inds:
+            for inds in batch_dict_inds_:
+                ulb_record = True
+                if inds in batch_dict['unlabeled_inds']:
+                    ulb_record = False
+                    ulb_record =  (batch_dict['cur_iteration'] >= 20)
 
-            selected_gt = gt_assign[selected]
-            selected_gt_labels = gt_labels[selected_gt]
-            tp_cls = pred_labels[selected] == selected_gt_labels
-            class_thresh_=class_thresh.detach().clone().to(tp_cls.device)
-            pred_thresh_ = pred_thresh.detach().clone().to(tp_cls.device)
-            conf_thresh =class_thresh_.unsqueeze(
-                        0).repeat(len(selected), 1).gather(dim=1, index=(pred_labels[selected]-1).unsqueeze(-1))
-            pred_thresh = pred_thresh_.unsqueeze(
-                        0).repeat(len(selected), 1).gather(dim=1, index=(pred_labels[selected]-1).unsqueeze(-1))
-            conf_thresh = conf_thresh.squeeze(dim=-1)
-            pred_thresh = pred_thresh.squeeze(dim=-1)
-            iou_selected = iou[selected] > conf_thresh
-            pred_selected = pred_scores[selected] > pred_thresh
-            final_sel = iou_selected & tp_cls
-            final_sel_a = final_sel & pred_selected
-            final_preds = pred_labels[selected][final_sel_a]
-            final_shared = shared_features[selected][final_sel_a]
-            car_sh = final_shared[final_preds == 1]
-            ped_sh = final_shared[final_preds == 2]
-            cyc_sh = final_shared[final_preds == 3]
-            
-            for i,feature in enumerate(car_sh):
-                self.updated_template['Car'].append(car_sh[i].clone().detach())
-            for i,feature in enumerate(ped_sh):
-                self.updated_template['Ped'].append(ped_sh[i].clone().detach())
-            for i,feature in enumerate(cyc_sh):
-                self.updated_template['Cyc'].append(cyc_sh[i].clone().detach())
-            
+                pred_scores = pred_dicts_feat[inds]['pred_scores_all']
+                pred_labels = pred_dicts_feat[inds]['label_preds']
+                iou = pred_dicts_feat[inds]['iou']
+                gt_assign = pred_dicts_feat[inds]['gt_assignment']
+                selected = pred_dicts_feat[inds]['selected']
+                shared_features = pred_dicts_feat[inds]['shared_features']
+                # temp['rcnn_cls_interim'] = (pred_dicts_feat[inds]['rcnn_cls_interim'])
+                # temp['rcnn_reg_interim'] = (pred_dicts_feat[inds]['rcnn_reg_interim'])
+                gt_labels = (pred_dicts_feat[inds]['gt_label'])
+                if (len(gt_assign) != 0) & ulb_record:
+                    selected_gt = gt_assign[selected]
+                    selected_gt_labels = gt_labels[selected_gt]
+                    tp_cls = pred_labels[selected] == selected_gt_labels
+                    class_thresh_=class_thresh.detach().clone().to(tp_cls.device)
+                    pred_thresh_ = pred_thresh.detach().clone().to(tp_cls.device)
+                    conf_thresh =class_thresh_.unsqueeze(
+                                0).repeat(len(selected), 1).gather(dim=1, index=(pred_labels[selected]-1).unsqueeze(-1))
+                    pred_thresh = pred_thresh_.unsqueeze(
+                                0).repeat(len(selected), 1).gather(dim=1, index=(pred_labels[selected]-1).unsqueeze(-1))
+                    conf_thresh = conf_thresh.squeeze(dim=-1)
+                    pred_thresh = pred_thresh.squeeze(dim=-1)
+                    iou_selected = iou[selected] > conf_thresh
+                    pred_selected = pred_scores[selected] > pred_thresh
+                    final_sel = iou_selected & tp_cls
+                    final_sel_a = final_sel & pred_selected
+                    final_preds = pred_labels[selected][final_sel_a]
+                    final_shared = shared_features[selected][final_sel_a]
+                    car_sh = final_shared[final_preds == 1]
+                    ped_sh = final_shared[final_preds == 2]
+                    cyc_sh = final_shared[final_preds == 3]
+                    
+                    for i,feature in enumerate(car_sh):
+                        self.updated_template['Car'].append(car_sh[i].clone().detach())
+                    for i,feature in enumerate(ped_sh):
+                        self.updated_template['Ped'].append(ped_sh[i].clone().detach())
+                    for i,feature in enumerate(cyc_sh):
+                        self.updated_template['Cyc'].append(cyc_sh[i].clone().detach())
+                    
+                if batch_dict['cur_iteration']+1 % 20 == 0:
+                    alpha = 0.9
+                    cls_map = {0:'Car',1:'Ped',2:'Cyc'}
+                    for i,cls in enumerate(self.classes): 
+                        if len(self.updated_template[cls]) != 0:
+                            update_feat = torch.mean(torch.stack(self.updated_template[cls]),dim=0)
+                            self.rcnn_sh_mean[i] = (self.rcnn_sh_mean[i].to(update_feat.device)*alpha) + ((1-alpha)*update_feat)
+                            if self.model_cfg.PROTOTYPE.RECORD:
+                                #         self.proto_keys = ['Car_sh_ema','Ped_sh_ema','Cyc_sh_ema','Car_sh_lb','Ped_sh_lb','Cyc_sh_lb','Car_sh_ulb','Ped_sh_ulb','Cyc_sh_ulb']
+                                if inds in batch_dict['labeled_inds']:
+                                    self.proto_dict[cls_map[i]+'_sh_lb'].extend(update_feat.tolist())
+                                else:
+                                    self.proto_dict[cls_map[i]+'_sh_ulb'].extend(update_feat.tolist())
+                                self.proto_dict[cls_map[i]+'_sh_ema'].extend(self.rcnn_sh_mean[i].tolist())
+                                self.proto_dict['iteration'].append(batch_dict['cur_iteration'])
+                                self.proto_dict['epoch'].append(batch_dict['cur_epoch'])
 
-        if batch_dict['cur_iteration']+1 % 20 == 0:
-            alpha = 0.9 
-            for i,cls in enumerate(self.classes): 
-                if len(self.updated_template[cls]) != 0:
-                    update_feat = torch.mean(torch.stack(self.updated_template[cls]),dim=0)
-                    self.rcnn_sh_mean[i] = (self.rcnn_sh_mean[i].to(update_feat.device)*alpha) + ((1-alpha)*update_feat)
-                self.updated_template = {val: [] for val in self.classes}            
+                        self.updated_template = {val: [] for val in self.classes}
+                # replace old pickle data (if exists) with updated one 
+                output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]
+                file_path = os.path.join(output_dir, 'prototype.pkl')
+                pickle.dump(self.proto_dict, open(file_path, 'wb'))                        
 
     def ensemble_post_processing(self, batch_dict_a, batch_dict_b, unlabeled_inds, ensemble_option=None):
         # TODO(farzad) what about roi_labels and roi_scores in following options?
