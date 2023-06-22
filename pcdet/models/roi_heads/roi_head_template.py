@@ -509,6 +509,20 @@ class RoIHeadTemplate(nn.Module):
                     rcnn_loss_cls = (batch_loss_cls * cls_valid_mask).sum(-1) / torch.clamp(cls_valid_mask.sum(-1), min=1.0)
                 rcnn_acc_cls = torch.abs(torch.sigmoid(rcnn_cls_flat) - rcnn_cls_labels).reshape(batch_size, -1)
                 rcnn_acc_cls = (rcnn_acc_cls * cls_valid_mask).sum(-1) / torch.clamp(cls_valid_mask.sum(-1), min=1.0)
+
+                # Classwise loss
+                rcnn_loss_cls_dict = {'Car': None, 'Pedestrian': None, 'Cyclist': None}
+                for cls_idx, cls_name in enumerate(rcnn_loss_cls_dict.keys()):
+                    # Create classwise mask using ROI labels 
+                    cur_cls_mask = (forward_ret_dict['roi_labels'] == (cls_idx+1))
+                    if 'rcnn_cls_weights' in forward_ret_dict: 
+                        #TODO:Deepika check
+                        rcnn_loss_cls_dict[cls_name] = (batch_loss_cls * cur_cls_mask * rcnn_cls_weights * cls_valid_mask).sum(-1) / torch.clamp(rcnn_loss_cls_norm, min=1.0)
+                    else:
+                        rcnn_loss_cls_dict[cls_name] = (batch_loss_cls * cur_cls_mask * cls_valid_mask).sum(-1) / torch.clamp(cls_valid_mask.sum(-1), min=1.0)
+                    # Adding these individual losses should be equal to rcnn_loss_cls (just for verificaiton)
+                rcnn_loss_cls_dict['Total'] = rcnn_loss_cls_dict['Car'] + rcnn_loss_cls_dict['Pedestrian'] + rcnn_loss_cls_dict['Cyclist']
+
         elif loss_cfgs.CLS_LOSS == 'CrossEntropy':
             batch_loss_cls = F.cross_entropy(rcnn_cls, rcnn_cls_labels, reduction='none', ignore_index=-1)
             cls_valid_mask = (rcnn_cls_labels >= 0).float()
@@ -525,7 +539,11 @@ class RoIHeadTemplate(nn.Module):
         rcnn_loss_cls = rcnn_loss_cls * loss_cfgs.LOSS_WEIGHTS['rcnn_cls_weight']
         tb_dict = {
             'rcnn_loss_cls': rcnn_loss_cls.item() if scalar else rcnn_loss_cls,
-            'rcnn_acc_cls': rcnn_acc_cls.item() if scalar else rcnn_acc_cls
+            'rcnn_acc_cls': rcnn_acc_cls.item() if scalar else rcnn_acc_cls,
+            'rcnn_loss_cls_car': 0 if scalar else rcnn_loss_cls_dict['Car'],
+            'rcnn_loss_cls_ped': 0 if scalar else rcnn_loss_cls_dict['Pedestrian'],
+            'rcnn_loss_cls_cyc': 0 if scalar else rcnn_loss_cls_dict['Cyclist'],
+            'rcnn_loss_cls_total': 0 if scalar else rcnn_loss_cls_dict['Total']
         }
         return rcnn_loss_cls, tb_dict
 
@@ -536,25 +554,33 @@ class RoIHeadTemplate(nn.Module):
         rcnn_cls_labels = (forward_ret_dict['rcnn_cls_labels'][ulb_inds]).view(-1)
         bg_mask = rcnn_cls_labels == 0
         fg_mask = rcnn_cls_labels == 1
+        uc_mask = ~fg_mask & ~bg_mask
+        align_loss_ = 1-cos_scores[uc_mask]
         repel_loss_ = cos_scores[bg_mask]
         attract_loss_ = 1 - (cos_scores[fg_mask])
         repel_loss_ulb = torch.mean(repel_loss_ * loss_cfgs.LOSS_WEIGHTS['repel_loss_weight']).nan_to_num(0.0)
         attract_loss_ulb = torch.mean(attract_loss_ * loss_cfgs.LOSS_WEIGHTS['attract_loss_weight']).nan_to_num(0.0)
+        align_loss_ulb = torch.mean(align_loss_ * loss_cfgs.LOSS_WEIGHTS['align_loss_weight']).nan_to_num(0.0)
         repel_loss_list = []
         attract_loss_list = []
+        align_loss_list = []
         for cls_idx in range(1,4):
             repel_cls_mask = (forward_ret_dict['roi_labels'][ulb_inds].view(-1) == cls_idx)[bg_mask]
             attract_cls_mask = (forward_ret_dict['roi_labels'][ulb_inds].view(-1) == cls_idx)[fg_mask]
+            align_cls_mask = (forward_ret_dict['roi_labels'][ulb_inds].view(-1) == cls_idx)[uc_mask]
             repel_loss_list.append(torch.mean(repel_loss_[repel_cls_mask] * loss_cfgs.LOSS_WEIGHTS['repel_loss_weight']).nan_to_num(0.0))
             attract_loss_list.append(torch.mean(attract_loss_[attract_cls_mask] * loss_cfgs.LOSS_WEIGHTS['attract_loss_weight']).nan_to_num(0.0))
+            align_loss_list.append(torch.mean(align_loss_[align_cls_mask] * loss_cfgs.LOSS_WEIGHTS['align_loss_weight']).nan_to_num(0.0))
         tb_dict = {
             # For consistency with other losses
             'repel_loss_ulb': repel_loss_ulb.unsqueeze(0).repeat(forward_ret_dict['roi_labels'].shape[0], 1),
             'attract_loss_ulb': attract_loss_ulb.unsqueeze(0).repeat(forward_ret_dict['roi_labels'].shape[0], 1),
+            'align_loss_ulb': align_loss_ulb.unsqueeze(0).repeat(forward_ret_dict['roi_labels'].shape[0], 1),
             'classwise_repel': {'Car': repel_loss_list[0],'Ped':repel_loss_list[1],'Cyc': repel_loss_list[2],'total_loss': sum(repel_loss_list)},
-            'classwise_attract':{'Car': attract_loss_list[0],'Ped':attract_loss_list[1],'Cyc': attract_loss_list[2],'total_loss': sum(attract_loss_list)}   
+            'classwise_attract':{'Car': attract_loss_list[0],'Ped':attract_loss_list[1],'Cyc': attract_loss_list[2],'total_loss': sum(attract_loss_list)},
+            'classwise_align':{'Car': align_loss_list[0],'Ped':align_loss_list[1],'Cyc': align_loss_list[2],'total_loss': sum(align_loss_list)}                  
         }
-        return repel_loss_ulb, attract_loss_ulb, tb_dict
+        return repel_loss_ulb, attract_loss_ulb,align_loss_ulb,tb_dict
     
         
     def pre_loss_filtering(self):
@@ -696,7 +722,7 @@ class RoIHeadTemplate(nn.Module):
         rcnn_loss_cls, cls_tb_dict = self.get_box_cls_layer_loss(self.forward_ret_dict, scalar=scalar)
         rcnn_loss_reg, reg_tb_dict = self.get_box_reg_layer_loss(self.forward_ret_dict, scalar=scalar)
         ulb_loss_cls_dist, cls_dist_dict = self.get_ulb_cls_dist_loss(self.forward_ret_dict)
-        bg_repel_loss,fg_attract_loss, ra_loss_dict = self.repel_attract_loss(self.forward_ret_dict)
+        bg_repel_loss,fg_attract_loss,uc_align_loss,ra_loss_dict = self.repel_attract_loss(self.forward_ret_dict)
         rcnn_loss = rcnn_loss_cls + rcnn_loss_reg + ulb_loss_cls_dist 
         tb_dict.update(cls_tb_dict)
         tb_dict.update(reg_tb_dict)
@@ -706,7 +732,7 @@ class RoIHeadTemplate(nn.Module):
         if scalar:
             return rcnn_loss, tb_dict
         else:
-            return rcnn_loss_cls, rcnn_loss_reg, ulb_loss_cls_dist,bg_repel_loss,fg_attract_loss,tb_dict
+            return rcnn_loss_cls, rcnn_loss_reg, ulb_loss_cls_dist, bg_repel_loss, fg_attract_loss, uc_align_loss, tb_dict
 
     def generate_predicted_boxes(self, batch_size, rois, cls_preds, box_preds):
         """

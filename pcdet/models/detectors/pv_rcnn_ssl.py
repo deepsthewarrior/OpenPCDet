@@ -371,7 +371,7 @@ class PVRCNN_SSL(Detector3DTemplate):
             disp_dict = {}
             loss_rpn_cls, loss_rpn_box, tb_dict = self.pv_rcnn.dense_head.get_loss(scalar=False)
             loss_point, tb_dict = self.pv_rcnn.point_head.get_loss(tb_dict, scalar=False)
-            loss_rcnn_cls, loss_rcnn_box, ulb_loss_cls_dist,repel_bg_loss,attract_fg_loss, tb_dict = self.pv_rcnn.roi_head.get_loss(tb_dict, scalar=False)
+            loss_rcnn_cls, loss_rcnn_box, ulb_loss_cls_dist,repel_bg_loss,attract_fg_loss, align_uc_loss, tb_dict = self.pv_rcnn.roi_head.get_loss(tb_dict, scalar=False)
 
             if not self.unlabeled_supervise_cls:
                 loss_rpn_cls = loss_rpn_cls[labeled_inds, ...].mean()
@@ -396,6 +396,8 @@ class PVRCNN_SSL(Detector3DTemplate):
                 loss += repel_bg_loss
             if self.model_cfg['ROI_HEAD'].get('ENABLE_FG_ATTRACT_LOSS', False):
                 loss += attract_fg_loss
+            if self.model_cfg['ROI_HEAD'].get('ENABLE_UC_ALIGN_LOSS', False):
+                loss+= align_uc_loss
             tb_dict_ = {}
             for key in tb_dict.keys():
                 if 'loss' in key:
