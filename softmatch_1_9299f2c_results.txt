@@ -1,0 +1,108 @@
+
+#--------------------Calculate Mean mAP-----------------------#
+
+Defined Metric
+['Car AP_R40@0.70, 0.70, 0.70', 'Pedestrian AP_R40@0.50, 0.50, 0.50', 'Cyclist AP_R40@0.50, 0.50, 0.50']
+Experiment(s)
+['softmatch_1_9299f2c', 'softmatch_2_9299f2c', 'softmatch_3_9299f2c']
+Evaluated Epochs[50, 52, 54, 56, 58, 60]
+Scanning output/cfgs/kitti_models/pv_rcnn_ssl_60/softmatch_1_9299f2c/log_train_20230502-091551.txt for evaluated results
+
+Scanning output/cfgs/kitti_models/pv_rcnn_ssl_60/softmatch_1_9299f2c/log_train_20230502-092905.txt for evaluated results
+
+Scanning output/cfgs/kitti_models/pv_rcnn_ssl_60/softmatch_1_9299f2c/log_train_20230502-093337.txt for evaluated results
+
+Scanning output/cfgs/kitti_models/pv_rcnn_ssl_60/softmatch_1_9299f2c/log_train_20230502-105009.txt for evaluated results
+
+Scanning output/cfgs/kitti_models/pv_rcnn_ssl_60/softmatch_1_9299f2c/log_train_20230502-105342.txt for evaluated results
+
+Scanning output/cfgs/kitti_models/pv_rcnn_ssl_60/softmatch_1_9299f2c/log_train_20230502-110852.txt for evaluated results
+
+Scanning output/cfgs/kitti_models/pv_rcnn_ssl_60/softmatch_1_9299f2c/log_train_20230502-111420.txt for evaluated results
+
+Scanning output/cfgs/kitti_models/pv_rcnn_ssl_60/softmatch_1_9299f2c/log_train_20230502-111928.txt for evaluated results
+
+mAP(s)[[88.43 74.59 71.83 21.53 19.51 18.43 73.46 47.29 44.78 88.43 74.61 71.87
+  21.55 19.53 18.42 73.46 47.28 44.78]
+ [86.91 74.84 71.74 22.08 18.87 18.12 73.65 49.2  45.58 88.42 74.82 71.75
+  22.11 18.9  18.14 73.65 49.2  45.58]
+ [87.26 75.06 72.04 22.03 18.81 18.16 73.45 48.87 46.21 87.25 75.06 72.04
+  22.03 18.81 18.14 73.38 48.73 46.08]
+ [87.36 74.87 72.11 22.47 18.43 17.57 72.14 47.95 43.97 87.36 74.88 72.12
+  22.47 18.45 17.58 72.15 47.94 43.97]
+ [87.7  76.57 72.46 21.55 18.02 17.55 72.16 48.02 44.21 87.68 76.55 72.43
+  21.54 18.02 17.55 72.17 48.01 44.22]
+ [87.81 76.7  72.61 20.92 17.19 16.9  72.33 48.17 44.43 87.8  76.73 72.59
+  20.98 17.26 16.94 72.33 48.17 44.42]]
+Max mAP[88.43 76.7  72.61 22.47 19.51 18.43 73.65 49.2  46.21 88.43 76.73 72.59
+ 22.47 19.53 18.42 73.65 49.2  46.08]
+Scanning output/cfgs/kitti_models/pv_rcnn_ssl_60/softmatch_2_9299f2c/log_train_20230502-092905.txt for evaluated results
+
+Scanning output/cfgs/kitti_models/pv_rcnn_ssl_60/softmatch_2_9299f2c/log_train_20230502-093336.txt for evaluated results
+
+Scanning output/cfgs/kitti_models/pv_rcnn_ssl_60/softmatch_2_9299f2c/log_train_20230502-105009.txt for evaluated results
+
+Scanning output/cfgs/kitti_models/pv_rcnn_ssl_60/softmatch_2_9299f2c/log_train_20230502-105342.txt for evaluated results
+
+Scanning output/cfgs/kitti_models/pv_rcnn_ssl_60/softmatch_2_9299f2c/log_train_20230502-110852.txt for evaluated results
+
+Scanning output/cfgs/kitti_models/pv_rcnn_ssl_60/softmatch_2_9299f2c/log_train_20230502-111420.txt for evaluated results
+
+Scanning output/cfgs/kitti_models/pv_rcnn_ssl_60/softmatch_2_9299f2c/log_train_20230502-111928.txt for evaluated results
+
+mAP(s)[[87.61 75.23 70.87 28.8  25.11 24.09 71.71 46.13 42.47 87.6  75.22 70.86
+  28.79 25.16 24.09 71.71 46.16 42.47]
+ [88.26 76.27 71.48 26.43 23.15 22.66 73.67 45.   42.58 88.26 76.25 71.48
+  26.42 23.13 22.66 73.69 45.   42.57]
+ [88.56 76.1  71.39 29.81 26.64 25.3  72.31 46.   42.17 88.56 76.1  71.39
+  29.81 26.64 25.31 72.31 45.94 42.16]
+ [88.51 76.18 72.88 21.81 19.53 18.88 74.47 46.35 43.92 88.55 76.19 72.91
+  21.83 19.55 18.88 74.45 46.33 43.91]
+ [88.48 76.32 73.01 22.4  19.74 19.35 74.86 46.21 43.73 88.46 76.32 73.01
+  22.31 19.71 19.33 74.84 46.21 43.72]
+ [88.51 76.2  73.01 21.2  19.07 18.63 74.61 45.98 43.46 88.51 76.2  72.98
+  21.22 19.07 18.63 74.63 46.   43.47]]
+Max mAP[88.56 76.32 73.01 29.81 26.64 25.3  74.86 46.35 43.92 88.56 76.32 73.01
+ 29.81 26.64 25.31 74.84 46.33 43.91]
+Scanning output/cfgs/kitti_models/pv_rcnn_ssl_60/softmatch_3_9299f2c/log_train_20230502-091601.txt for evaluated results
+
+Scanning output/cfgs/kitti_models/pv_rcnn_ssl_60/softmatch_3_9299f2c/log_train_20230502-092905.txt for evaluated results
+
+Scanning output/cfgs/kitti_models/pv_rcnn_ssl_60/softmatch_3_9299f2c/log_train_20230502-093337.txt for evaluated results
+
+Scanning output/cfgs/kitti_models/pv_rcnn_ssl_60/softmatch_3_9299f2c/log_train_20230502-105009.txt for evaluated results
+
+Scanning output/cfgs/kitti_models/pv_rcnn_ssl_60/softmatch_3_9299f2c/log_train_20230502-105342.txt for evaluated results
+
+Scanning output/cfgs/kitti_models/pv_rcnn_ssl_60/softmatch_3_9299f2c/log_train_20230502-110852.txt for evaluated results
+
+Scanning output/cfgs/kitti_models/pv_rcnn_ssl_60/softmatch_3_9299f2c/log_train_20230502-111420.txt for evaluated results
+
+Scanning output/cfgs/kitti_models/pv_rcnn_ssl_60/softmatch_3_9299f2c/log_train_20230502-111928.txt for evaluated results
+
+mAP(s)[[87.63 75.41 70.97 29.78 25.8  24.11 69.66 43.77 41.46 87.64 75.42 70.98
+  29.79 25.76 24.12 69.65 43.77 41.48]
+ [86.73 74.88 70.71 25.92 22.43 20.79 69.29 43.18 40.63 86.73 74.89 70.72
+  25.92 22.43 20.81 69.29 43.18 40.64]
+ [86.9  75.55 71.12 24.77 21.59 20.34 69.03 43.01 40.57 86.9  75.55 71.12
+  24.71 21.58 20.33 69.03 43.01 40.58]
+ [87.24 75.61 72.47 26.98 24.23 23.07 70.37 43.99 39.88 87.24 75.61 72.47
+  26.97 24.19 23.06 70.37 43.99 39.87]
+ [87.13 75.49 71.23 26.23 23.59 22.37 71.61 43.85 41.38 87.13 75.49 71.23
+  26.21 23.58 22.35 71.61 43.85 41.38]
+ [87.36 75.73 72.71 26.9  23.7  22.5  71.45 43.66 41.19 87.36 75.75 72.72
+  26.89 23.71 22.52 71.45 43.66 41.18]]
+Max mAP[87.63 75.73 72.71 29.78 25.8  24.11 71.61 43.99 41.46 87.64 75.75 72.72
+ 29.79 25.76 24.12 71.61 43.99 41.48]
+
+----------------Final Results----------------
+
+Max mAP(s)
+[[88.43 76.7  72.61 22.47 19.51 18.43 73.65 49.2  46.21 88.43 76.73 72.59
+  22.47 19.53 18.42 73.65 49.2  46.08]
+ [88.56 76.32 73.01 29.81 26.64 25.3  74.86 46.35 43.92 88.56 76.32 73.01
+  29.81 26.64 25.31 74.84 46.33 43.91]
+ [87.63 75.73 72.71 29.78 25.8  24.11 71.61 43.99 41.46 87.64 75.75 72.72
+  29.79 25.76 24.12 71.61 43.99 41.48]]
+Mean mAP[88.21 76.25 72.77 27.35 23.98 22.61 73.37 46.51 43.87 88.21 76.27 72.77
+ 27.36 23.97 22.62 73.37 46.51 43.82]

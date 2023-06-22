@@ -1,0 +1,12 @@
+
+#--------------------Calculate Mean mAP-----------------------#
+
+Defined Metric
+['Car AP_R40@0.70, 0.70, 0.70', 'Pedestrian AP_R40@0.50, 0.50, 0.50', 'Cyclist AP_R40@0.50, 0.50, 0.50']
+Experiment(s)
+['DA_15_3diouMatch_subsampling_old_thresh_1', 'DA_15_3diouMatch_subsampling_old_thresh_2', 'DA_15_3diouMatch_subsampling_old_thresh_3']
+
+----------------Final Results----------------
+
+Max mAP(s)
+[]

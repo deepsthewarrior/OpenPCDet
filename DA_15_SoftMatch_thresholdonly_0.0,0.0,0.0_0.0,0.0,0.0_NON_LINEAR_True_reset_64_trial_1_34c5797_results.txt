@@ -1,0 +1,11 @@
+
+#--------------------Calculate Mean mAP-----------------------#
+
+Defined Metric
+['Car AP_R40@0.70, 0.70, 0.70', 'Pedestrian AP_R40@0.50, 0.50, 0.50', 'Cyclist AP_R40@0.50, 0.50, 0.50']
+Experiment(s)
+['DA_15_SoftMatch_thresholdonly_0.0,0.0,0.0_0.0,0.0,0.0_NON_LINEAR_True_reset_64_trial_1_34c5797', 'DA_15_SoftMatch_thresholdonly_0.0,0.0,0.0_0.0,0.0,0.0_NON_LINEAR_True_reset_64_trial_2_34c5797', 'DA_15_SoftMatch_thresholdonly_0.0,0.0,0.0_0.0,0.0,0.0_NON_LINEAR_True_reset_64_trial_3_34c5797']
+Evaluated Epochs[50, 52, 54, 56, 58, 60]
+Scanning output/cfgs/kitti_models/pv_rcnn_ssl_60/DA_15_SoftMatch_thresholdonly_0.0,0.0,0.0_0.0,0.0,0.0_NON_LINEAR_True_reset_64_trial_1_34c5797/log_train_20230608-104233.txt for evaluated results
+
+Scanning output/cfgs/kitti_models/pv_rcnn_ssl_60/DA_15_SoftMatch_thresholdonly_0.0,0.0,0.0_0.0,0.0,0.0_NON_LINEAR_True_reset_64_trial_1_34c5797/log_train_20230608-104648.txt for evaluated results

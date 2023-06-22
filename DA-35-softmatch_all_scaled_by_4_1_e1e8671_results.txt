@@ -1,0 +1,25 @@
+
+#--------------------Calculate Mean mAP-----------------------#
+
+Defined Metric
+['Car AP_R40@0.70, 0.70, 0.70', 'Pedestrian AP_R40@0.50, 0.50, 0.50', 'Cyclist AP_R40@0.50, 0.50, 0.50']
+Experiment(s)
+['DA-35-softmatch_all_scaled_by_4_1_e1e8671', 'DA-35-softmatch_all_scaled_by_4_2_e1e8671', 'DA-35-softmatch_all_scaled_by_4_3_e1e8671']
+Evaluated Epochs[50, 52, 54, 56, 58, 60]
+Scanning output/cfgs/kitti_models/pv_rcnn_ssl_60/DA-35-softmatch_all_scaled_by_4_1_e1e8671/log_train_20230503-100549.txt for evaluated results
+
+Scanning output/cfgs/kitti_models/pv_rcnn_ssl_60/DA-35-softmatch_all_scaled_by_4_1_e1e8671/log_train_20230503-100745.txt for evaluated results
+
+mAP(s)[[86.   76.1  72.16 19.44 16.53 15.58 72.38 46.7  42.82]
+ [87.27 75.61 71.2  28.06 24.04 22.54 75.67 48.6  45.95]
+ [87.5  75.44 72.64 22.23 18.98 18.17 77.81 49.52 46.85]
+ [89.18 75.51 72.72 28.26 24.32 22.77 78.79 49.92 46.06]
+ [87.41 75.68 72.81 28.09 23.66 22.48 78.77 50.32 47.63]
+ [87.42 75.6  72.85 26.63 23.09 21.95 78.5  50.   47.26]]
+Max mAP[89.18 76.1  72.85 28.26 24.32 22.77 78.79 50.32 47.63]
+
+----------------Final Results----------------
+
+Max mAP(s)
+[[89.18 76.1  72.85 28.26 24.32 22.77 78.79 50.32 47.63]]
+Mean mAP[89.18 76.1  72.85 28.26 24.32 22.77 78.79 50.32 47.63]

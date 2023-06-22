@@ -1,0 +1,12 @@
+
+#--------------------Calculate Mean mAP-----------------------#
+
+Defined Metric
+['Car AP_R40@0.70, 0.70, 0.70', 'Pedestrian AP_R40@0.50, 0.50, 0.50', 'Cyclist AP_R40@0.50, 0.50, 0.50']
+Experiment(s)
+['cls_split_trial_1_386f9f7']
+
+----------------Final Results----------------
+
+Max mAP(s)
+[]
