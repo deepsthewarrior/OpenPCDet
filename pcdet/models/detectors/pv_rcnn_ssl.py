@@ -150,20 +150,15 @@ class PVRCNN_SSL(Detector3DTemplate):
         self.metric_registry = MetricRegistry(dataset=self.dataset, model_cfg=model_cfg)
         vals_to_store = ['iou_roi_pl', 'iou_roi_gt', 'pred_scores', 'weights', 'class_labels', 'iteration']
         self.val_dict = {val: [] for val in vals_to_store}
-        vals_shared = ['shared_features','rcnn_cls_interim','rcnn_reg_interim','pred_boxes','pred_scores','pred_labels','selected','iou','gt_assignment','gt_label','ens']
-        self.shared_pkl = {vals: [] for vals in vals_shared}
-                # 'pred_boxes': final_boxes,
-                # 'pred_scores': final_scores,
-                # 'pred_labels': final_labels,
-                # 'shared_features': shared_features,
-                # 'rcnn_reg_interim': reg_inter,
-                # 'rcnn_cls_interim': cls_inter,
-                # 'selected' : selected,
-                # 'iou' : max_overlaps,
-                # 'gt_assignment': gt_assignment,
-                # 'pred_scores_all': max_cls_preds,
-                # 'label_preds': label_preds,
-                # 'gt_label': gt_label,
+        self.classes = ['Car','Ped','Cyc']
+        self.features_to_update_lb = []
+        self.labels_to_update_lb = []
+        self.features_to_update_ulb = []
+        self.labels_to_update_ulb = []
+        self.momentum = 0.9
+        self.shared_pkl = {'ens': []}
+
+
     def forward(self, batch_dict):
         if self.training:
             labeled_mask = batch_dict['labeled_mask'].view(-1)
@@ -171,20 +166,38 @@ class PVRCNN_SSL(Detector3DTemplate):
             unlabeled_inds = torch.nonzero(1-labeled_mask).squeeze(1).long()
             batch_dict['unlabeled_inds'] = unlabeled_inds
             batch_dict['labeled_inds'] = labeled_inds
-            
-            # batch_dict_ema = {}
-            # keys = list(batch_dict.keys())
-            # for k in keys:
-            #     if k + '_ema' in keys:
-            #         continue
-            #     if k.endswith('_ema'):
-            #         batch_dict_ema[k[:-4]] = batch_dict[k]
-            #     else:
-            #         batch_dict_ema[k] = batch_dict[k]
-            #         keys = list(batch_dict.keys())
+            batch_dict_ema = {}
+            keys = list(batch_dict.keys())
+            for k in keys:
+                if k + '_ema' in keys:
+                    continue
+                if k.endswith('_ema'):
+                    batch_dict_ema[k[:-4]] = batch_dict[k]
+                else:
+                    batch_dict_ema[k] = batch_dict[k]
 
-
-            
+            # Create new dict for weakly aug.(WA) data for teacher - Eg. flip along x axis
+            batch_dict_ema_wa = {}
+            # If ENABLE_RELIABILITY is True, run WA (Humble Teacher) along with original teacher
+            if self.model_cfg['ROI_HEAD'].get('ENABLE_RELIABILITY', False):
+                keys = list(batch_dict.keys())
+                for k in keys:
+                    if k + '_ema_wa' in keys:
+                        continue
+                    if k.endswith('_ema_wa'):
+                        batch_dict_ema_wa[k[:-7]] = batch_dict[k]
+                    else:
+                        # TODO(farzad) Warning! Here flip_x values are copied from _ema to _ema_wa which is not correct!
+                        batch_dict_ema_wa[k] = batch_dict[k]
+            gt_boxes_check = torch.any(batch_dict['gt_boxes']!=0,dim=-1)
+            instance_idx_check = batch_dict['instance_idx']!=0
+            assert torch.all(gt_boxes_check[labeled_inds] == instance_idx_check[labeled_inds]), "gt_boxes and instance_idx should have the same length for labeled data" 
+            assert torch.all(gt_boxes_check[unlabeled_inds] == instance_idx_check[unlabeled_inds]), "gt_boxes and instance_idx should have the same length for ulb"     
+            gt_boxes_check = torch.any(batch_dict_ema['gt_boxes']!=0,dim=-1)
+            instance_idx_check = batch_dict_ema['instance_idx']!=0
+            assert torch.all(gt_boxes_check[labeled_inds] == instance_idx_check[labeled_inds]), "gt_boxes and instance_idx should have the same length for labeled data wa" 
+            assert torch.all(gt_boxes_check[unlabeled_inds] == instance_idx_check[unlabeled_inds]), "gt_boxes and instance_idx should have the same length for ulb wa"     
+            record_dict = {}
 
             with torch.no_grad():
                 for cur_module in self.pv_rcnn_ema.module_list:
@@ -192,32 +205,47 @@ class PVRCNN_SSL(Detector3DTemplate):
                         batch_dict= cur_module(batch_dict, disable_gt_roi_when_pseudo_labeling=True)
                     except:
                         batch_dict = cur_module(batch_dict)
-            pred_dicts_gap, recall_dicts = self.pv_rcnn_ema.post_processing(batch_dict, no_recall_dict=True,
-                                                                                override_thresh=0.0,
-                                                                            no_nms_for_unlabeled=self.no_nms)
-            pseudo_boxes, pseudo_scores, pseudo_sem_scores, pseudo_boxes_var, pseudo_scores_var = \
-                self._filter_pseudo_labels(pred_dicts_gap, labeled_inds)
+                        # if cur_module.model_cfg['NAME']=='VoxelBackBone8x':
+                        #     record_dict['dense__features_pkl'] = batch_dict['encoded_spconv_tensor'].dense() # dense convert sparse to NCHW format
+                        #     record_dict['sparse__features_pkl'] = batch_dict['encoded_spconv_tensor']
 
-            self._fill_with_pseudo_labels(batch_dict, pseudo_boxes, unlabeled_inds, labeled_inds)            
+                            # record_dict['']
+                            
+            # pred_dicts_gap, recall_dicts = self.pv_rcnn_ema.post_processing(batch_dict, no_recall_dict=True,
+            #                                                                     override_thresh=0.0,
+            #                                                                 no_nms_for_unlabeled=self.no_nms)
+            # pseudo_boxes, pseudo_scores, pseudo_sem_scores, pseudo_boxes_var, pseudo_scores_var = \
+            #     self._filter_pseudo_labels(pred_dicts_gap, labeled_inds)
+
+            # self._fill_with_pseudo_labels(batch_dict, pseudo_boxes, unlabeled_inds, labeled_inds)            
             
 
             for inds in labeled_inds:
                 temp = {}
-                temp['pred_scores'] = pred_dicts_gap[inds]['pred_scores_all'].to('cuda:0')
-                temp['pred_labels'] = (pred_dicts_gap[inds]['label_preds']).to('cuda:0')
-                temp['iou'] = (pred_dicts_gap[inds]['iou']).to('cuda:0')
-                temp['gt_assignment'] = (pred_dicts_gap[inds]['gt_assignment']).to('cuda:0')
-                temp['selected'] = (pred_dicts_gap[inds]['selected']).to('cuda:0')
-                temp['shared_features'] = (pred_dicts_gap[inds]['shared_features']).to('cuda:0')
-                temp['rcnn_cls_interim'] = (pred_dicts_gap[inds]['rcnn_cls_interim']).to('cuda:0')
-                temp['pooled_features'] = (pred_dicts_gap[inds]['pooled_features']).to('cuda:0')
-                # temp['rcnn_reg_interim'] = (pred_dicts_gap[inds]['rcnn_reg_interim'])
-                temp['gt_label'] = (pred_dicts_gap[inds]['gt_label']).to('cuda:0')
+                # temp['pred_scores'] = pred_dicts_gap[inds]['pred_scores_all'].to('cuda:0')
+                # temp['pred_labels'] = (pred_dicts_gap[inds]['label_preds']).to('cuda:0')
+                # temp['iou'] = (pred_dicts_gap[inds]['iou']).to('cuda:0')
+                # temp['gt_assignment'] = (pred_dicts_gap[inds]['gt_assignment']).to('cuda:0')
+                # temp['selected'] = (pred_dicts_gap[inds]['selected']).to('cuda:0')
+                # temp['shared_features'] = (pred_dicts_gap[inds]['shared_features']).to('cuda:0')
+                # temp['rcnn_cls_interim'] = (pred_dicts_gap[inds]['rcnn_cls_interim']).to('cuda:0')
+                # temp['pooled_features'] = (pred_dicts_gap[inds]['pooled_features']).to('cuda:0')
+                # # temp['rcnn_reg_interim'] = (pred_dicts_gap[inds]['rcnn_reg_interim'])
+                # temp['gt_label'] = (pred_dicts_gap[inds]['gt_label']).to('cuda:0')
+                cur_gt_boxes = batch_dict['gt_boxes'][inds]
+                cur_shared_features_gt = batch_dict['shared_features_gt'][inds]
+                cur_cls_preds = batch_dict['batch_cls_preds'][inds]
+                k = cur_gt_boxes.__len__() - 1
+                while k >= 0 and cur_gt_boxes[k].sum() == 0:
+                    k -= 1
+                cur_gt_boxes = cur_gt_boxes[:k + 1]
+                temp['shared_features_gt'] = cur_shared_features_gt[:k + 1]
+                temp['rcnn_cls_preds'] = cur_cls_preds[:k + 1]
+                temp['encoded_spconv_tensor_dense'] = (batch_dict['encoded_spconv_tensor'].dense())[inds]
+                temp['spatial_features'] = batch_dict['spatial_features'][inds]
+                temp['pooled_features_gt'] = batch_dict['pooled_features_gt'][inds]
                 self.shared_pkl['ens'].append(temp)
-
-
-
-
+                temp['instance_idx'] = batch_dict['instance_idx'][inds]
 
             # self.shared_pkl['rcnn_cls_interim'].append(rcnn_interim)
             # self.shared_pkl['rcnn_reg_interim'].append(reg_interm)

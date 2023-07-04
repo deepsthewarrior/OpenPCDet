@@ -1,5 +1,5 @@
 import torch.nn as nn
-
+import torch
 from ...ops.pointnet2.pointnet2_stack import pointnet2_modules as pointnet2_stack_modules
 from ...utils import common_utils
 from .roi_head_template import RoIHeadTemplate
@@ -82,7 +82,7 @@ class PVRCNNHead(RoIHeadTemplate):
                     nn.init.constant_(m.bias, 0)
         nn.init.normal_(self.reg_layers[-1].weight, mean=0, std=0.001)
 
-    def roi_grid_pool(self, batch_dict):
+    def roi_grid_pool(self, batch_dict,pool_gtboxes=False):
         """
         Args:
             batch_dict:
@@ -97,10 +97,14 @@ class PVRCNNHead(RoIHeadTemplate):
         """
         batch_size = batch_dict['batch_size']
         rois = batch_dict['rois']
-        point_coords = batch_dict['point_coords'] #torch.Size([4096, 4])
-        point_features = batch_dict['point_features'] #4096,128(2,2048,128)
+        point_coords = batch_dict["point_coords"] #idx,x,y,z
+        point_features = batch_dict["point_features"] # each point is represented by a 128 dim vector 2048x128 for a scene
+        point_cls_scores = batch_dict["point_cls_scores"]
 
         point_features = point_features * batch_dict['point_cls_scores'].view(-1, 1)
+
+        if pool_gtboxes:
+            rois = batch_dict['gt_boxes'][...,0:7]
 
         global_roi_grid_points, local_roi_grid_points = self.get_global_grid_points_of_roi(
             rois, grid_size=self.model_cfg.ROI_GRID_POOL.GRID_SIZE
@@ -108,7 +112,7 @@ class PVRCNNHead(RoIHeadTemplate):
         global_roi_grid_points = global_roi_grid_points.view(batch_size, -1, 3)  # (B, Nx6x6x6, 3)
 
         xyz = point_coords[:, 1:4] # 1..4 is x,y,z
-        xyz_batch_cnt = xyz.new_zeros(batch_size).int() # 0 is batch size
+        xyz_batch_cnt = xyz.new_zeros(batch_size).int() # 0 is batch size #fill_(local_roi_grid_points.shape[1])
         batch_idx = point_coords[:, 0]
         for k in range(batch_size):
             xyz_batch_cnt[k] = (batch_idx == k).sum()
@@ -134,7 +138,7 @@ class PVRCNNHead(RoIHeadTemplate):
         rois = rois.view(-1, rois.shape[-1])
         batch_size_rcnn = rois.shape[0]
 
-        local_roi_grid_points = self.get_dense_grid_points(rois, batch_size_rcnn, grid_size)  # (B, 6x6x6, 3)
+        local_roi_grid_points = self.get_dense_grid_points(rois, batch_size_rcnn, grid_size)  # (B, 6x6x6, 3) #NOTE: uniform sampling of grid points, in a given 3d proposal
         global_roi_grid_points = common_utils.rotate_points_along_z(
             local_roi_grid_points.clone(), rois[:, 6]
         ).squeeze(dim=1)
@@ -142,13 +146,13 @@ class PVRCNNHead(RoIHeadTemplate):
         global_roi_grid_points += global_center.unsqueeze(dim=1)
         return global_roi_grid_points, local_roi_grid_points
 
-    @staticmethod
-    def get_dense_grid_points(rois, batch_size_rcnn, grid_size):
+    @staticmethod  
+    def get_dense_grid_points(rois, batch_size_rcnn, grid_size):   #NOTE: uniform sampling of grid points. Line 155: 
         faked_features = rois.new_ones((grid_size, grid_size, grid_size)) # template grid of 6*6*6
-        dense_idx = faked_features.nonzero()  # (N, 3) [x_idx, y_idx, z_idx]
+        dense_idx = faked_features.nonzero()  # (N, 3) [x_idx, y_idx, z_idx] 0,0,0, to 6,6,6
         dense_idx = dense_idx.repeat(batch_size_rcnn, 1, 1).float()  # (B, 6x6x6, 3)
 
-        local_roi_size = rois.view(batch_size_rcnn, -1)[:, 3:6] #take x,y,z from rois
+        local_roi_size = rois.view(batch_size_rcnn, -1)[:, 3:6] #take x,y,z from rois   
         roi_grid_points = (dense_idx + 0.5) / grid_size * local_roi_size.unsqueeze(dim=1) \
                           - (local_roi_size.unsqueeze(dim=1) / 2)  # (B, 6x6x6, 3)
         return roi_grid_points
@@ -170,17 +174,27 @@ class PVRCNNHead(RoIHeadTemplate):
             batch_dict['rois'] = targets_dict['rois']
             batch_dict['roi_labels'] = targets_dict['roi_labels']
 
+        with torch.no_grad():
+            pooled_features_gt = self.roi_grid_pool(batch_dict,pool_gtboxes=True)  # (BxNum_GT, 6x6x6, C)
+            grid_size = self.model_cfg.ROI_GRID_POOL.GRID_SIZE
+            batch_size_rcnn = pooled_features_gt.shape[0]
+            pooled_features_gt = pooled_features_gt.permute(0, 2, 1).\
+                contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxNum_GT, C, 6, 6, 6)
+            shared_features_gt = self.shared_fc_layer(pooled_features_gt.view(batch_size_rcnn, -1, 1))
+            
+                            
         # RoI aware pooling
         pooled_features = self.roi_grid_pool(batch_dict)  # (BxN, 6x6x6, C)
-
+            
         grid_size = self.model_cfg.ROI_GRID_POOL.GRID_SIZE
         batch_size_rcnn = pooled_features.shape[0]
         pooled_features = pooled_features.permute(0, 2, 1).\
             contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxN, C, 6, 6, 6)
 
         shared_features = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
-        rcnn_cls_interim = self.cls_layers[:-1](shared_features)
-        rcnn_cls = self.cls_layers[-1](rcnn_cls_interim).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
+        rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
+        # rcnn_cls_interim = self.cls_layers[:-1](shared_features)
+        # rcnn_cls = self.cls_layers[-1](rcnn_cls_interim).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
         rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)
         
         # x = pooled_features.view(batch_size_rcnn, -1, 1).clone().detach()
@@ -203,10 +217,11 @@ class PVRCNNHead(RoIHeadTemplate):
             batch_dict['batch_box_preds'] = batch_box_preds
             batch_dict['cls_preds_normalized'] = False
             batch_dict['shared_features'] = shared_features.view(batch_box_preds.shape[0],-1,shared_features.shape[1])
-            batch_dict['rcnn_cls_interim'] = rcnn_cls_interim.view(batch_box_preds.shape[0],-1,rcnn_cls_interim.shape[1])
+            batch_dict['shared_features_gt'] = shared_features_gt.view(batch_box_preds.shape[0],-1,shared_features_gt.shape[1])
+            batch_dict['pooled_features_gt'] = pooled_features_gt.view(batch_box_preds.shape[0],-1,128,6,6,6)
+            # batch_dict['rcnn_cls_interim'] = rcnn_cls_interim.view(batch_box_preds.shape[0],-1,rcnn_cls_interim.shape[1])
             batch_dict['pooled_features'] = pooled_features.view(batch_box_preds.shape[0],-1,128,6,6,6)
             # batch_dict['rcnn_reg_interim'] = rcnn_reg_interim.view(batch_box_preds.shape[0],-1,rcnn_reg_interim.shape[1])
-            
             # Temporarily add infos to targets_dict for metrics
             targets_dict['batch_box_preds'] = batch_box_preds
 
