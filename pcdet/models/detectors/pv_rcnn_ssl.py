@@ -243,6 +243,7 @@ class PVRCNN_SSL(Detector3DTemplate):
                 temp['rcnn_cls_preds'] = cur_cls_preds[:k + 1]
                 temp['encoded_spconv_tensor_dense'] = (batch_dict['encoded_spconv_tensor'].dense())[inds]
                 temp['spatial_features'] = batch_dict['spatial_features'][inds]
+                temp['spatial_features_2d'] = batch_dict['spatial_features_2d'][inds]
                 temp['pooled_features_gt'] = batch_dict['pooled_features_gt'][inds]
                 self.shared_pkl['ens'].append(temp)
                 temp['instance_idx'] = batch_dict['instance_idx'][inds]

@@ -19,7 +19,7 @@ FOV_POINTS_ONLY: True
 
 
 DATA_AUGMENTOR:
-    DISABLE_AUG_LIST: ['placeholder']
+    DISABLE_AUG_LIST: ['random_world_flip','gt_sampling','random_world_rotation','random_world_scaling']
     AUG_CONFIG_LIST:
         - NAME: gt_sampling
           USE_ROAD_PLANE: True
