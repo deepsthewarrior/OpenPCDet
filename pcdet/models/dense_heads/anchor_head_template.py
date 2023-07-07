@@ -291,7 +291,7 @@ class AnchorHeadTemplate(nn.Module):
                 -(batch_box_preds[..., 6] + np.pi / 2), offset=0.5, period=np.pi * 2
             )
 
-        return batch_cls_preds, batch_box_preds
+        return batch_cls_preds, batch_box_preds,anchors
 
     def forward(self, **kwargs):
         raise NotImplementedError
