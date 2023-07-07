@@ -368,7 +368,7 @@ class RoIHeadTemplate(nn.Module):
         gt_of_rois = targets_dict['gt_of_rois']  # (B, N, 7 + C + 1)
         targets_dict['gt_of_rois_src'] = gt_of_rois.clone().detach()
 
-        # canonical transformation
+        # canonical transformation #gts are in local coords wrt to roi centers
         roi_center = rois[:, :, 0:3]
         roi_ry = rois[:, :, 6] % (2 * np.pi)
         gt_of_rois[:, :, 0:3] = gt_of_rois[:, :, 0:3] - roi_center
@@ -452,9 +452,9 @@ class RoIHeadTemplate(nn.Module):
             rois_anchor = roi_boxes3d.clone().detach().view(-1, code_size)
             rois_anchor[:, 0:3] = 0
             rois_anchor[:, 6] = 0
-            reg_targets = self.box_coder.encode_torch(
-                gt_boxes3d_ct.view(rcnn_batch_size, code_size), rois_anchor
-            )
+            reg_targets = self.box_coder.encode_torch( # raw values to residuals. 
+                gt_boxes3d_ct.view(rcnn_batch_size, code_size), rois_anchor #local co-oridnates system, roi anchor
+            ) 
 
             rcnn_loss_reg = self.reg_loss_func(
                 rcnn_reg.view(rcnn_batch_size, -1).unsqueeze(dim=0),
@@ -485,11 +485,11 @@ class RoIHeadTemplate(nn.Module):
                 roi_ry = fg_roi_boxes3d[:, :, 6].view(-1)
                 roi_xyz = fg_roi_boxes3d[:, :, 0:3].view(-1, 3)
                 batch_anchors[:, :, 0:3] = 0
-                rcnn_boxes3d = self.box_coder.decode_torch(
+                rcnn_boxes3d = self.box_coder.decode_torch(  # roi's are encoded wrt 
                     fg_rcnn_reg.view(batch_anchors.shape[0], -1, code_size), batch_anchors
                 ).view(-1, code_size)
 
-                rcnn_boxes3d = common_utils.rotate_points_along_z(
+                rcnn_boxes3d = common_utils.rotate_points_along_z(  # local to global
                     rcnn_boxes3d.unsqueeze(dim=1), roi_ry
                 ).squeeze(dim=1)
                 rcnn_boxes3d[:, 0:3] += roi_xyz

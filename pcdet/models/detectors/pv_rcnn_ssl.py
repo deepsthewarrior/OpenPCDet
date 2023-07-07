@@ -202,7 +202,7 @@ class PVRCNN_SSL(Detector3DTemplate):
             with torch.no_grad():
                 for cur_module in self.pv_rcnn_ema.module_list:
                     try:
-                        batch_dict= cur_module(batch_dict, disable_gt_roi_when_pseudo_labeling=True)
+                        batch_dict= cur_module(batch_dict, disable_gt_roi_when_pseudo_labeling=False)
                     except:
                         batch_dict = cur_module(batch_dict)
                         # if cur_module.model_cfg['NAME']=='VoxelBackBone8x':
@@ -240,13 +240,15 @@ class PVRCNN_SSL(Detector3DTemplate):
                     k -= 1
                 cur_gt_boxes = cur_gt_boxes[:k + 1]
                 temp['shared_features_gt'] = cur_shared_features_gt[:k + 1]
-                temp['rcnn_cls_preds'] = cur_cls_preds[:k + 1]
-                temp['encoded_spconv_tensor_dense'] = (batch_dict['encoded_spconv_tensor'].dense())[inds]
+                # temp['rcnn_cls_preds'] = cur_cls_preds[:k + 1]
+                # temp['encoded_spconv_tensor_dense'] = (batch_dict['encoded_spconv_tensor'].dense())[inds]
                 temp['spatial_features'] = batch_dict['spatial_features'][inds]
                 temp['spatial_features_2d'] = batch_dict['spatial_features_2d'][inds]
                 temp['pooled_features_gt'] = batch_dict['pooled_features_gt'][inds]
                 self.shared_pkl['ens'].append(temp)
                 temp['instance_idx'] = batch_dict['instance_idx'][inds]
+                temp['gt_classes'] = (batch_dict['gt_boxes'][inds])[..., -1].int()
+                temp['gt_boxes_bev'] = (batch_dict['gt_boxes_bev'][inds])
 
             # self.shared_pkl['rcnn_cls_interim'].append(rcnn_interim)
             # self.shared_pkl['rcnn_reg_interim'].append(reg_interm)

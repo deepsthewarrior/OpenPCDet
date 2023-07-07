@@ -1,7 +1,8 @@
 import numpy as np
 import torch.nn as nn
-
+import torch
 from .anchor_head_template import AnchorHeadTemplate
+from  pcdet.utils.box_utils import boxes3d_lidar_to_aligned_bev_boxes
 
 
 class AnchorHeadSingle(AnchorHeadTemplate):
@@ -15,11 +16,11 @@ class AnchorHeadSingle(AnchorHeadTemplate):
         self.num_anchors_per_location = sum(self.num_anchors_per_location)
 
         self.conv_cls = nn.Conv2d(
-            input_channels, self.num_anchors_per_location * self.num_class,
+            input_channels, self.num_anchors_per_location * self.num_class, #6*3 = 18
             kernel_size=1
         )
         self.conv_box = nn.Conv2d(
-            input_channels, self.num_anchors_per_location * self.box_coder.code_size,
+            input_channels, self.num_anchors_per_location * self.box_coder.code_size, #6*7 = 42
             kernel_size=1
         )
 
@@ -41,7 +42,7 @@ class AnchorHeadSingle(AnchorHeadTemplate):
         nn.init.normal_(self.conv_box.weight, mean=0, std=0.001)
 
     def forward(self, data_dict, disable_gt_roi_when_pseudo_labeling=False):
-        spatial_features_2d = data_dict['spatial_features_2d']
+        spatial_features_2d = data_dict['spatial_features_2d'] #200,176,C
 
         cls_preds = self.conv_cls(spatial_features_2d)
         box_preds = self.conv_box(spatial_features_2d)
@@ -51,20 +52,30 @@ class AnchorHeadSingle(AnchorHeadTemplate):
 
         self.forward_ret_dict['cls_preds'] = cls_preds
         self.forward_ret_dict['box_preds'] = box_preds
-
+        
         if self.conv_dir_cls is not None:
             dir_cls_preds = self.conv_dir_cls(spatial_features_2d)
             dir_cls_preds = dir_cls_preds.permute(0, 2, 3, 1).contiguous()
             self.forward_ret_dict['dir_cls_preds'] = dir_cls_preds
         else:
             dir_cls_preds = None
-
+        
         if (self.training or self.print_loss_when_eval) and not disable_gt_roi_when_pseudo_labeling:
             targets_dict = self.assign_targets(
                 gt_boxes=data_dict['gt_boxes']
             )
             self.forward_ret_dict.update(targets_dict)
+        
+        if self.training:
+            bev_boxes = []
+            for k in range(data_dict['batch_size']):
+                cur_gt = data_dict['gt_boxes'][k]
+                cur_gt_classes = cur_gt[:, -1].int()
+                if cur_gt.__len__() != 0:
+                    bev_boxes.append(boxes3d_lidar_to_aligned_bev_boxes(cur_gt[:,0:7]))
+            data_dict['gt_boxes_bev']=torch.stack(bev_boxes, dim=0)
 
+                
         if not self.training or self.predict_boxes_when_training:
             batch_cls_preds, batch_box_preds = self.generate_predicted_boxes(
                 batch_size=data_dict['batch_size'],

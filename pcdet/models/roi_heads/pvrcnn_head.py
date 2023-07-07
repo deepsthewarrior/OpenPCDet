@@ -3,7 +3,7 @@ import torch
 from ...ops.pointnet2.pointnet2_stack import pointnet2_modules as pointnet2_stack_modules
 from ...utils import common_utils
 from .roi_head_template import RoIHeadTemplate
-
+from ...ops.roiaware_pool3d import roiaware_pool3d_utils
 
 class PVRCNNHead(RoIHeadTemplate):
     def __init__(self, input_channels, model_cfg, num_class=1,
@@ -101,7 +101,7 @@ class PVRCNNHead(RoIHeadTemplate):
         point_features = batch_dict["point_features"] # each point is represented by a 128 dim vector 2048x128 for a scene
         point_cls_scores = batch_dict["point_cls_scores"]
 
-        point_features = point_features * batch_dict['point_cls_scores'].view(-1, 1)
+        point_features = point_features * batch_dict['point_cls_scores'].view(-1, 1) # visualize the points?
 
         if pool_gtboxes:
             rois = batch_dict['gt_boxes'][...,0:7]
@@ -139,8 +139,8 @@ class PVRCNNHead(RoIHeadTemplate):
         batch_size_rcnn = rois.shape[0]
 
         local_roi_grid_points = self.get_dense_grid_points(rois, batch_size_rcnn, grid_size)  # (B, 6x6x6, 3) #NOTE: uniform sampling of grid points, in a given 3d proposal
-        global_roi_grid_points = common_utils.rotate_points_along_z(
-            local_roi_grid_points.clone(), rois[:, 6]
+        global_roi_grid_points = common_utils.rotate_points_along_z(  # part of rotation augmentation
+            local_roi_grid_points.clone(), rois[:, 6]  
         ).squeeze(dim=1)
         global_center = rois[:, 0:3].clone()
         global_roi_grid_points += global_center.unsqueeze(dim=1)
@@ -187,7 +187,7 @@ class PVRCNNHead(RoIHeadTemplate):
         pooled_features = self.roi_grid_pool(batch_dict)  # (BxN, 6x6x6, C)
             
         grid_size = self.model_cfg.ROI_GRID_POOL.GRID_SIZE
-        batch_size_rcnn = pooled_features.shape[0]
+        batch_size_rcnn = pooled_features.shape[0] 
         pooled_features = pooled_features.permute(0, 2, 1).\
             contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxN, C, 6, 6, 6)
 
