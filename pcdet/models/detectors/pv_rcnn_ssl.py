@@ -242,12 +242,12 @@ class PVRCNN_SSL(Detector3DTemplate):
                 # temp['shared_features_gt'] = cur_shared_features_gt[:k + 1]
                 # temp['rcnn_cls_preds'] = cur_cls_preds[:k + 1]
                 # temp['encoded_spconv_tensor_dense'] = (batch_dict['encoded_spconv_tensor'].dense())[inds]
-                temp['spatial_features'] = (batch_dict['spatial_features'][inds]).clone().detach().cpu().numpy()
-                temp['spatial_features_2d'] = (batch_dict['spatial_features_2d'][inds]).clone().detach().cpu().numpy()
-                # temp['pooled_features_gt'] = batch_dict['pooled_features_gt'][inds]
-                temp['instance_idx'] = (batch_dict['instance_idx'][inds]).clone().detach().cpu().numpy()
-                temp['gt_classes'] = ((batch_dict['gt_boxes'][inds])[..., -1].int()).clone().detach().cpu().numpy()
-                temp['gt_boxes_bev'] = (batch_dict['gt_boxes_bev'][inds]).clone().detach().cpu().numpy()
+                temp['spatial_features'] = (batch_dict['spatial_features'][inds])[:k + 1].clone().detach().cpu().numpy()
+                temp['spatial_features_2d'] = (batch_dict['spatial_features_2d'][inds])[:k + 1].clone().detach().cpu().numpy()
+                temp['pooled_features_gt'] = (batch_dict['pooled_features_gt'][inds])[:k + 1].clone().detach().cpu().numpy()
+                temp['instance_idx'] = (batch_dict['instance_idx'][inds])[:k + 1].clone().detach().cpu().numpy()
+                temp['gt_classes'] = ((batch_dict['gt_boxes'][inds])[..., -1].int())[:k + 1].clone().detach().cpu().numpy()
+                temp['gt_boxes_bev'] = (batch_dict['gt_boxes_bev'][inds])[:k + 1].clone().detach().cpu().numpy()
                 temp['gt_boxes'] = cur_gt_boxes.clone().detach().cpu().numpy()
                 # temp['anchors'] = (batch_dict['anchors'][inds]).clone().detach().cpu().numpy()
                 self.shared_pkl['ens'].append(temp)
