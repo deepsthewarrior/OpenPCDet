@@ -132,7 +132,7 @@ class PVRCNNHead(RoIHeadTemplate):
             -1, self.model_cfg.ROI_GRID_POOL.GRID_SIZE ** 3,
             pooled_features.shape[-1]
         )  # (BxN, 6x6x6, C)
-        return pooled_features
+        return pooled_features,pooled_points
 
     def get_global_grid_points_of_roi(self, rois, grid_size):
         rois = rois.view(-1, rois.shape[-1])
@@ -175,16 +175,16 @@ class PVRCNNHead(RoIHeadTemplate):
             batch_dict['roi_labels'] = targets_dict['roi_labels']
 
         with torch.no_grad():
-            pooled_features_gt = self.roi_grid_pool(batch_dict,pool_gtboxes=True)  # (BxNum_GT, 6x6x6, C)
+            pooled_features_gt,pooled_points_gt  = self.roi_grid_pool(batch_dict,pool_gtboxes=True)  # (BxNum_GT, 6x6x6, C)
             grid_size = self.model_cfg.ROI_GRID_POOL.GRID_SIZE
             batch_size_rcnn = pooled_features_gt.shape[0]
-            pooled_features_gt = pooled_features_gt.permute(0, 2, 1).\
+            pooled_features_gt= pooled_features_gt.permute(0, 2, 1).\
                 contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxNum_GT, C, 6, 6, 6)
             shared_features_gt = self.shared_fc_layer(pooled_features_gt.view(batch_size_rcnn, -1, 1))
             
                             
         # RoI aware pooling
-        pooled_features = self.roi_grid_pool(batch_dict)  # (BxN, 6x6x6, C)
+        pooled_features,pooled_points = self.roi_grid_pool(batch_dict)  # (BxN, 6x6x6, C)
             
         grid_size = self.model_cfg.ROI_GRID_POOL.GRID_SIZE
         batch_size_rcnn = pooled_features.shape[0] 
@@ -219,6 +219,7 @@ class PVRCNNHead(RoIHeadTemplate):
             batch_dict['shared_features'] = shared_features.view(batch_box_preds.shape[0],-1,shared_features.shape[1])
             batch_dict['shared_features_gt'] = shared_features_gt.view(batch_box_preds.shape[0],-1,shared_features_gt.shape[1])
             batch_dict['pooled_features_gt'] = pooled_features_gt.view(batch_box_preds.shape[0],-1,128,6,6,6)
+            batch_dict['pooled_points_gt'] = pooled_points_gt.view(batch_box_preds.shape[0],-1,3,6,6,6)
             # batch_dict['rcnn_cls_interim'] = rcnn_cls_interim.view(batch_box_preds.shape[0],-1,rcnn_cls_interim.shape[1])
             batch_dict['pooled_features'] = pooled_features.view(batch_box_preds.shape[0],-1,128,6,6,6)
             # batch_dict['rcnn_reg_interim'] = rcnn_reg_interim.view(batch_box_preds.shape[0],-1,rcnn_reg_interim.shape[1])
