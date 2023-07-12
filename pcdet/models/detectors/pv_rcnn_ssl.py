@@ -169,13 +169,14 @@ class PVRCNN_SSL(Detector3DTemplate):
         self.supervise_mode = model_cfg.SUPERVISE_MODE
         cls_bg_thresh = model_cfg.ROI_HEAD.TARGET_CONFIG.CLS_BG_THRESH
         self.metric_registry = MetricRegistry(dataset=self.dataset, model_cfg=model_cfg)
-        self.labeled_template = DynamicPrototype(dataset=self.dataset, model_cfg=model_cfg).get(tag=f'labeled_prototype',file='only_sh_cls_100.pkl') 
+        self.labeled_template = DynamicPrototype(dataset=self.dataset, model_cfg=model_cfg).get(tag=f'labeled_prototype',file=model_cfg.ROI_HEAD.BASE_PROTOTYPE) 
         self.labeled_prototype = self.labeled_template.rcnn_sh_mean #base prototype
-        self.unlabeled_template = DynamicPrototype(dataset=self.dataset, model_cfg=model_cfg).get(tag=f'unlabeled_prototype',file='only_sh_cls_100.pkl')
+        self.unlabeled_template = DynamicPrototype(dataset=self.dataset, model_cfg=model_cfg).get(tag=f'unlabeled_prototype',file=model_cfg.ROI_HEAD.BASE_PROTOTYPE)
         self.unlabeled_prototype = self.unlabeled_template.rcnn_sh_mean #base prototype same as labeled #TODO: ignore base prototype for ulb if needed
         vals_to_store = ['iou_roi_pl', 'iou_roi_gt', 'pred_scores', 'teacher_pred_scores', 
                         'weights', 'roi_scores', 'pcv_scores', 'num_points_in_roi', 'class_labels',
-                        'iteration']
+                        'iteration','cos_scores_pool_raw','cos_scores_sh_raw','cos_scores_pool_norm',
+                        'cos_scores_sh_norm']
         self.val_dict = {val: [] for val in vals_to_store}
         self.classes = ['Car','Ped','Cyc']
         self.features_to_update_lb = []
@@ -500,6 +501,18 @@ class PVRCNN_SSL(Detector3DTemplate):
 
                         cur_iteration = torch.ones_like(preds_iou_max) * (batch_dict['cur_iteration'])
                         self.val_dict['iteration'].extend(cur_iteration.tolist())
+
+                        cur_cos_scores_pool = self.pv_rcnn.roi_head.forward_ret_dict['cos_scores_pool_raw'][cur_unlabeled_ind]
+                        self.val_dict['cos_scores_pool_raw'].extend(cur_cos_scores_pool.tolist())
+
+                        cur_cos_scores_sh = self.pv_rcnn.roi_head.forward_ret_dict['cos_scores_sh_raw'][cur_unlabeled_ind]
+                        self.val_dict['cos_scores_sh_raw'].extend(cur_cos_scores_sh.tolist())
+
+                        cur_cos_scores_pool_norm = self.pv_rcnn.roi_head.forward_ret_dict['cos_scores_pool_norm'][cur_unlabeled_ind]
+                        self.val_dict['cos_scores_pool_norm'].extend(cur_cos_scores_pool_norm.tolist())
+
+                        cur_cos_scores_sh_norm = self.pv_rcnn.roi_head.forward_ret_dict['cos_scores_sh_norm'][cur_unlabeled_ind]
+                        self.val_dict['cos_scores_sh_norm'].extend(cur_cos_scores_sh_norm.tolist())
 
                 # replace old pickle data (if exists) with updated one 
                 output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]

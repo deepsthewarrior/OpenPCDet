@@ -170,6 +170,7 @@ MODEL:
         CLS_FC: [256, 256]
         REG_FC: [256, 256]
         DP_RATIO: 0.3
+        BASE_PROTOTYPE: 'prototypes_pooled_shared_0.01.pkl'
 
         NMS_CONFIG:
             TRAIN:
@@ -270,6 +271,8 @@ MODEL:
     EMA_UPDATE_INTERVAL: 1 
     REDUCE_LOSS: 'mean'
     STORE_SCORES_IN_PKL: False
+
+        
 
 
 OPTIMIZATION:

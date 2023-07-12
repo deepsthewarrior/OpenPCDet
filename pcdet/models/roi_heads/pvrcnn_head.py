@@ -44,14 +44,15 @@ class PVRCNNHead(RoIHeadTemplate):
         self.init_weights(weight_init='xavier')
 
         self.print_loss_when_eval = False
-        pkl_file = 'prototypes_pooled_feat.pkl'
+        self.pooled_prototype_lb_ = []
+        pkl_file = self.model_cfg.BASE_PROTOTYPE
         with open(pkl_file, 'rb') as file:
         # Load the data from the .pkl file
-            self.pooled_prototype_lb = pickle.load(file)
-        self.pooled_prototype_lb['car'] = (self.pooled_prototype_lb['car'].cuda()).contiguous().view(-1)
-        self.pooled_prototype_lb['ped'] = (self.pooled_prototype_lb['ped'].cuda()).contiguous().view(-1)
-        self.pooled_prototype_lb['cyc'] = (self.pooled_prototype_lb['cyc'].cuda()).contiguous().view(-1)
-
+            data = pickle.load(file) # 0->Car, 1->Ped, 2->Cyc
+        self.pooled_prototype_lb_.append((data['Car']['mean']['pool'].cuda()).contiguous().view(-1)) # (128,6,6,6) to (27648)
+        self.pooled_prototype_lb_.append((data['Ped']['mean']['pool'].cuda()).contiguous().view(-1))
+        self.pooled_prototype_lb_.append((data['Cyc']['mean']['pool'].cuda()).contiguous().view(-1))
+        self.pooled_prototype_lb = torch.stack(self.pooled_prototype_lb_,dim=0).cuda() # [3, 27648] == [num_protos, C]
     def init_weights(self, weight_init='xavier'):
         if weight_init == 'kaiming':
             init_func = nn.init.kaiming_normal_
@@ -189,7 +190,6 @@ class PVRCNNHead(RoIHeadTemplate):
         pooled_features = pooled_features.permute(0, 2, 1).\
             contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxN, C, 6, 6, 6)
 
-        
 
         shared_features = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
         rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
@@ -201,38 +201,36 @@ class PVRCNNHead(RoIHeadTemplate):
             labels = (targets_dict['roi_labels'].clone().view(-1)) - 1 
             prototype = batch_dict['labeled_prototype'].to(labels.device) 
             cosine_scores = torch.zeros_like(batch_dict['roi_scores'].view(-1))
-            cosine_scores_car = torch.zeros_like(batch_dict['roi_scores'].view(-1))
-            cosine_scores_ped = torch.zeros_like(batch_dict['roi_scores'].view(-1))
-            cosine_scores_cyc = torch.zeros_like(batch_dict['roi_scores'].view(-1))
 
-            for i,sh in enumerate(shared_features_clone):  # using batch_dict['shared_features'] as its cloned and detached already #NOTE: protype based classifier is to be from non-detached shared features in future
-                cos_score = F.normalize(sh) @ F.normalize(prototype[labels[i]]).t() # cosine similarity between shared features and prototype labelwise. this is used for weighting purposes
-                cosine_scores[i] = cos_score
-                #cosine similarity between shared features and shared prototype classwise for analysis(shared features are ema ed)
-                cosine_scores_car[i] = F.normalize(sh) @ F.normalize(prototype[0]).t()
-                cosine_scores_ped[i] = F.normalize(sh) @ F.normalize(prototype[1]).t()
-                cosine_scores_cyc[i] = F.normalize(sh) @ F.normalize(prototype[2]).t()
-            targets_dict['cos_scores_car_sh'] = cosine_scores_car.view(batch_dict['roi_scores'].shape[0],-1)
-            targets_dict['cos_scores_ped_sh'] = cosine_scores_ped.view(batch_dict['roi_scores'].shape[0],-1)
-            targets_dict['cos_scores_cyc_sh'] = cosine_scores_cyc.view(batch_dict['roi_scores'].shape[0],-1)
-    
-            targets_dict['cos_scores'] = cosine_scores.view(batch_dict['roi_scores'].shape[0],-1)
-            batch_dict['shared_features'] = shared_features_clone.view(batch_dict['roi_scores'].shape[0],-1,shared_features_clone.shape[-2],shared_features_clone.shape[-1]) # reshaping to batch_wise features
+            # Cosine similarity between shared features and prototype
+            sh_protos = batch_dict['labeled_prototype'].to(labels.device).squeeze()  # [3, 256] == [num_protos, C]
+            sh_proposals = shared_features_clone.squeeze()  # [256, 256] == [num_proposals, C]
+            sh_cos_sim = F.normalize(sh_proposals) @ F.normalize(sh_protos).t()
+            for i,sh in enumerate(shared_features_clone):  #  cloned and detached already #NOTE: protype based classifier is to be from non-detached shared features in future
+                cosine_scores[i] = F.normalize(sh) @ F.normalize(prototype[labels[i]]).t() #  this is used for weighting (to be refactored in future)
             
-            pooled_features_clone = pooled_features.view(batch_size_rcnn,pooled_features.shape[1],-1).clone().detach() # taking mean of pooled features and transposing for cosine similarity
-            # pooled_features_clone = pooled_features_clone.view(batch_size_rcnn,pooled_features.shape[1],-1) #(B, C, 1)
-            cosine_scores_car_pool = torch.zeros_like(batch_dict['roi_scores'].view(-1))
-            cosine_scores_ped_pool = torch.zeros_like(batch_dict['roi_scores'].view(-1))
-            cosine_scores_cyc_pool = torch.zeros_like(batch_dict['roi_scores'].view(-1))
+            targets_dict['cos_scores_car_sh'] = sh_cos_sim[:,0].view(batch_dict['roi_scores'].shape[0],-1)
+            targets_dict['cos_scores_ped_sh'] = sh_cos_sim[:,1].view(batch_dict['roi_scores'].shape[0],-1)
+            targets_dict['cos_scores_cyc_sh'] = sh_cos_sim[:,2].view(batch_dict['roi_scores'].shape[0],-1)
 
-            for i,sh in enumerate(pooled_features_clone):  # using batch_dict['shared_features'] as its cloned and detached already #NOTE: protype based classifier is to be from non-detached shared features in future
-                sh=(sh.contiguous().view(-1)).unsqueeze(0) # (1,(216*128))
-                cosine_scores_car_pool[i] = F.normalize(sh) @ F.normalize(self.pooled_prototype_lb['car'].unsqueeze(0)).t() # unsqueeze(0) to make it (1,(216*128)==> (1,N) F.cosine_similarity needs (N,1) or (N,N)(did not change the dimensions when replacing the cosine with matmul for consistency with previous commits)
-                cosine_scores_ped_pool[i] = F.normalize(sh) @ F.normalize(self.pooled_prototype_lb['ped'].unsqueeze(0)).t()
-                cosine_scores_cyc_pool[i] = F.normalize(sh) @ F.normalize(self.pooled_prototype_lb['cyc'].unsqueeze(0)).t()
-            targets_dict['cos_scores_car_pool'] = cosine_scores_car_pool.view(batch_dict['roi_scores'].shape[0],-1)
-            targets_dict['cos_scores_ped_pool'] = cosine_scores_ped_pool.view(batch_dict['roi_scores'].shape[0],-1)
-            targets_dict['cos_scores_cyc_pool'] = cosine_scores_cyc_pool.view(batch_dict['roi_scores'].shape[0],-1)
+            targets_dict['cos_scores'] = cosine_scores.view(batch_dict['roi_scores'].shape[0],-1)
+            batch_dict['shared_features'] = shared_features_clone.view(batch_dict['roi_scores'].shape[0],-1,shared_features_clone.shape[-2],shared_features_clone.shape[-1]) # reshaping to batch_wise features, for ema update
+
+            # Cosine similarity between pooled features and prototype
+            pooled_features_clone = pooled_features.view(batch_size_rcnn,-1).clone().detach() #(N,128,6,6,6) => (N,27648)
+            pool_protos = self.pooled_prototype_lb.to(labels.device).squeeze()
+            pool_proposals = pooled_features_clone.squeeze()
+            pool_cos_sim = F.normalize(pool_proposals) @ F.normalize(pool_protos).t()
+
+            targets_dict['cos_scores_car_pool'] = pool_cos_sim[:,0].view(batch_dict['roi_scores'].shape[0],-1)
+            targets_dict['cos_scores_ped_pool'] = pool_cos_sim[:,1].view(batch_dict['roi_scores'].shape[0],-1)
+            targets_dict['cos_scores_cyc_pool'] = pool_cos_sim[:,2].view(batch_dict['roi_scores'].shape[0],-1)
+
+            targets_dict['cos_scores_pool_raw'] = pool_cos_sim.view(batch_dict['roi_scores'].shape[0],batch_dict['roi_scores'].shape[1],-1) # (N,128,3)
+            targets_dict['cos_scores_sh_raw'] = sh_cos_sim.view(batch_dict['roi_scores'].shape[0],batch_dict['roi_scores'].shape[1],-1) # (N,128,3)
+            targets_dict['cos_scores_pool_norm'] = F.softmax(targets_dict['cos_scores_pool_raw'],dim=-1) # (N,128,3)
+            targets_dict['cos_scores_sh_norm'] = F.softmax(targets_dict['cos_scores_sh_raw'],dim=-1) # (N,128,3)
+
         if not self.training or self.predict_boxes_when_training:
             batch_cls_preds, batch_box_preds = self.generate_predicted_boxes(
                 batch_size=batch_dict['batch_size'], rois=batch_dict['rois'], cls_preds=rcnn_cls, box_preds=rcnn_reg
