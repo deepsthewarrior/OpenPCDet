@@ -51,7 +51,9 @@ class PredQualityMetrics(Metric):
                              "cos_scores_cyc_pool_tp","cos_scores_cyc_pool_fp","cos_scores_car_sh_bg","cos_scores_car_sh_uc","cos_scores_car_sh_fg",
                              "cos_scores_car_sh_fn","cos_scores_car_sh_tp","cos_scores_car_sh_fp","cos_scores_ped_sh_bg","cos_scores_ped_sh_uc","cos_scores_ped_sh_fg",
                              "cos_scores_ped_sh_fn","cos_scores_ped_sh_tp","cos_scores_ped_sh_fp","cos_scores_cyc_sh_bg","cos_scores_cyc_sh_uc","cos_scores_cyc_sh_fg",
-                             "cos_scores_cyc_sh_fn","cos_scores_cyc_sh_tp","cos_scores_cyc_sh_fp"]
+                             "cos_scores_cyc_sh_fn","cos_scores_cyc_sh_tp","cos_scores_cyc_sh_fp","cos_sem_pool_bg","cos_sem_pool_fg","cos_sem_pool_uc",
+                             "cos_sem_scores_pool_fn","cos_sem_scores_pool_tp","cos_sem_scores_pool_fp","pred_fn_rate_cos","pred_tp_rate_cos","pred_ious_wrt_pl_fn_cos",
+                             "pred_fp_ratio_cos","pred_ious_wrt_pl_fg_cos","pred_ious_wrt_pl_fn_cos","pred_ious_wrt_pl_fp_cos","pred_ious_wrt_pl_tp_cos"]
                              
         self.min_overlaps = np.array([0.7, 0.5, 0.5, 0.7, 0.5, 0.7])
         self.class_agnostic_fg_thresh = 0.7
@@ -62,7 +64,7 @@ class PredQualityMetrics(Metric):
                rois=None, roi_scores=None, targets=None, target_scores=None, pred_weights=None,
                pseudo_labels=None, pseudo_label_scores=None, pred_iou_wrt_pl=None, cos_scores=None,
                cos_scores_car_pool=None,cos_scores_ped_pool=None,cos_scores_cyc_pool=None,cos_scores_car_sh=None,
-               cos_scores_ped_sh=None,cos_scores_cyc_sh=None) -> None:
+               cos_scores_ped_sh=None,cos_scores_cyc_sh=None,cos_scores_softmax=None,cos_scores_raw=None) -> None:
         assert isinstance(preds, list) and isinstance(ground_truths, list) and isinstance(pred_scores, list)
         assert all([pred.dim() == 2 for pred in preds]) and all([pred.dim() == 2 for pred in ground_truths]) and all([pred.dim() == 1 for pred in pred_scores])
         assert all([pred.shape[-1] == 8 for pred in preds]) and all([gt.shape[-1] == 8 for gt in ground_truths])
@@ -96,7 +98,13 @@ class PredQualityMetrics(Metric):
             valid_cos_car_sh = cos_scores_car_sh[i][valid_preds_mask.nonzero().view(-1)] if cos_scores_car_sh else None 
             valid_cos_ped_sh = cos_scores_ped_sh[i][valid_preds_mask.nonzero().view(-1)] if cos_scores_ped_sh else None
             valid_cos_cyc_sh = cos_scores_cyc_sh[i][valid_preds_mask.nonzero().view(-1)] if cos_scores_cyc_sh else None
+            valid_cos_softmax = cos_scores_softmax[i][valid_preds_mask.nonzero().view(-1)] if cos_scores_softmax else None
+            valid_cos_scores_raw = cos_scores_raw[i][valid_preds_mask.nonzero().view(-1)] if cos_scores_raw else None
 
+            if valid_cos_softmax is not None:
+                cos_sem_labels = torch.argmax(valid_cos_softmax,dim=-1) 
+                cos_sem_scores_raw = torch.gather(valid_cos_scores_raw, dim=-1, index=(cos_sem_labels).unsqueeze(-1)).squeeze(-1)
+            
             valid_gts_mask = torch.logical_not(torch.all(ground_truths[i] == 0, dim=-1))
             valid_gt_boxes = ground_truths[i][valid_gts_mask]
             if pseudo_labels is not None:
@@ -116,6 +124,7 @@ class PredQualityMetrics(Metric):
             num_gts = valid_gts_mask.sum()
             num_preds = valid_preds_mask.sum()
 
+
             classwise_metrics = {}
             for metric_name in self.metrics_name:
                 classwise_metrics[metric_name] = sample_tensor.new_zeros(num_classes + 1).fill_(float('nan'))
@@ -129,7 +138,6 @@ class PredQualityMetrics(Metric):
                 if num_gts > 0 and num_preds > 0:
                     overlap = iou3d_nms_utils.boxes_iou3d_gpu(valid_pred_boxes[:, 0:7], valid_gt_boxes[:, 0:7])
                     preds_iou_max, assigned_gt_inds = overlap.max(dim=1)
-
                     assigned_gt_cls_mask = valid_gt_boxes[assigned_gt_inds, -1] == cind
 
                     cc_mask = (pred_cls_mask & assigned_gt_cls_mask)  # correctly classified mask
@@ -157,6 +165,54 @@ class PredQualityMetrics(Metric):
                     classwise_metrics['pred_ious_bgs'][cind] = (preds_iou_max * cls_bg_mask.float()).sum() / cls_bg_mask.sum()
                     cls_score_bg = (valid_pred_scores * cls_bg_mask.float()).sum() / torch.clamp(bg_mask.float().sum(), min=1.0)
                     classwise_metrics['score_bgs'][cind] = cls_score_bg
+
+                    if valid_cos_softmax is not None:
+                        cos_sem_cls_mask = cos_sem_labels == cind
+                        ccs_mask = cos_sem_cls_mask & assigned_gt_cls_mask # correctly classified cosine semantic mask
+                        mcs_mask = (cos_sem_cls_mask & (~assigned_gt_cls_mask)) | ((~cos_sem_cls_mask) & assigned_gt_cls_mask) 
+                        ccs_fg_mask = fg_mask & ccs_mask
+                        ccs_uc_mask = uc_mask & ccs_mask
+                        cls_sem_bg_mask = cos_sem_cls_mask  & bg_mask
+
+                    if cos_scores_raw is not None: # if we try to use cosine semantic scores based on pooled proto, what are the cos_scores for FG, BG, UC (class-wise)?
+                        cos_scores_pool_bg = (cos_sem_scores_raw * cls_sem_bg_mask.float()).sum() / cls_sem_bg_mask.float().sum()
+                        classwise_metrics['cos_sem_pool_bg'][cind] = cos_scores_pool_bg
+                        cos_scores_pool_uc = (cos_sem_scores_raw * ccs_uc_mask.float()).sum() / ccs_uc_mask.float().sum()
+                        classwise_metrics['cos_sem_pool_uc'][cind] = cos_scores_pool_uc
+                        cos_scores_pool_fg = (cos_sem_scores_raw * ccs_fg_mask.float()).sum() / ccs_fg_mask.sum()
+                        classwise_metrics['cos_sem_pool_fg'][cind] = cos_scores_pool_fg
+                         
+                        # calculate FN, TP, FP based on cos_semantic scores replacing RPN scores
+                        fg_threshs = self.config.ROI_HEAD.TARGET_CONFIG.UNLABELED_CLS_FG_THRESH
+                        bg_thresh = self.config.ROI_HEAD.TARGET_CONFIG.UNLABELED_CLS_BG_THRESH
+                        classwise_fg_thresh = fg_threshs[cind]
+                        fg_mask_wrt_pl = valid_pred_iou_wrt_pl >= classwise_fg_thresh
+                        bg_mask_wrt_pl = valid_pred_iou_wrt_pl <= bg_thresh
+                        uc_mask_wrt_pl = ~(bg_mask_wrt_pl | fg_mask_wrt_pl)  # uncertain mask
+
+                        cls_fg_mask_wrt_pl = pred_cls_mask & fg_mask_wrt_pl
+                        cls_uc_mask_wrt_pl = pred_cls_mask & uc_mask_wrt_pl
+                        cls_bg_mask_wrt_pl = pred_cls_mask & bg_mask_wrt_pl
+                        # ------ Foreground Mis-classification Metrics ------                     
+                        fn_mask = (cls_bg_mask_wrt_pl | cls_uc_mask_wrt_pl) & ccs_fg_mask
+                        tp_mask = cls_fg_mask_wrt_pl & ccs_fg_mask
+                        fp_mask = cls_fg_mask_wrt_pl & (cls_sem_bg_mask | ccs_uc_mask)
+                        classwise_metrics['pred_fn_rate_cos'][cind] = fn_mask.sum() / ccs_fg_mask.sum() # to check if using cos_sem scores affects FN rate
+                        classwise_metrics['pred_tp_rate_cos'][cind] = tp_mask.sum() / ccs_fg_mask.sum()
+                        classwise_metrics['pred_fp_ratio_cos'][cind] = fp_mask.sum() / cls_fg_mask_wrt_pl.sum()
+                        classwise_metrics['pred_ious_wrt_pl_fg_cos'][cind] = (valid_pred_iou_wrt_pl * ccs_fg_mask.float()).sum() / ccs_fg_mask.sum()
+                        classwise_metrics['pred_ious_wrt_pl_fn_cos'][cind] = (valid_pred_iou_wrt_pl * fn_mask.float()).sum() / fn_mask.sum()
+                        classwise_metrics['pred_ious_wrt_pl_fp_cos'][cind] = (valid_pred_iou_wrt_pl * fp_mask.float()).sum() / fp_mask.sum()
+                        classwise_metrics['pred_ious_wrt_pl_tp_cos'][cind] = (valid_pred_iou_wrt_pl * tp_mask.float()).sum() / tp_mask.sum()
+                        
+                        # What are the cosine scores for FN, TP, FP (when cos sem is applied)? 
+                        if cos_scores_raw is not None:
+                            cos_pool_fg_mc = (cos_sem_scores_raw * fn_mask.float()).sum() / fn_mask.sum() 
+                            classwise_metrics['cos_sem_scores_pool_fn'][cind] = cos_pool_fg_mc
+                            cos_pool_cc_tp = (cos_sem_scores_raw * tp_mask).sum() / tp_mask.float().sum()
+                            classwise_metrics['cos_sem_scores_pool_tp'][cind] = cos_pool_cc_tp
+                            cos_pool_cc_fp = (cos_sem_scores_raw * fp_mask).sum() / fp_mask.float().sum()
+                            classwise_metrics['cos_sem_scores_pool_fp'][cind] = cos_pool_cc_fp
 
                     # Using clamp with min=1 in the denominator makes the final results zero when there's no FG,
                     # while without clamp it is N/A, which makes more sense.
@@ -236,9 +292,9 @@ class PredQualityMetrics(Metric):
                         cos_cyc_sh_uc = (valid_cos_cyc_sh * cc_uc_mask.float()).sum() / cc_uc_mask.float().sum()
                         classwise_metrics['cos_scores_cyc_sh_uc'][cind] = cos_cyc_sh_uc
                         cos_cyc_sh_fg = (valid_cos_cyc_sh * cc_fg_mask.float()).sum() / cc_fg_mask.sum()
-                        classwise_metrics['cos_scores_cyc_sh_fg'][cind] = cos_cyc_sh_fg
-                    
-                    
+                        classwise_metrics['cos_scores_cyc_sh_fg'][cind] = cos_cyc_sh_fg                    
+
+
                     if valid_pred_iou_wrt_pl is not None:
                         fg_threshs = self.config.ROI_HEAD.TARGET_CONFIG.UNLABELED_CLS_FG_THRESH
                         bg_thresh = self.config.ROI_HEAD.TARGET_CONFIG.UNLABELED_CLS_BG_THRESH

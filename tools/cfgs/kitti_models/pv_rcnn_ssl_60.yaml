@@ -170,7 +170,7 @@ MODEL:
         CLS_FC: [256, 256]
         REG_FC: [256, 256]
         DP_RATIO: 0.3
-        BASE_PROTOTYPE: 'prototypes_pooled_shared_0.01.pkl'
+        BASE_PROTOTYPE: 'prototypes_pooled_shared_0.01_gt_proto.pkl'
 
         NMS_CONFIG:
             TRAIN:

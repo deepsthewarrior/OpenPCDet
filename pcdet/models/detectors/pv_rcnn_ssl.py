@@ -571,15 +571,15 @@ class PVRCNN_SSL(Detector3DTemplate):
             # apply student's augs on teacher's pseudo-boxes (w/o filtered)
             batch_dict = self.apply_augmentation(input_dict, input_dict, unlabeled_inds, key='pseudo_boxes_prefilter')
 
-            tag = f'pl_gt_metrics_before_filtering'
-            metrics = self.metric_registry.get(tag)
+            # tag = f'pl_gt_metrics_before_filtering'
+            # metrics = self.metric_registry.get(tag)
 
-            preds_prefilter = [batch_dict['pseudo_boxes_prefilter'][uind] for uind in unlabeled_inds]
-            gts_prefilter = [batch_dict['gt_boxes'][uind] for uind in unlabeled_inds]
-            metric_inputs = {'preds': preds_prefilter, 'pred_scores': pseudo_scores, 'roi_scores': pseudo_sem_scores,
-                             'ground_truths': gts_prefilter}
-            metrics.update(**metric_inputs)
-            batch_dict.pop('pseudo_boxes_prefilter')
+            # preds_prefilter = [batch_dict['pseudo_boxes_prefilter'][uind] for uind in unlabeled_inds]
+            # gts_prefilter = [batch_dict['gt_boxes'][uind] for uind in unlabeled_inds]
+            # metric_inputs = {'preds': preds_prefilter, 'pred_scores': pseudo_scores, 'roi_scores': pseudo_sem_scores,
+            #                  'ground_truths': gts_prefilter}
+            # metrics.update(**metric_inputs)
+            # batch_dict.pop('pseudo_boxes_prefilter')
 
     def compute_metrics(self, tag):
         results = self.metric_registry.get(tag).compute()
