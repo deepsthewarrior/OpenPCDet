@@ -190,7 +190,7 @@ class PVRCNN_SSL(Detector3DTemplate):
                         # TODO(farzad) Warning! Here flip_x values are copied from _ema to _ema_wa which is not correct!
                         batch_dict_ema_wa[k] = batch_dict[k]
             gt_boxes_check = torch.any(batch_dict['gt_boxes']!=0,dim=-1)
-            instance_idx_check = batch_dict['instance_idx']!=0
+            instance_idx_check = batch_dict['instance_idx']!=0   
             assert torch.all(gt_boxes_check[labeled_inds] == instance_idx_check[labeled_inds]), "gt_boxes and instance_idx should have the same length for labeled data" 
             assert torch.all(gt_boxes_check[unlabeled_inds] == instance_idx_check[unlabeled_inds]), "gt_boxes and instance_idx should have the same length for ulb"     
             gt_boxes_check = torch.any(batch_dict_ema['gt_boxes']!=0,dim=-1)
@@ -202,9 +202,9 @@ class PVRCNN_SSL(Detector3DTemplate):
             with torch.no_grad():
                 for cur_module in self.pv_rcnn_ema.module_list:
                     try:
-                        batch_dict= cur_module(batch_dict, disable_gt_roi_when_pseudo_labeling=False)
+                        batch_dict_ema= cur_module(batch_dict_ema, disable_gt_roi_when_pseudo_labeling=False)
                     except:
-                        batch_dict = cur_module(batch_dict)
+                        batch_dict_ema = cur_module(batch_dict_ema)
                         # if cur_module.model_cfg['NAME']=='VoxelBackBone8x':
                         #     record_dict['dense__features_pkl'] = batch_dict['encoded_spconv_tensor'].dense() # dense convert sparse to NCHW format
                         #     record_dict['sparse__features_pkl'] = batch_dict['encoded_spconv_tensor']
@@ -232,23 +232,23 @@ class PVRCNN_SSL(Detector3DTemplate):
                 # temp['pooled_features'] = (pred_dicts_gap[inds]['pooled_features']).to('cuda:0')
                 # # temp['rcnn_reg_interim'] = (pred_dicts_gap[inds]['rcnn_reg_interim'])
                 # temp['gt_label'] = (pred_dicts_gap[inds]['gt_label']).to('cuda:0')
-                cur_gt_boxes = batch_dict['gt_boxes'][inds]
-                cur_shared_features_gt = batch_dict['shared_features_gt'][inds]
-                cur_cls_preds = batch_dict['batch_cls_preds'][inds]
+                cur_gt_boxes = batch_dict_ema['gt_boxes'][inds]
+                cur_shared_features_gt = batch_dict_ema['shared_features_gt'][inds]
+                cur_cls_preds = batch_dict_ema['batch_cls_preds'][inds]
                 k = cur_gt_boxes.__len__() - 1
                 while k >= 0 and cur_gt_boxes[k].sum() == 0:
                     k -= 1
                 cur_gt_boxes = cur_gt_boxes[:k + 1]
                 # temp['rcnn_cls_preds'] = cur_cls_preds[:k + 1]
-                # temp['encoded_spconv_tensor_dense'] = (batch_dict['encoded_spconv_tensor'].dense())[inds]
-                # temp['anchors'] = (batch_dict['anchors'][inds]).clone().detach().cpu().numpy()
+                # temp['encoded_spconv_tensor_dense'] = (batch_dict_ema['encoded_spconv_tensor'].dense())[inds]
+                # temp['anchors'] = (batch_dict_ema['anchors'][inds]).clone().detach().cpu().numpy()
                 temp['shared_features_gt'] = cur_shared_features_gt[:k + 1].clone().detach().cpu().numpy()
-                temp['spatial_features'] = (batch_dict['spatial_features'][inds])[:k + 1].clone().detach().cpu().numpy()
-                temp['spatial_features_2d'] = (batch_dict['spatial_features_2d'][inds])[:k + 1].clone().detach().cpu().numpy()
-                temp['pooled_features_gt'] = (batch_dict['pooled_features_gt'][inds])[:k + 1].clone().detach().cpu().numpy()
-                temp['instance_idx'] = (batch_dict['instance_idx'][inds])[:k + 1].clone().detach().cpu().numpy()
-                temp['gt_classes'] = ((batch_dict['gt_boxes'][inds])[..., -1].int())[:k + 1].clone().detach().cpu().numpy()
-                temp['gt_boxes_bev'] = (batch_dict['gt_boxes_bev'][inds])[:k + 1].clone().detach().cpu().numpy()
+                temp['spatial_features'] = (batch_dict_ema['spatial_features'][inds])[:k + 1].clone().detach().cpu().numpy()
+                temp['spatial_features_2d'] = (batch_dict_ema['spatial_features_2d'][inds])[:k + 1].clone().detach().cpu().numpy()
+                temp['pooled_features_gt'] = (batch_dict_ema['pooled_features_gt'][inds])[:k + 1].clone().detach().cpu().numpy()
+                temp['instance_idx'] = (batch_dict_ema['instance_idx'][inds])[:k + 1].clone().detach().cpu().numpy()
+                temp['gt_classes'] = ((batch_dict_ema['gt_boxes'][inds])[..., -1].int())[:k + 1].clone().detach().cpu().numpy()
+                temp['gt_boxes_bev'] = (batch_dict_ema['gt_boxes_bev'][inds])[:k + 1].clone().detach().cpu().numpy()
                 temp['gt_boxes'] = cur_gt_boxes.clone().detach().cpu().numpy()
                 self.shared_pkl['ens'].append(temp)
 
