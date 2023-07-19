@@ -111,7 +111,6 @@ class DynamicPrototype(object):
         if tag in self._tag_metrics.keys():
             metric = self._tag_metrics[tag]  
         else:
-            assert file, "instance is created for the first time, Pkl file needed"
             metric = Prototype(tag=tag, dataset=self.dataset, config=self.model_cfg,file=file)
             self._tag_metrics[tag] = metric
         return metric
@@ -171,7 +170,7 @@ class PVRCNN_SSL(Detector3DTemplate):
         self.metric_registry = MetricRegistry(dataset=self.dataset, model_cfg=model_cfg)
         self.labeled_template = DynamicPrototype(dataset=self.dataset, model_cfg=model_cfg).get(tag=f'labeled_prototype',file=model_cfg.ROI_HEAD.BASE_PROTOTYPE) 
         self.labeled_prototype = self.labeled_template.base_proto #base prototype
-        self.unlabeled_template = DynamicPrototype(dataset=self.dataset, model_cfg=model_cfg).get(tag=f'unlabeled_prototype',file=model_cfg.ROI_HEAD.BASE_PROTOTYPE)
+        self.unlabeled_template = DynamicPrototype(dataset=self.dataset, model_cfg=model_cfg).get(tag=f'unlabeled_prototype',file=None)
         self.unlabeled_prototype = self.unlabeled_template.base_proto #base prototype same as labeled #TODO: ignore base prototype for ulb if needed
         vals_to_store = ['iou_roi_pl', 'iou_roi_gt', 'pred_scores', 'teacher_pred_scores', 
                         'weights', 'roi_scores', 'pcv_scores', 'num_points_in_roi', 'class_labels',
@@ -304,18 +303,31 @@ class PVRCNN_SSL(Detector3DTemplate):
             self._fill_with_pseudo_labels(batch_dict_pl, ulb_roi, unlabeled_inds, labeled_inds)                    
             self.pv_rcnn_ema.roi_head.forward(batch_dict_pl,
                                                       disable_gt_roi_when_pseudo_labeling=True)
-            # for ind in labeled_inds:
-            #     cur_gt_boxes = batch_dict_pl['gt_boxes'][ind]
-            #     k = cur_gt_boxes.__len__() - 1
-            #     while k >= 0 and cur_gt_boxes[k].sum() == 0:
-            #         k -= 1
-            #     cur_gt_boxes = cur_gt_boxes[:k + 1]
-            #     cur_pooled_feat = (batch_dict_pl['pooled_features_gt'][ind])[:k + 1]
-            #     self.features_to_update_lb.append(cur_pooled_feat.view(cur_pooled_feat.shape[0], -1)) # N x 27648
-            #     self.labels_to_update_lb.append(cur_gt_boxes[:, -1])
-            # self.labeled_prototype = self.labeled_template.update(self.features_to_update_lb,self.labels_to_update_lb,19)
-            # self.features_to_update_lb = []
-            # self.labels_to_update_lb = []
+            for ind in labeled_inds:
+                cur_gt_boxes = batch_dict_pl['gt_boxes'][ind]
+                k = cur_gt_boxes.__len__() - 1
+                while k >= 0 and cur_gt_boxes[k].sum() == 0:
+                    k -= 1
+                cur_gt_boxes = cur_gt_boxes[:k + 1]
+                cur_pooled_feat = (batch_dict_pl['pooled_features_gt'][ind])[:k + 1]
+                self.features_to_update_lb.append(cur_pooled_feat.view(cur_pooled_feat.shape[0], -1)) # N x 27648
+                self.labels_to_update_lb.append(cur_gt_boxes[:, -1])
+            self.labeled_prototype = self.labeled_template.update(self.features_to_update_lb,self.labels_to_update_lb)
+            self.features_to_update_lb = []
+            self.labels_to_update_lb = []
+
+            for uind in unlabeled_inds:
+                cur_gt_boxes = batch_dict_pl['gt_boxes'][uind]
+                k = cur_gt_boxes.__len__() - 1
+                while k >= 0 and cur_gt_boxes[k].sum() == 0:
+                    k -= 1
+                cur_gt_boxes = cur_gt_boxes[:k + 1]
+                cur_pooled_feat = (batch_dict_pl['pooled_features_gt'][uind])[:k + 1]
+                self.features_to_update_ulb.append(cur_pooled_feat.view(cur_pooled_feat.shape[0], -1)) # N x 27648
+                self.labels_to_update_ulb.append(cur_gt_boxes[:, -1])
+            self.unlabeled_prototype = self.unlabeled_template.update(self.features_to_update_ulb,self.labels_to_update_ulb)
+            self.features_to_update_ulb = []
+            self.labels_to_update_ulb = []
 
             pseudo_boxes, pseudo_scores, pseudo_sem_scores, pseudo_boxes_var, pseudo_scores_var = \
                 self._filter_pseudo_labels(pred_dicts_ens, unlabeled_inds)

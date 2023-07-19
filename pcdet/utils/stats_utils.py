@@ -91,9 +91,6 @@ class PredQualityMetrics(Metric):
             valid_cos_cyc_pool = cos_scores_cyc_pool[i][valid_preds_mask.nonzero().view(-1)] if cos_scores_cyc_pool else None
             valid_cos_softmax = cos_scores_softmax[i][valid_preds_mask.nonzero().view(-1)] if cos_scores_softmax else None
 
-            if valid_cos_softmax is not None:
-                cos_sem_labels = torch.argmax(valid_cos_softmax,dim=-1) 
-                cos_sem_scores_softmax = torch.gather(valid_cos_softmax, dim=-1, index=(cos_sem_labels).unsqueeze(-1)).squeeze(-1)
             
             valid_gts_mask = torch.logical_not(torch.all(ground_truths[i] == 0, dim=-1))
             valid_gt_boxes = ground_truths[i][valid_gts_mask]
@@ -157,6 +154,8 @@ class PredQualityMetrics(Metric):
                     classwise_metrics['score_bgs'][cind] = cls_score_bg
 
                     if valid_cos_softmax is not None:
+                        cos_sem_labels = torch.argmax(valid_cos_softmax,dim=-1) 
+                        cos_sem_scores_softmax = torch.gather(valid_cos_softmax, dim=-1, index=(cos_sem_labels).unsqueeze(-1)).squeeze(-1)
                         cos_sem_cls_mask = cos_sem_labels == cind
                         ccs_mask = cos_sem_cls_mask & assigned_gt_cls_mask # correctly classified cosine semantic mask
                         mcs_mask = (cos_sem_cls_mask & (~assigned_gt_cls_mask)) | ((~cos_sem_cls_mask) & assigned_gt_cls_mask) 

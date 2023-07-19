@@ -8,46 +8,55 @@ class Prototype(object):
         self.tag = kwargs.get('tag', None)
         self.classes  = ['Car','Ped','Cyc']
         self.momentum = 0.9
-        assert self.file is not None, "File path to the prototype is not provided"
-        with open(self.file,'rb') as f:
-            self.rcnn_features = pickle.loads(f.read())
-        proto_list = []
-        avg = "mean"
-        param = "pool"
-        for cls in self.classes:
-            proto_list.append(self.rcnn_features[cls][avg][param].contiguous().view(-1).detach().cpu())
-        self.proto_list_ = torch.stack(proto_list).cuda()  #TODO: check if this device assignment is correct
-        self.base_proto = self.proto_list_.clone().detach()
-        self.proto = self.base_proto.clone().detach()
+        if self.file is not None:
+            with open(self.file,'rb') as f:
+                self.rcnn_features = pickle.loads(f.read())
+            proto_list = []
+            avg = "mean"
+            param = "pool"
+            for cls in self.classes:
+                proto_list.append(self.rcnn_features[cls][avg][param].contiguous().view(-1).detach().cpu())
+            self.proto_list_ = torch.stack(proto_list).cuda()  #TODO: check if this device assignment is correct
+            self.base_proto = self.proto_list_.clone().detach()
+            self.proto = self.base_proto.clone().detach()
+        else:
+            self.proto = None
+            self.base_proto = None
         self.features = []
         self.labels = []
         self.reset_state_interval = 20 #TODO:Deepika make this configurable
+        self.cur_features = []
     
-    def update(self,features,labels,iter):
+    def update(self,features,labels):
         self.features.extend(features) #NOTE: if features is [], extend will not affect the self.features
         self.labels.extend(labels)
         # Compute EMA
-        if ((iter+1) % self.reset_state_interval) == 0: 
-            print("20th iter")
-            if len(self.features)!= 0:
-                print("Computing EMA")
-                # Gather the tensors (shares tensor among all GPUs)
-                features_to_gather = torch.cat(self.features, dim=0).clone().detach() # convert to tensor before gather
-                labels_to_gather = torch.cat(self.labels, dim=0).clone().detach()
-                print(f"gathering features {features_to_gather.shape} in {self.tag}")
-                gathered_features = self.gather_tensors(features_to_gather) # Gather tensors from all GPUs
-                gathered_labels = self.gather_tensors(labels_to_gather,labels=True) 
-                print(f'gathered_features {gathered_features.shape}')
-                # Do EMA update of prototype
-                for cls in range(0,3):
-                    cls_mask = gathered_labels == (cls+1)
-                    if torch.any(cls_mask): 
-                        cls_features_mean = (gathered_features[cls_mask]).mean(dim=0)                    
+        if len(self.features)!= 0:
+            print("Computing EMA")
+            # Gather the tensors (shares tensor among all GPUs)
+            features_to_gather = torch.cat(self.features, dim=0).clone().detach() # convert to tensor before gather
+            labels_to_gather = torch.cat(self.labels, dim=0).clone().detach()
+            print(f"gathering features {features_to_gather.shape} in {self.tag}")
+            print(f"gathering labels {labels_to_gather.shape} in {self.tag}")
+            gathered_features = self.gather_tensors(features_to_gather) # Gather tensors from all GPUs
+            gathered_labels = self.gather_tensors(labels_to_gather,labels=True) 
+            print(f'gathered_features {gathered_features.shape}')
+            print(f'gathered_labels {gathered_labels.shape}')
+            # Do EMA update of prototype
+            for cls in range(0,3):
+                cls_mask = gathered_labels == (cls+1)
+                if torch.any(cls_mask): 
+                    cls_features_mean = (gathered_features[cls_mask]).mean(dim=0)
+                    if self.proto is not None:                   
                         self.proto[cls] = (self.momentum*self.proto[cls]) + ((1-self.momentum)*cls_features_mean)
+                    else:
+                        self.cur_features.append(cls_features_mean)
+                        if cls == 2:
+                            self.proto = torch.stack(self.cur_features).to(gathered_labels.device)                 
 
-                # Reset the lists         
-                self.features = []
-                self.labels = []
+            # Reset the lists         
+            self.features = []
+            self.labels = []
 
         return self.proto
 
