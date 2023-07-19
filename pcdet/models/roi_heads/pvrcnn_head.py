@@ -171,17 +171,18 @@ class PVRCNNHead(RoIHeadTemplate):
             # TODO(farzad) refactor this with global registry,
             #  accessible in different places, not via passing through batch_dict
             targets_dict['metric_registry'] = batch_dict['metric_registry']
+
+        if 'cal_gt_proto' in batch_dict.keys(): # do only during the batch_dict_pl
             with torch.no_grad():
+                batch_dict['gt_boxes']
                 pooled_features_gt = self.roi_grid_pool(batch_dict,pool_gtboxes=True)  # (BxNum_GT, 6x6x6, C)
                 grid_size = self.model_cfg.ROI_GRID_POOL.GRID_SIZE
                 batch_size_rcnn = pooled_features_gt.shape[0]
                 pooled_features_gt = pooled_features_gt.permute(0, 2, 1).\
-                    contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxNum_GT, C, 6, 6, 6)
+                    contiguous().view(batch_dict['batch_size'],-1,128, grid_size, grid_size, grid_size)  # (BxNum_GT, C, 6, 6, 6)
                 shared_features_gt = self.shared_fc_layer(pooled_features_gt.view(batch_size_rcnn, -1, 1))
                 batch_dict['pooled_features_gt'] = pooled_features_gt
-                
-                            
-
+                                            
         # RoI aware pooling
         pooled_features = self.roi_grid_pool(batch_dict)  # (BxN, 6x6x6, C)
         
@@ -189,47 +190,25 @@ class PVRCNNHead(RoIHeadTemplate):
         batch_size_rcnn = pooled_features.shape[0]
         pooled_features = pooled_features.permute(0, 2, 1).\
             contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxN, C, 6, 6, 6)
-
-
         shared_features = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
         rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
         rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)
         
         # Cosine similarity between shared features and prototype
-        if (self.training or self.print_loss_when_eval) and not disable_gt_roi_when_pseudo_labeling: # cannot do this "if" in line 152 as we don't have shared features at that point
-            shared_features_clone = shared_features.clone().detach().transpose(-2,-1) # cloning and detaching to keep the graph intact, transposing for cosine similarity
+        if 'labeled_prototype' in batch_dict.keys(): # cannot do this during obtaining batch_dict_std and batch_dict_pl
             labels = (targets_dict['roi_labels'].clone().view(-1)) - 1 
-            prototype = batch_dict['labeled_prototype'].to(labels.device) 
-            cosine_scores = torch.zeros_like(batch_dict['roi_scores'].view(-1))
-
-            # Cosine similarity between shared features and prototype
-            sh_protos = batch_dict['labeled_prototype'].to(labels.device).squeeze()  # [3, 256] == [num_protos, C]
-            sh_proposals = shared_features_clone.squeeze()  # [256, 256] == [num_proposals, C]
-            sh_cos_sim = F.normalize(sh_proposals) @ F.normalize(sh_protos).t()
-            for i,sh in enumerate(shared_features_clone):  #  cloned and detached already #NOTE: protype based classifier is to be from non-detached shared features in future
-                cosine_scores[i] = F.normalize(sh) @ F.normalize(prototype[labels[i]]).t() #  this is used for weighting (to be refactored in future)
-            
-            targets_dict['cos_scores_car_sh'] = sh_cos_sim[:,0].view(batch_dict['roi_scores'].shape[0],-1)
-            targets_dict['cos_scores_ped_sh'] = sh_cos_sim[:,1].view(batch_dict['roi_scores'].shape[0],-1)
-            targets_dict['cos_scores_cyc_sh'] = sh_cos_sim[:,2].view(batch_dict['roi_scores'].shape[0],-1)
-
-            targets_dict['cos_scores'] = cosine_scores.view(batch_dict['roi_scores'].shape[0],-1)
-            batch_dict['shared_features'] = shared_features_clone.view(batch_dict['roi_scores'].shape[0],-1,shared_features_clone.shape[-2],shared_features_clone.shape[-1]) # reshaping to batch_wise features, for ema update
 
             # Cosine similarity between pooled features and prototype
             pooled_features_clone = pooled_features.view(batch_size_rcnn,-1).clone().detach() #(N,128,6,6,6) => (N,27648)
-            pool_protos = self.pooled_prototype_lb.to(labels.device).squeeze()
+            pool_protos_lb = batch_dict['labeled_prototype'].to(labels.device) #[3, 27648]
             pool_proposals = pooled_features_clone.squeeze()
-            pool_cos_sim = F.normalize(pool_proposals) @ F.normalize(pool_protos).t()
+            pool_cos_sim = F.normalize(pool_proposals) @ F.normalize(pool_protos_lb).t()
 
             targets_dict['cos_scores_car_pool'] = pool_cos_sim[:,0].view(batch_dict['roi_scores'].shape[0],-1)
             targets_dict['cos_scores_ped_pool'] = pool_cos_sim[:,1].view(batch_dict['roi_scores'].shape[0],-1)
             targets_dict['cos_scores_cyc_pool'] = pool_cos_sim[:,2].view(batch_dict['roi_scores'].shape[0],-1)
-
-            targets_dict['cos_scores_pool_raw'] = pool_cos_sim.view(batch_dict['roi_scores'].shape[0],batch_dict['roi_scores'].shape[1],-1) # (N,128,3)
-            targets_dict['cos_scores_sh_raw'] = sh_cos_sim.view(batch_dict['roi_scores'].shape[0],batch_dict['roi_scores'].shape[1],-1) # (N,128,3)
-            targets_dict['cos_scores_pool_norm'] = F.softmax(targets_dict['cos_scores_pool_raw'],dim=-1) # (N,128,3)
-            targets_dict['cos_scores_sh_norm'] = F.softmax(targets_dict['cos_scores_sh_raw'],dim=-1) # (N,128,3)
+            batched_pool_cos_sim = pool_cos_sim.view(batch_dict['roi_scores'].shape[0],-1,3)
+            targets_dict['cos_scores_pool_norm'] = F.softmax(batched_pool_cos_sim,dim=-1) # (N,128,3)
 
         if not self.training or self.predict_boxes_when_training:
             batch_cls_preds, batch_box_preds = self.generate_predicted_boxes(

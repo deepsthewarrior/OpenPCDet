@@ -11,13 +11,14 @@ class Prototype(object):
         assert self.file is not None, "File path to the prototype is not provided"
         with open(self.file,'rb') as f:
             self.rcnn_features = pickle.loads(f.read())
-        rcnn_sh_mean = []
+        proto_list = []
         avg = "mean"
-        param = "sh"
+        param = "pool"
         for cls in self.classes:
-            rcnn_sh_mean.append(self.rcnn_features[cls][avg][param].unsqueeze(dim=0).detach().cpu())
-        self.rcnn_sh_mean_ = torch.stack(rcnn_sh_mean).cuda()  #TODO: check if this device assignment is correct
-        self.rcnn_sh_mean = self.rcnn_sh_mean_.detach().clone()
+            proto_list.append(self.rcnn_features[cls][avg][param].contiguous().view(-1).detach().cpu())
+        self.proto_list_ = torch.stack(proto_list).cuda()  #TODO: check if this device assignment is correct
+        self.base_proto = self.proto_list_.clone().detach()
+        self.proto = self.base_proto.clone().detach()
         self.features = []
         self.labels = []
         self.reset_state_interval = 20 #TODO:Deepika make this configurable
@@ -31,8 +32,8 @@ class Prototype(object):
             if len(self.features)!= 0:
                 print("Computing EMA")
                 # Gather the tensors (shares tensor among all GPUs)
-                features_to_gather = torch.cat(self.features, dim=0).detach().clone() # convert to tensor before gather
-                labels_to_gather = torch.cat(self.labels, dim=0).detach().clone()
+                features_to_gather = torch.cat(self.features, dim=0).clone().detach() # convert to tensor before gather
+                labels_to_gather = torch.cat(self.labels, dim=0).clone().detach()
                 print(f"gathering features {features_to_gather.shape} in {self.tag}")
                 gathered_features = self.gather_tensors(features_to_gather) # Gather tensors from all GPUs
                 gathered_labels = self.gather_tensors(labels_to_gather,labels=True) 
@@ -42,13 +43,13 @@ class Prototype(object):
                     cls_mask = gathered_labels == (cls+1)
                     if torch.any(cls_mask): 
                         cls_features_mean = (gathered_features[cls_mask]).mean(dim=0)                    
-                        self.rcnn_sh_mean[cls] = (self.momentum*self.rcnn_sh_mean[cls]) + ((1-self.momentum)*cls_features_mean)
+                        self.proto[cls] = (self.momentum*self.proto[cls]) + ((1-self.momentum)*cls_features_mean)
 
                 # Reset the lists         
                 self.features = []
                 self.labels = []
 
-        return self.rcnn_sh_mean
+        return self.proto
 
 
     
@@ -66,7 +67,7 @@ class Prototype(object):
         if labels:
             assert tensor.ndim == 1,"labels should be of shape 1"
         else:
-            assert tensor.ndim == 3,"features should be of shape N,1,256"
+            assert tensor.ndim > 1,"features should be of shape N,27K"
 
         if dist.is_initialized(): # check if dist mode is initialized
             # Determine sizes first

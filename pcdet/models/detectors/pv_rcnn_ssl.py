@@ -170,9 +170,9 @@ class PVRCNN_SSL(Detector3DTemplate):
         cls_bg_thresh = model_cfg.ROI_HEAD.TARGET_CONFIG.CLS_BG_THRESH
         self.metric_registry = MetricRegistry(dataset=self.dataset, model_cfg=model_cfg)
         self.labeled_template = DynamicPrototype(dataset=self.dataset, model_cfg=model_cfg).get(tag=f'labeled_prototype',file=model_cfg.ROI_HEAD.BASE_PROTOTYPE) 
-        self.labeled_prototype = self.labeled_template.rcnn_sh_mean #base prototype
+        self.labeled_prototype = self.labeled_template.base_proto #base prototype
         self.unlabeled_template = DynamicPrototype(dataset=self.dataset, model_cfg=model_cfg).get(tag=f'unlabeled_prototype',file=model_cfg.ROI_HEAD.BASE_PROTOTYPE)
-        self.unlabeled_prototype = self.unlabeled_template.rcnn_sh_mean #base prototype same as labeled #TODO: ignore base prototype for ulb if needed
+        self.unlabeled_prototype = self.unlabeled_template.base_proto #base prototype same as labeled #TODO: ignore base prototype for ulb if needed
         vals_to_store = ['iou_roi_pl', 'iou_roi_gt', 'pred_scores', 'teacher_pred_scores', 
                         'weights', 'roi_scores', 'pcv_scores', 'num_points_in_roi', 'class_labels',
                         'iteration','cos_scores_pool_raw','cos_scores_sh_raw','cos_scores_pool_norm',
@@ -203,7 +203,8 @@ class PVRCNN_SSL(Detector3DTemplate):
                     batch_dict_ema[k[:-4]] = batch_dict[k]
                 else:
                     batch_dict_ema[k] = batch_dict[k]
-
+            batch_dict_ema['labeled_prototype'] = self.labeled_prototype
+            
             gt_boxes_check = torch.any(batch_dict['gt_boxes']!=0,dim=-1)
             instance_idx_check = batch_dict['instance_idx']!=0
             assert torch.all(gt_boxes_check[labeled_inds] == instance_idx_check[labeled_inds]), "gt_boxes and instance_idx should have the same length for labeled data" 
@@ -225,7 +226,7 @@ class PVRCNN_SSL(Detector3DTemplate):
                     else:
                         # TODO(farzad) Warning! Here flip_x values are copied from _ema to _ema_wa which is not correct!
                         batch_dict_ema_wa[k] = batch_dict[k]
-
+                
                 with torch.no_grad():
                     self.pv_rcnn_ema.train()
                     for cur_module in self.pv_rcnn_ema.module_list:
@@ -271,13 +272,50 @@ class PVRCNN_SSL(Detector3DTemplate):
                             batch_dict_ema = cur_module(batch_dict_ema)
                 pred_dicts_ens, recall_dicts_ema = self.pv_rcnn_ema.post_processing(batch_dict_ema, no_recall_dict=True,
                                                                                     override_thresh=0.0,
-                                                                                    no_nms_for_unlabeled=self.no_nms)
-
+                                                                                    no_nms_for_unlabeled=self.no_nms,return_selected=True)
+            # selected_rois = torch.cat([pred_dicts_ens[uind]['selected'] for uind in unlabeled_inds],dim=0)
             # Used for calc stats before and after filtering
             ori_unlabeled_boxes = batch_dict['gt_boxes'][unlabeled_inds, ...]
             if self.model_cfg.ROI_HEAD.get("ENABLE_EVAL", False):
                 # PL metrics before filtering
-                self.update_metrics(batch_dict, pred_dicts_ens, unlabeled_inds, labeled_inds)
+                self.update_metrics(batch_dict, pred_dicts_ens, batch_dict_ema,unlabeled_inds, labeled_inds)
+
+            # calculate features of pre-filtered_pl 
+            with torch.no_grad(): # creating a new dict as a safe practice. TODO: check if this is needed or send a copy of batch_dict_ema again
+                    batch_dict_pl = {}
+                    ulb_roi= []
+                    for uind in unlabeled_inds:
+                        selected_mask = pred_dicts_ens[uind]['selected']
+                        batch_dict_pl['gt_boxes'] = batch_dict_ema['gt_boxes']
+                        roi_bbox = (batch_dict_ema['rois'][uind])[selected_mask]
+                        ulb_roi.append(torch.cat(([roi_bbox,pred_dicts_ens[uind]['pred_labels'].unsqueeze(1)]),dim=1))
+                    # selected_rois = torch.cat(ulb_roi,dim=0)
+                    batch_dict_pl['cal_gt_proto'] = True
+                    batch_dict_pl['gt_boxes'] = batch_dict_ema['gt_boxes']
+                    batch_dict_pl['unlabeled_inds'] = batch_dict_ema['unlabeled_inds']
+                    batch_dict_pl['rois'] = batch_dict_ema['rois'].clone().detach()
+                    batch_dict_pl['roi_scores'] = batch_dict_ema['roi_scores'].clone().detach()
+                    batch_dict_pl['roi_labels'] = batch_dict_ema['roi_labels'].clone().detach()
+                    batch_dict_pl['has_class_labels'] = batch_dict_ema['has_class_labels']
+                    batch_dict_pl['batch_size'] = batch_dict_ema['batch_size']
+                    batch_dict_pl['point_features'] = batch_dict_ema['point_features'].clone().detach()
+                    batch_dict_pl['point_coords'] = batch_dict_ema['point_coords'].clone().detach()
+                    batch_dict_pl['point_cls_scores'] = batch_dict_ema['point_cls_scores'].clone().detach()
+            self._fill_with_pseudo_labels(batch_dict_pl, ulb_roi, unlabeled_inds, labeled_inds)                    
+            self.pv_rcnn_ema.roi_head.forward(batch_dict_pl,
+                                                      disable_gt_roi_when_pseudo_labeling=True)
+            # for ind in labeled_inds:
+            #     cur_gt_boxes = batch_dict_pl['gt_boxes'][ind]
+            #     k = cur_gt_boxes.__len__() - 1
+            #     while k >= 0 and cur_gt_boxes[k].sum() == 0:
+            #         k -= 1
+            #     cur_gt_boxes = cur_gt_boxes[:k + 1]
+            #     cur_pooled_feat = (batch_dict_pl['pooled_features_gt'][ind])[:k + 1]
+            #     self.features_to_update_lb.append(cur_pooled_feat.view(cur_pooled_feat.shape[0], -1)) # N x 27648
+            #     self.labels_to_update_lb.append(cur_gt_boxes[:, -1])
+            # self.labeled_prototype = self.labeled_template.update(self.features_to_update_lb,self.labels_to_update_lb,19)
+            # self.features_to_update_lb = []
+            # self.labels_to_update_lb = []
 
             pseudo_boxes, pseudo_scores, pseudo_sem_scores, pseudo_boxes_var, pseudo_scores_var = \
                 self._filter_pseudo_labels(pred_dicts_ens, unlabeled_inds)
@@ -360,8 +398,7 @@ class PVRCNN_SSL(Detector3DTemplate):
             self.pv_rcnn.roi_head.forward_ret_dict['pl_boxes'] = batch_dict['gt_boxes']
             self.pv_rcnn.roi_head.forward_ret_dict['pl_scores'] = pseudo_scores
     
-            pred_dicts_prototype, recall_dicts_prototype = self.pv_rcnn.post_processing(batch_dict,return_selected=True)
-            # self.update_feature_prototype(batch_dict, pred_dicts_prototype) #TODO: Deepika, must uncomment for ema update on shared prototype. commented for comparision of static prototypes of both pooled and shared features
+            # self.update_feature_prototype(batch_dict_pl, pred_dicts_prototype) 
             if self.model_cfg['ROI_HEAD'].get('ENABLE_SOFT_TEACHER', False):
                 # using teacher to evaluate student's bg/fg proposals through its rcnn head
                 with torch.no_grad():
@@ -375,7 +412,6 @@ class PVRCNN_SSL(Detector3DTemplate):
                     batch_dict_std['point_features'] = batch_dict_ema['point_features'].data.clone()
                     batch_dict_std['point_coords'] = batch_dict_ema['point_coords'].data.clone()
                     batch_dict_std['point_cls_scores'] = batch_dict_ema['point_cls_scores'].data.clone()
-
                     batch_dict_std = self.reverse_augmentation(batch_dict_std, batch_dict, unlabeled_inds)
 
                     # Perturb Student's ROIs before using them for Teacher's ROI head
@@ -385,7 +421,6 @@ class PVRCNN_SSL(Detector3DTemplate):
                         batch_dict_std['rois_before_aug'] = batch_dict_std['rois'].clone().detach()
                         batch_dict_std['rois'][unlabeled_inds] = \
                             augment_rois(batch_dict_std['rois'][unlabeled_inds], self.model_cfg.ROI_HEAD)
-
                     self.pv_rcnn_ema.roi_head.forward(batch_dict_std,
                                                       disable_gt_roi_when_pseudo_labeling=True)
                     batch_dict_std = self.apply_augmentation(batch_dict_std, batch_dict, unlabeled_inds, key='batch_box_preds')
@@ -502,17 +537,9 @@ class PVRCNN_SSL(Detector3DTemplate):
                         cur_iteration = torch.ones_like(preds_iou_max) * (batch_dict['cur_iteration'])
                         self.val_dict['iteration'].extend(cur_iteration.tolist())
 
-                        cur_cos_scores_pool = self.pv_rcnn.roi_head.forward_ret_dict['cos_scores_pool_raw'][cur_unlabeled_ind]
-                        self.val_dict['cos_scores_pool_raw'].extend(cur_cos_scores_pool.tolist())
-
-                        cur_cos_scores_sh = self.pv_rcnn.roi_head.forward_ret_dict['cos_scores_sh_raw'][cur_unlabeled_ind]
-                        self.val_dict['cos_scores_sh_raw'].extend(cur_cos_scores_sh.tolist())
-
                         cur_cos_scores_pool_norm = self.pv_rcnn.roi_head.forward_ret_dict['cos_scores_pool_norm'][cur_unlabeled_ind]
                         self.val_dict['cos_scores_pool_norm'].extend(cur_cos_scores_pool_norm.tolist())
 
-                        cur_cos_scores_sh_norm = self.pv_rcnn.roi_head.forward_ret_dict['cos_scores_sh_norm'][cur_unlabeled_ind]
-                        self.val_dict['cos_scores_sh_norm'].extend(cur_cos_scores_sh_norm.tolist())
 
                 # replace old pickle data (if exists) with updated one 
                 output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]
@@ -552,13 +579,15 @@ class PVRCNN_SSL(Detector3DTemplate):
 
             return pred_dicts, recall_dicts, {}
 
-    def update_metrics(self, input_dict, pred_dict, unlabeled_inds, labeled_inds):
+    def update_metrics(self, input_dict, pred_dict,batch_dict_ema, unlabeled_inds, labeled_inds):
         """
         Recording PL vs GT statistics BEFORE filtering
         """
         if 'pl_gt_metrics_before_filtering' in self.model_cfg.ROI_HEAD.METRICS_PRED_TYPES:
             pseudo_boxes, pseudo_labels, pseudo_scores, pseudo_sem_scores, _, _ = self._unpack_predictions(
                 pred_dict, unlabeled_inds)
+            
+
             pseudo_boxes = [torch.cat([pseudo_box, pseudo_label.view(-1, 1).float()], dim=1) \
                             for (pseudo_box, pseudo_label) in zip(pseudo_boxes, pseudo_labels)]
 
@@ -570,16 +599,39 @@ class PVRCNN_SSL(Detector3DTemplate):
 
             # apply student's augs on teacher's pseudo-boxes (w/o filtered)
             batch_dict = self.apply_augmentation(input_dict, input_dict, unlabeled_inds, key='pseudo_boxes_prefilter')
+            cos_scores_pool_softmax = torch.zeros(batch_dict['pseudo_boxes_prefilter'].shape[0],batch_dict['pseudo_boxes_prefilter'].shape[1],3).to(batch_dict['pseudo_boxes_prefilter'].device)
+            cos_scores_car_pool = torch.zeros(batch_dict['pseudo_boxes_prefilter'].shape[0],batch_dict['pseudo_boxes_prefilter'].shape[1]).to(batch_dict['pseudo_boxes_prefilter'].device)
+            cos_scores_cyc_pool = torch.zeros(batch_dict['pseudo_boxes_prefilter'].shape[0],batch_dict['pseudo_boxes_prefilter'].shape[1]).to(batch_dict['pseudo_boxes_prefilter'].device)
+            cos_scores_ped_pool = torch.zeros(batch_dict['pseudo_boxes_prefilter'].shape[0],batch_dict['pseudo_boxes_prefilter'].shape[1]).to(batch_dict['gt_boxes'].device)
 
-            # tag = f'pl_gt_metrics_before_filtering'
-            # metrics = self.metric_registry.get(tag)
+            for uind in unlabeled_inds:
+                selected = pred_dict[uind]['selected']
+                cos_scores_softmax = (batch_dict_ema['cos_scores_pool_norm'][uind])[selected]
+                car_proto_pool_scores = (batch_dict_ema['cos_scores_car_pool'][uind])[selected]
+                ped_proto_pool_scores = (batch_dict_ema['cos_scores_ped_pool'][uind])[selected]
+                cyc_proto_pool_scores = (batch_dict_ema['cos_scores_cyc_pool'][uind])[selected]
 
-            # preds_prefilter = [batch_dict['pseudo_boxes_prefilter'][uind] for uind in unlabeled_inds]
-            # gts_prefilter = [batch_dict['gt_boxes'][uind] for uind in unlabeled_inds]
-            # metric_inputs = {'preds': preds_prefilter, 'pred_scores': pseudo_scores, 'roi_scores': pseudo_sem_scores,
-            #                  'ground_truths': gts_prefilter}
-            # metrics.update(**metric_inputs)
-            # batch_dict.pop('pseudo_boxes_prefilter')
+                diff = batch_dict['pseudo_boxes_prefilter'].shape[1] - cos_scores_softmax.shape[0] 
+                cos_scores_pool_softmax[uind] = torch.cat([cos_scores_softmax, torch.zeros(diff,3).to(selected.device)],dim=0)
+                cos_scores_car_pool[uind] = torch.cat([car_proto_pool_scores, torch.zeros(diff).to(selected.device)],dim=0)
+                cos_scores_cyc_pool[uind] = torch.cat([ped_proto_pool_scores, torch.zeros(diff).to(selected.device)],dim=0)
+                cos_scores_ped_pool[uind] = torch.cat([cyc_proto_pool_scores, torch.zeros(diff).to(selected.device)],dim=0)
+                assert torch.all((batch_dict['pseudo_boxes_prefilter'][uind].sum(-1)).nonzero() == cos_scores_car_pool[uind].nonzero()), "pred boxes and cos_scores_car_pool are not aligned"
+            
+            tag = f'pl_gt_metrics_before_filtering'
+            metrics = self.metric_registry.get(tag)
+
+            cos_sem_pool_softmax = [cos_scores_pool_softmax[uind] for uind in unlabeled_inds]
+            cos_sem_car_pool = [cos_scores_car_pool[uind] for uind in unlabeled_inds]
+            cos_sem_ped_pool = [cos_scores_ped_pool[uind] for uind in unlabeled_inds]
+            cos_sem_cyc_pool = [cos_scores_cyc_pool[uind] for uind in unlabeled_inds]
+            preds_prefilter = [batch_dict['pseudo_boxes_prefilter'][uind] for uind in unlabeled_inds]
+            gts_prefilter = [batch_dict['gt_boxes'][uind] for uind in unlabeled_inds]
+            metric_inputs = {'preds': preds_prefilter, 'pred_scores': pseudo_scores, 'roi_scores': pseudo_sem_scores,
+                             'ground_truths': gts_prefilter,'cos_scores_car_pool':cos_sem_car_pool,'cos_scores_ped_pool':cos_sem_ped_pool,
+                             'cos_scores_cyc_pool':cos_sem_cyc_pool,'cos_scores_softmax':cos_sem_pool_softmax}
+            metrics.update(**metric_inputs)
+            batch_dict.pop('pseudo_boxes_prefilter')
 
     def compute_metrics(self, tag):
         results = self.metric_registry.get(tag).compute()
@@ -592,27 +644,28 @@ class PVRCNN_SSL(Detector3DTemplate):
         """
         Update the feature prototype for labeled data
         """
-        for inds in batch_dict['labeled_inds']:
-            filtered_shared_feat_lb,filtered_gt_labels_lb = self.filter_proposals(batch_dict, pred_dicts, inds)
-            # indexwise update into a list
-            if filtered_shared_feat_lb is not None:
-                self.features_to_update_lb.append(filtered_shared_feat_lb)
-                self.labels_to_update_lb.append(filtered_gt_labels_lb)
-        # for all labeled data in a batch, update the prototype
-        self.labeled_prototype = self.labeled_template.update(self.features_to_update_lb,self.labels_to_update_lb,batch_dict['cur_iteration']) #TODO:Deepika commented for making static prototypes(uncomment later)
-        self.features_to_update_lb = []
-        self.labels_to_update_lb = []
+        # for inds in batch_dict['labeled_inds']:
+        #     filtered_shared_feat_lb,filtered_gt_labels_lb = self.filter_proposals(batch_dict, pred_dicts, inds)
+        #     # indexwise update into a list
+        #     if filtered_shared_feat_lb is not None:
+        #         self.features_to_update_lb.append(filtered_shared_feat_lb)
+        #         self.labels_to_update_lb.append(filtered_gt_labels_lb)
+        # # for all labeled data in a batch, update the prototype
+        # self.labeled_prototype = self.labeled_template.update(self.features_to_update_lb,self.labels_to_update_lb,batch_dict['cur_iteration']) #TODO:Deepika commented for making static prototypes(uncomment later)
+        # self.features_to_update_lb = []
+        # self.labels_to_update_lb = []
         
-        for inds in batch_dict['unlabeled_inds']:
-            filtered_shared_feat_ulb,filtered_gt_labels_ulb = self.filter_proposals(batch_dict, pred_dicts, inds)
-            # append indexwise filtered proposals to a list
-            if filtered_shared_feat_ulb is not None:
-                self.features_to_update_ulb.append(filtered_shared_feat_ulb)
-                self.labels_to_update_ulb.append(filtered_gt_labels_ulb)
+        # for inds in batch_dict['unlabeled_inds']:
+        #     filtered_shared_feat_ulb,filtered_gt_labels_ulb = self.filter_proposals(batch_dict, pred_dicts, inds)
+        #     # append indexwise filtered proposals to a list
+        #     if filtered_shared_feat_ulb is not None:
+        #         self.features_to_update_ulb.append(filtered_shared_feat_ulb)
+        #         self.labels_to_update_ulb.append(filtered_gt_labels_ulb)
         # for all unlabeled data in a batch, update the prototype
-        self.unlabeled_prototype = self.unlabeled_template.update(self.features_to_update_ulb,self.labels_to_update_ulb,batch_dict['cur_iteration'])
-        self.features_to_update_ulb = []
-        self.labels_to_update_ulb = []
+        
+        # self.unlabeled_prototype = self.unlabeled_template.update(self.features_to_update_ulb,self.labels_to_update_ulb,batch_dict['cur_iteration'])
+        # self.features_to_update_ulb = []
+        # self.labels_to_update_ulb = []
 
 
     def ensemble_post_processing(self, batch_dict_a, batch_dict_b, unlabeled_inds, ensemble_option=None):
@@ -912,7 +965,9 @@ class PVRCNN_SSL(Detector3DTemplate):
             selected_roi_scores = pred_dicts[inds]['pred_sem_scores']
             selected_roi_labels = pred_dicts[inds]['pred_labels']
             shared_feat = batch_dict['shared_features'][inds] # shared feature for the current batch index
+            pooled_feat = batch_dict['pooled_features_gt'][inds] # pooled feature for the current batch index
             selected_shared_feat = shared_feat[selected_inds] # shared feature for the selected proposals 
+            selected_pooled_feat = pooled_feat[selected_inds] # pooled feature for the selected proposals
             valid_gt_boxes_mask = torch.logical_not(torch.all(batch_dict['gt_boxes'][inds] == 0, dim=-1))
             valid_gt_boxes = batch_dict['gt_boxes'][inds][valid_gt_boxes_mask] #for unlabeled inds GT is PL
 
@@ -932,6 +987,7 @@ class PVRCNN_SSL(Detector3DTemplate):
                 filter_inds_mask = (max_overlaps >= iou_thresh) & (selected_pred_scores >= pred_thresh) & cc_mask # filter mask
                 if torch.any(filter_inds_mask):
                     filtered_shared_feat = selected_shared_feat[filter_inds_mask]
+                    filtered_pooled_feat = selected_pooled_feat[filter_inds_mask]
                     filtered_gt_labels = selected_roi_labels[filter_inds_mask]
                 
             return filtered_shared_feat, filtered_gt_labels
