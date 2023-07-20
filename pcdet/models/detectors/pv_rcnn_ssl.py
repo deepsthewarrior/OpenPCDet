@@ -323,8 +323,9 @@ class PVRCNN_SSL(Detector3DTemplate):
                     k -= 1
                 cur_gt_boxes = cur_gt_boxes[:k + 1]
                 cur_pooled_feat = (batch_dict_pl['pooled_features_gt'][uind])[:k + 1]
-                self.features_to_update_ulb.append(cur_pooled_feat.view(cur_pooled_feat.shape[0], -1)) # N x 27648
-                self.labels_to_update_ulb.append(cur_gt_boxes[:, -1])
+                if len(self.features_to_update_ulb):
+                    self.features_to_update_ulb.append(cur_pooled_feat.view(cur_pooled_feat.shape[0], -1)) # N x 27648
+                    self.labels_to_update_ulb.append(cur_gt_boxes[:, -1])
             self.unlabeled_prototype = self.unlabeled_template.update(self.features_to_update_ulb,self.labels_to_update_ulb)
             self.features_to_update_ulb = []
             self.labels_to_update_ulb = []

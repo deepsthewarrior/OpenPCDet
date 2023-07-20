@@ -91,7 +91,6 @@ class PredQualityMetrics(Metric):
             valid_cos_cyc_pool = cos_scores_cyc_pool[i][valid_preds_mask.nonzero().view(-1)] if cos_scores_cyc_pool else None
             valid_cos_softmax = cos_scores_softmax[i][valid_preds_mask.nonzero().view(-1)] if cos_scores_softmax else None
 
-            
             valid_gts_mask = torch.logical_not(torch.all(ground_truths[i] == 0, dim=-1))
             valid_gt_boxes = ground_truths[i][valid_gts_mask]
             if pseudo_labels is not None:
@@ -147,6 +146,8 @@ class PredQualityMetrics(Metric):
                     classwise_metrics['pred_ious_ucs'][cind] = (preds_iou_max * cc_uc_mask.float()).sum() / cc_uc_mask.sum()
                     cls_score_uc = (valid_pred_scores * cc_uc_mask.float()).sum() / (cc_uc_mask).sum()
                     classwise_metrics['score_ucs'][cind] = cls_score_uc
+                    classwise_metrics['accuracy_rpn_classifier_fg'][cind] = cc_fg_mask.sum()/fg_mask.sum() #accuracy = correct/total
+                    classwise_metrics['accuracy_rpn_classifier_uc'][cind] = cc_uc_mask.sum()/uc_mask.sum()
 
                     cls_bg_mask = pred_cls_mask & bg_mask
                     classwise_metrics['pred_ious_bgs'][cind] = (preds_iou_max * cls_bg_mask.float()).sum() / cls_bg_mask.sum()
@@ -170,6 +171,8 @@ class PredQualityMetrics(Metric):
                         classwise_metrics['cos_sem_pool_uc'][cind] = cos_scores_pool_uc
                         cos_scores_pool_fg = (cos_sem_scores_softmax * ccs_fg_mask.float()).sum() / ccs_fg_mask.sum()
                         classwise_metrics['cos_sem_pool_fg'][cind] = cos_scores_pool_fg
+                        classwise_metrics['accuracy_cos_classifier_fg'][cind] =  ccs_fg_mask.sum()/fg_mask.sum()
+                        classwise_metrics['accuracy_cos_classifier_uc'][cind] =  ccs_uc_mask.sum()/uc_mask.sum()
                         
                         if valid_pred_iou_wrt_pl is not None:
                             # calculate FN, TP, FP based on cos_semantic scores replacing RPN scores
@@ -187,8 +190,7 @@ class PredQualityMetrics(Metric):
                             fn_mask = (cls_bg_mask_wrt_pl | cls_uc_mask_wrt_pl) & ccs_fg_mask
                             tp_mask = cls_fg_mask_wrt_pl & ccs_fg_mask
                             fp_mask = cls_fg_mask_wrt_pl & (cls_sem_bg_mask | ccs_uc_mask)
-                            tn_mask = (cls_bg_mask_wrt_pl | cls_uc_mask_wrt_pl) & (cls_sem_bg_mask | ccs_uc_mask)
-                            classwise_metrics['accuracy_cos_classifier'][cind] = (tp_mask.sum() + tn_mask.sum()) / (ccs_fg_mask.sum() + ccs_uc_mask.sum() + cls_sem_bg_mask.sum()) # (tp+tn)/total
+                            # tn_mask = (cls_bg_mask_wrt_pl | cls_uc_mask_wrt_pl) & (cls_sem_bg_mask | ccs_uc_mask)                            
                             classwise_metrics['pred_fn_rate_cos'][cind] = fn_mask.sum() / ccs_fg_mask.sum() # to check if using cos_sem scores affects FN rate
                             classwise_metrics['pred_tp_rate_cos'][cind] = tp_mask.sum() / ccs_fg_mask.sum()
                             classwise_metrics['pred_fp_ratio_cos'][cind] = fp_mask.sum() / cls_fg_mask_wrt_pl.sum()
@@ -270,7 +272,6 @@ class PredQualityMetrics(Metric):
                         tp_mask = cls_fg_mask_wrt_pl & cc_fg_mask
                         fp_mask = cls_fg_mask_wrt_pl & (cls_bg_mask | cc_uc_mask)
                         tn_mask = (cls_bg_mask_wrt_pl | cls_uc_mask_wrt_pl) & (cls_bg_mask | cc_uc_mask)
-                        classwise_metrics['accuracy_rpn_classifier'][cind] = fn_mask.sum() / cc_fg_mask.sum()
                         classwise_metrics['pred_fn_rate'][cind] = fn_mask.sum() / cc_fg_mask.sum()
                         classwise_metrics['pred_tp_rate'][cind] = tp_mask.sum() / cc_fg_mask.sum()
                         classwise_metrics['pred_fp_ratio'][cind] = fp_mask.sum() / cls_fg_mask_wrt_pl.sum()
