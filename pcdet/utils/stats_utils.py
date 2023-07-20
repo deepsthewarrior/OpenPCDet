@@ -50,7 +50,7 @@ class PredQualityMetrics(Metric):
                              "cos_scores_cyc_pool_tp","cos_scores_cyc_pool_fp","cos_sem_pool_bg","cos_sem_pool_fg","cos_sem_pool_uc",
                              "cos_sem_scores_pool_fn","cos_sem_scores_pool_tp","cos_sem_scores_pool_fp","pred_fn_rate_cos","pred_tp_rate_cos","pred_ious_wrt_pl_tp_cos",
                              "pred_fp_ratio_cos","pred_ious_wrt_pl_fg_cos","pred_ious_wrt_pl_fn_cos","pred_ious_wrt_pl_fp_cos","pred_ious_wrt_pl_tp_cos",
-                             "accuracy_rpn_classifier","accuracy_cos_classifier"]
+                            "accuracy_rpn_classifier_fg","accuracy_rpn_classifier_uc","accuracy_cos_classifier_fg","accuracy_cos_classifier_uc"]
                              
         self.min_overlaps = np.array([0.7, 0.5, 0.5, 0.7, 0.5, 0.7])
         self.class_agnostic_fg_thresh = 0.7
