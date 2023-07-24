@@ -27,7 +27,7 @@ class Prototype(object):
         self.reset_state_interval = 20 #TODO:Deepika make this configurable
         self.cur_features = []
     
-    def update(self,features,labels):
+    def update(self,features,labels,iter):
         self.features.extend(features) #NOTE: if features is [], extend will not affect the self.features
         self.labels.extend(labels)
         # Compute EMA
@@ -47,16 +47,19 @@ class Prototype(object):
                 cls_mask = gathered_labels == (cls+1)
                 if torch.any(cls_mask): 
                     cls_features_mean = (gathered_features[cls_mask]).mean(dim=0)
-                    if self.proto is not None:                   
+                    if self.tag == "labeled_prototype":                   
+                        self.proto[cls] = (self.momentum*self.proto[cls]) + ((1-self.momentum)*cls_features_mean)
+                    elif self.tag == "unlabeled_prototype" and iter >= 20 and self.proto is not None: # MCL net implementation for ulb proto
                         self.proto[cls] = (self.momentum*self.proto[cls]) + ((1-self.momentum)*cls_features_mean)
                     else:
                         self.cur_features.append(cls_features_mean)
-                        if cls == 2:
+                        if cls == 2: # stack to tensor after cyc
                             self.proto = torch.stack(self.cur_features).to(gathered_labels.device)                 
 
             # Reset the lists         
             self.features = []
             self.labels = []
+            self.cur_features = []
 
         return self.proto
 

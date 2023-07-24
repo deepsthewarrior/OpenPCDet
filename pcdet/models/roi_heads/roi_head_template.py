@@ -197,11 +197,14 @@ class RoIHeadTemplate(nn.Module):
         ema_preds_of_std_rois, ema_pred_scores_of_std_rois = [], []
         sample_gts = []
         sample_gt_iou_of_rois = []
-        sample_cos_scores_car_pool = []
-        sample_cos_scores_ped_pool = []
-        sample_cos_scores_cyc_pool = []
-        sample_cos_scores_softmax = []
-    
+        sample_cos_scores_car_pool_lb = []
+        sample_cos_scores_ped_pool_lb = []
+        sample_cos_scores_cyc_pool_lb = []
+        sample_cos_scores_softmax_lb = []
+        sample_cos_scores_car_pool_ulb = []
+        sample_cos_scores_ped_pool_ulb = []
+        sample_cos_scores_cyc_pool_ulb = []
+        sample_cos_scores_softmax_ulb = []    
     
         for i, uind in enumerate(unlabeled_inds):
             mask = (targets_dict['reg_valid_mask'][uind] > 0) if mask_type == 'reg' else (
@@ -229,16 +232,26 @@ class RoIHeadTemplate(nn.Module):
             sample_preds.append(pred_labeled_boxes)
             sample_pred_scores.append(pred_scores)
 
-            # Cosine similarity
-            car_cos_scores_pool = targets_dict['cos_scores_car_pool'][uind][mask].detach().clone()
-            ped_cos_scores_pool = targets_dict['cos_scores_ped_pool'][uind][mask].detach().clone()
-            cyc_cos_scores_pool = targets_dict['cos_scores_cyc_pool'][uind][mask].detach().clone()
-            sample_cos_scores_car_pool.append(car_cos_scores_pool)
-            sample_cos_scores_ped_pool.append(ped_cos_scores_pool)
-            sample_cos_scores_cyc_pool.append(cyc_cos_scores_pool)
-            cos_scores_softmax = targets_dict['cos_scores_pool_norm'][uind][mask].detach().clone()
-            sample_cos_scores_softmax.append(cos_scores_softmax)
+            # Cosine similarity lb
+            car_cos_scores_pool_lb = targets_dict['cos_scores_car_pool_lb'][uind][mask].detach().clone()
+            ped_cos_scores_pool_lb = targets_dict['cos_scores_ped_pool_lb'][uind][mask].detach().clone()
+            cyc_cos_scores_pool_lb = targets_dict['cos_scores_cyc_pool_lb'][uind][mask].detach().clone()
+            sample_cos_scores_car_pool_lb.append(car_cos_scores_pool_lb)
+            sample_cos_scores_ped_pool_lb.append(ped_cos_scores_pool_lb)
+            sample_cos_scores_cyc_pool_lb.append(cyc_cos_scores_pool_lb)
+            cos_scores_softmax_lb = targets_dict['cos_scores_pool_norm_lb'][uind][mask].detach().clone()
+            sample_cos_scores_softmax_lb.append(cos_scores_softmax_lb)
 
+            # Cosine similarity ulb
+            if 'cos_scores_car_pool_ulb' in targets_dict.keys():
+                car_cos_scores_pool_ulb = targets_dict['cos_scores_car_pool_ulb'][uind][mask].detach().clone()
+                ped_cos_scores_pool_ulb = targets_dict['cos_scores_ped_pool_ulb'][uind][mask].detach().clone()
+                cyc_cos_scores_pool_ulb = targets_dict['cos_scores_cyc_pool_ulb'][uind][mask].detach().clone()
+                sample_cos_scores_car_pool_ulb.append(car_cos_scores_pool_ulb)
+                sample_cos_scores_ped_pool_ulb.append(ped_cos_scores_pool_ulb)
+                sample_cos_scores_cyc_pool_ulb.append(cyc_cos_scores_pool_ulb)
+                cos_scores_softmax_ulb = targets_dict['cos_scores_pool_norm_ulb'][uind][mask].detach().clone()
+                sample_cos_scores_softmax_ulb.append(cos_scores_softmax_ulb)
 
             # (Real labels) GT info
             gt_labeled_boxes = targets_dict['ori_unlabeled_boxes'][i]
@@ -325,9 +338,11 @@ class RoIHeadTemplate(nn.Module):
                              'ground_truths': sample_gts, 'targets': sample_targets,
                              'pseudo_labels': sample_pls, 'pseudo_label_scores': sample_pl_scores,
                              'target_scores': sample_target_scores, 'pred_weights': sample_pred_weights,
-                             'pred_iou_wrt_pl': sample_gt_iou_of_rois,'cos_scores_car_pool': sample_cos_scores_car_pool, 
-                             'cos_scores_ped_pool': sample_cos_scores_ped_pool,'cos_scores_cyc_pool': sample_cos_scores_cyc_pool,
-                             'cos_scores_softmax': sample_cos_scores_softmax}
+                             'pred_iou_wrt_pl': sample_gt_iou_of_rois,'cos_scores_car_pool_lb': sample_cos_scores_car_pool_lb, 
+                             'cos_scores_ped_pool_lb': sample_cos_scores_ped_pool_lb,'cos_scores_cyc_pool_lb': sample_cos_scores_cyc_pool_lb,
+                             'cos_scores_softmax_lb': sample_cos_scores_softmax_lb,'cos_scores_car_pool_ulb': sample_cos_scores_car_pool_ulb, 
+                             'cos_scores_ped_pool_ulb': sample_cos_scores_ped_pool_ulb,'cos_scores_cyc_pool_ulb': sample_cos_scores_cyc_pool_ulb,
+                             'cos_scores_softmax_ulb': sample_cos_scores_softmax_ulb}
             metrics.update(**metric_inputs)
 
     def assign_targets(self, batch_dict):

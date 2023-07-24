@@ -202,13 +202,22 @@ class PVRCNNHead(RoIHeadTemplate):
             pooled_features_clone = pooled_features.view(batch_size_rcnn,-1).clone().detach() #(N,128,6,6,6) => (N,27648)
             pool_protos_lb = batch_dict['labeled_prototype'].to(labels.device) #[3, 27648]
             pool_proposals = pooled_features_clone.squeeze()
-            pool_cos_sim = F.normalize(pool_proposals) @ F.normalize(pool_protos_lb).t()
+            pool_protos_ulb= batch_dict['unlabeled_prototype'].to(labels.device) if batch_dict['unlabeled_prototype'] is not None else None #[3, 27648]
+            pool_cos_sim_lb = F.normalize(pool_proposals) @ F.normalize(pool_protos_lb).t()
+            pool_cos_sim_ulb = F.normalize(pool_proposals) @ F.normalize(pool_protos_ulb).t() if pool_protos_ulb is not None else None
 
-            targets_dict['cos_scores_car_pool'] = pool_cos_sim[:,0].view(batch_dict['roi_scores'].shape[0],-1)
-            targets_dict['cos_scores_ped_pool'] = pool_cos_sim[:,1].view(batch_dict['roi_scores'].shape[0],-1)
-            targets_dict['cos_scores_cyc_pool'] = pool_cos_sim[:,2].view(batch_dict['roi_scores'].shape[0],-1)
-            batched_pool_cos_sim = pool_cos_sim.view(batch_dict['roi_scores'].shape[0],-1,3)
-            targets_dict['cos_scores_pool_norm'] = F.softmax(batched_pool_cos_sim,dim=-1) # (N,128,3)
+            if pool_protos_ulb is not None:
+                targets_dict['cos_scores_car_pool_ulb'] = pool_cos_sim_ulb[:,0].view(batch_dict['roi_scores'].shape[0],-1)
+                targets_dict['cos_scores_ped_pool_ulb'] = pool_cos_sim_ulb[:,1].view(batch_dict['roi_scores'].shape[0],-1)
+                targets_dict['cos_scores_cyc_pool_ulb'] = pool_cos_sim_ulb[:,2].view(batch_dict['roi_scores'].shape[0],-1)
+                batched_pool_cos_sim_ulb = pool_cos_sim_ulb.view(batch_dict['roi_scores'].shape[0],-1,3)
+                targets_dict['cos_scores_pool_norm_ulb'] = F.softmax(batched_pool_cos_sim_ulb,dim=-1) # (N,128,3)                
+
+            targets_dict['cos_scores_car_pool_lb'] = pool_cos_sim_lb[:,0].view(batch_dict['roi_scores'].shape[0],-1)
+            targets_dict['cos_scores_ped_pool_lb'] = pool_cos_sim_lb[:,1].view(batch_dict['roi_scores'].shape[0],-1)
+            targets_dict['cos_scores_cyc_pool_lb'] = pool_cos_sim_lb[:,2].view(batch_dict['roi_scores'].shape[0],-1)
+            batched_pool_cos_sim_lb = pool_cos_sim_lb.view(batch_dict['roi_scores'].shape[0],-1,3)
+            targets_dict['cos_scores_pool_norm_lb'] = F.softmax(batched_pool_cos_sim_lb,dim=-1) # (N,128,3)
 
         if not self.training or self.predict_boxes_when_training:
             batch_cls_preds, batch_box_preds = self.generate_predicted_boxes(

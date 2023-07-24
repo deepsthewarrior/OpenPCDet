@@ -43,14 +43,16 @@ class PredQualityMetrics(Metric):
                              "pred_weight_fn", "pred_weight_tp", "pred_weight_fp", "uc_pred_fn_rate", "uc_pred_fp_rate",
                              "uc_pred_ious_wrt_pl_fn", "uc_pred_ious_wrt_pl_fp", "uc_score_fn", "uc_score_fp", 
                              "uc_target_score_fn", "uc_target_score_fp", "uc_pred_weight_fn", "uc_pred_weight_fp",
-                             "cos_scores_car_pool_bg","cos_scores_car_pool_uc","cos_scores_car_pool_fg","cos_scores_car_pool_fn",
-                             "cos_scores_car_pool_tp","cos_scores_car_pool_fp","cos_scores_ped_pool_bg","cos_scores_ped_pool_uc",
-                             "cos_scores_ped_pool_fg","cos_scores_ped_pool_fn","cos_scores_ped_pool_tp","cos_scores_ped_pool_fp",
-                             "cos_scores_cyc_pool_bg","cos_scores_cyc_pool_uc","cos_scores_cyc_pool_fg","cos_scores_cyc_pool_fn",
+                             "cos_scores_car_pool_bg_lb","cos_scores_car_pool_uc_lb","cos_scores_car_pool_fg_lb","cos_scores_car_pool_fn",
+                             "cos_scores_car_pool_tp","cos_scores_car_pool_fp","cos_scores_ped_pool_bg_lb","cos_scores_ped_pool_uc_lb",
+                             "cos_scores_ped_pool_fg_lb","cos_scores_ped_pool_fn","cos_scores_ped_pool_tp","cos_scores_ped_pool_fp",
+                             "cos_scores_cyc_pool_bg_lb","cos_scores_cyc_pool_uc_lb","cos_scores_cyc_pool_fg_lb","cos_scores_cyc_pool_fn",
                              "cos_scores_cyc_pool_tp","cos_scores_cyc_pool_fp","cos_sem_pool_bg","cos_sem_pool_fg","cos_sem_pool_uc",
                              "cos_sem_scores_pool_fn","cos_sem_scores_pool_tp","cos_sem_scores_pool_fp","pred_fn_rate_cos","pred_tp_rate_cos","pred_ious_wrt_pl_tp_cos",
                              "pred_fp_ratio_cos","pred_ious_wrt_pl_fg_cos","pred_ious_wrt_pl_fn_cos","pred_ious_wrt_pl_fp_cos","pred_ious_wrt_pl_tp_cos",
-                            "accuracy_rpn_classifier_fg","accuracy_rpn_classifier_uc","accuracy_cos_classifier_fg","accuracy_cos_classifier_uc"]
+                            "accuracy_rpn_classifier_fg","accuracy_rpn_classifier_uc","accuracy_cos_classifier_fg","accuracy_cos_classifier_uc","cos_scores_ped_pool_bg_ulb",
+                            "cos_scores_ped_pool_uc_ulb","cos_scores_ped_pool_fg_ulb","cos_scores_cyc_pool_bg_ulb","cos_scores_cyc_pool_uc_ulb","cos_scores_cyc_pool_fg_ulb",
+                            "cos_scores_car_pool_bg_ulb","cos_scores_car_pool_uc_ulb","cos_scores_car_pool_fg_ulb"]
                              
         self.min_overlaps = np.array([0.7, 0.5, 0.5, 0.7, 0.5, 0.7])
         self.class_agnostic_fg_thresh = 0.7
@@ -60,7 +62,9 @@ class PredQualityMetrics(Metric):
     def update(self, preds: [torch.Tensor], ground_truths: [torch.Tensor], pred_scores: [torch.Tensor],
                rois=None, roi_scores=None, targets=None, target_scores=None, pred_weights=None,
                pseudo_labels=None, pseudo_label_scores=None, pred_iou_wrt_pl=None, 
-               cos_scores_car_pool=None,cos_scores_ped_pool=None,cos_scores_cyc_pool=None,cos_scores_softmax=None) -> None:
+               cos_scores_car_pool_lb=None,cos_scores_ped_pool_lb=None,cos_scores_cyc_pool_lb=None,cos_scores_softmax_lb=None,
+               cos_scores_car_pool_ulb=None,cos_scores_ped_pool_ulb=None,cos_scores_cyc_pool_ulb=None,cos_scores_softmax_ulb=None
+            ) -> None:
         assert isinstance(preds, list) and isinstance(ground_truths, list) and isinstance(pred_scores, list)
         assert all([pred.dim() == 2 for pred in preds]) and all([pred.dim() == 2 for pred in ground_truths]) and all([pred.dim() == 1 for pred in pred_scores])
         assert all([pred.shape[-1] == 8 for pred in preds]) and all([gt.shape[-1] == 8 for gt in ground_truths])
@@ -86,10 +90,14 @@ class PredQualityMetrics(Metric):
             valid_target_scores = target_scores[i][valid_preds_mask.nonzero().view(-1)] if target_scores else None
             valid_pred_weights = pred_weights[i][valid_preds_mask.nonzero().view(-1)] if pred_weights else None
             valid_pred_iou_wrt_pl = pred_iou_wrt_pl[i][valid_preds_mask.nonzero().view(-1)].squeeze() if pred_iou_wrt_pl else None
-            valid_cos_car_pool = cos_scores_car_pool[i][valid_preds_mask.nonzero().view(-1)] if cos_scores_car_pool else None
-            valid_cos_ped_pool = cos_scores_ped_pool[i][valid_preds_mask.nonzero().view(-1)] if cos_scores_ped_pool else None
-            valid_cos_cyc_pool = cos_scores_cyc_pool[i][valid_preds_mask.nonzero().view(-1)] if cos_scores_cyc_pool else None
-            valid_cos_softmax = cos_scores_softmax[i][valid_preds_mask.nonzero().view(-1)] if cos_scores_softmax else None
+            valid_cos_car_pool_lb = cos_scores_car_pool_lb[i][valid_preds_mask.nonzero().view(-1)] if cos_scores_car_pool_lb else None
+            valid_cos_ped_pool_lb = cos_scores_ped_pool_lb[i][valid_preds_mask.nonzero().view(-1)] if cos_scores_ped_pool_lb else None
+            valid_cos_cyc_pool_lb = cos_scores_cyc_pool_lb[i][valid_preds_mask.nonzero().view(-1)] if cos_scores_cyc_pool_lb else None
+            valid_cos_softmax_lb = cos_scores_softmax_lb[i][valid_preds_mask.nonzero().view(-1)] if cos_scores_softmax_lb else None
+            valid_cos_car_pool_ulb = cos_scores_car_pool_ulb[i][valid_preds_mask.nonzero().view(-1)] if cos_scores_car_pool_ulb else None
+            valid_cos_ped_pool_ulb = cos_scores_ped_pool_ulb[i][valid_preds_mask.nonzero().view(-1)] if cos_scores_ped_pool_ulb else None
+            valid_cos_cyc_pool_ulb = cos_scores_cyc_pool_ulb[i][valid_preds_mask.nonzero().view(-1)] if cos_scores_cyc_pool_ulb else None
+            valid_cos_softmax_ulb = cos_scores_softmax_ulb[i][valid_preds_mask.nonzero().view(-1)] if cos_scores_softmax_ulb else None
 
             valid_gts_mask = torch.logical_not(torch.all(ground_truths[i] == 0, dim=-1))
             valid_gt_boxes = ground_truths[i][valid_gts_mask]
@@ -154,9 +162,9 @@ class PredQualityMetrics(Metric):
                     cls_score_bg = (valid_pred_scores * cls_bg_mask.float()).sum() / torch.clamp(bg_mask.float().sum(), min=1.0)
                     classwise_metrics['score_bgs'][cind] = cls_score_bg
 
-                    if valid_cos_softmax is not None:
-                        cos_sem_labels = torch.argmax(valid_cos_softmax,dim=-1) 
-                        cos_sem_scores_softmax = torch.gather(valid_cos_softmax, dim=-1, index=(cos_sem_labels).unsqueeze(-1)).squeeze(-1)
+                    if valid_cos_softmax_lb is not None:
+                        cos_sem_labels = torch.argmax(valid_cos_softmax_lb,dim=-1) 
+                        cos_sem_scores_softmax_lb = torch.gather(valid_cos_softmax_lb, dim=-1, index=(cos_sem_labels).unsqueeze(-1)).squeeze(-1)
                         cos_sem_cls_mask = cos_sem_labels == cind
                         ccs_mask = cos_sem_cls_mask & assigned_gt_cls_mask # correctly classified cosine semantic mask
                         mcs_mask = (cos_sem_cls_mask & (~assigned_gt_cls_mask)) | ((~cos_sem_cls_mask) & assigned_gt_cls_mask) 
@@ -164,12 +172,12 @@ class PredQualityMetrics(Metric):
                         ccs_uc_mask = uc_mask & ccs_mask
                         cls_sem_bg_mask = cos_sem_cls_mask  & bg_mask
 
-                    if cos_scores_softmax is not None: # if we try to use cosine semantic scores based on pooled proto, what are the cos_scores for FG, BG, UC (class-wise)?
-                        cos_scores_pool_bg = (cos_sem_scores_softmax * cls_sem_bg_mask.float()).sum() / cls_sem_bg_mask.float().sum()
+                    if cos_scores_softmax_lb is not None: # if we try to use cosine semantic scores based on pooled proto, what are the cos_scores for FG, BG, UC (class-wise)?
+                        cos_scores_pool_bg = (cos_sem_scores_softmax_lb * cls_sem_bg_mask.float()).sum() / cls_sem_bg_mask.float().sum()
                         classwise_metrics['cos_sem_pool_bg'][cind] = cos_scores_pool_bg
-                        cos_scores_pool_uc = (cos_sem_scores_softmax * ccs_uc_mask.float()).sum() / ccs_uc_mask.float().sum()
+                        cos_scores_pool_uc = (cos_sem_scores_softmax_lb * ccs_uc_mask.float()).sum() / ccs_uc_mask.float().sum()
                         classwise_metrics['cos_sem_pool_uc'][cind] = cos_scores_pool_uc
-                        cos_scores_pool_fg = (cos_sem_scores_softmax * ccs_fg_mask.float()).sum() / ccs_fg_mask.sum()
+                        cos_scores_pool_fg = (cos_sem_scores_softmax_lb * ccs_fg_mask.float()).sum() / ccs_fg_mask.sum()
                         classwise_metrics['cos_sem_pool_fg'][cind] = cos_scores_pool_fg
                         classwise_metrics['accuracy_cos_classifier_fg'][cind] =  ccs_fg_mask.sum()/fg_mask.sum()
                         classwise_metrics['accuracy_cos_classifier_uc'][cind] =  ccs_uc_mask.sum()/uc_mask.sum()
@@ -200,13 +208,14 @@ class PredQualityMetrics(Metric):
                             classwise_metrics['pred_ious_wrt_pl_tp_cos'][cind] = (valid_pred_iou_wrt_pl * tp_mask.float()).sum() / tp_mask.sum()
                             
                             # What are the cosine scores for FN, TP, FP (when cos sem is applied)? 
-                            if cos_scores_softmax is not None:
-                                cos_pool_fg_mc = (cos_sem_scores_softmax * fn_mask.float()).sum() / fn_mask.sum() 
+                            if cos_scores_softmax_lb is not None:
+                                cos_pool_fg_mc = (cos_sem_scores_softmax_lb * fn_mask.float()).sum() / fn_mask.sum() 
                                 classwise_metrics['cos_sem_scores_pool_fn'][cind] = cos_pool_fg_mc
-                                cos_pool_cc_tp = (cos_sem_scores_softmax * tp_mask).sum() / tp_mask.float().sum()
+                                cos_pool_cc_tp = (cos_sem_scores_softmax_lb * tp_mask).sum() / tp_mask.float().sum()
                                 classwise_metrics['cos_sem_scores_pool_tp'][cind] = cos_pool_cc_tp
-                                cos_pool_cc_fp = (cos_sem_scores_softmax * fp_mask).sum() / fp_mask.float().sum()
+                                cos_pool_cc_fp = (cos_sem_scores_softmax_lb * fp_mask).sum() / fp_mask.float().sum()
                                 classwise_metrics['cos_sem_scores_pool_fp'][cind] = cos_pool_cc_fp
+
 
                     # Using clamp with min=1 in the denominator makes the final results zero when there's no FG,
                     # while without clamp it is N/A, which makes more sense.
@@ -232,29 +241,53 @@ class PredQualityMetrics(Metric):
                         cls_pred_weight_fg = (valid_pred_weights * cc_fg_mask.float()).sum() / cc_fg_mask.sum()
                         classwise_metrics['pred_weight_fg'][cind] = cls_pred_weight_fg
 
-                    if valid_cos_car_pool is not None:
-                        cos_scores_car_pool_bg = (valid_cos_car_pool * cls_bg_mask.float()).sum() / cls_bg_mask.float().sum()
-                        classwise_metrics['cos_scores_car_pool_bg'][cind] = cos_scores_car_pool_bg
-                        cos_scores_car_pool_uc = (valid_cos_car_pool * cc_uc_mask.float()).sum() / cc_uc_mask.float().sum()
-                        classwise_metrics['cos_scores_car_pool_uc'][cind] = cos_scores_car_pool_uc
-                        cos_scores_car_pool_fg = (valid_cos_car_pool * cc_fg_mask.float()).sum() / cc_fg_mask.sum()
-                        classwise_metrics['cos_scores_car_pool_fg'][cind] = cos_scores_car_pool_fg
+                    if valid_cos_car_pool_lb is not None:
+                        cos_scores_car_pool_bg = (valid_cos_car_pool_lb * cls_bg_mask.float()).sum() / cls_bg_mask.float().sum()
+                        classwise_metrics['cos_scores_car_pool_bg_lb'][cind] = cos_scores_car_pool_bg
+                        cos_scores_car_pool_uc = (valid_cos_car_pool_lb * cc_uc_mask.float()).sum() / cc_uc_mask.float().sum()
+                        classwise_metrics['cos_scores_car_pool_uc_lb'][cind] = cos_scores_car_pool_uc
+                        cos_scores_car_pool_fg = (valid_cos_car_pool_lb * cc_fg_mask.float()).sum() / cc_fg_mask.sum()
+                        classwise_metrics['cos_scores_car_pool_fg_lb'][cind] = cos_scores_car_pool_fg
                     
-                    if valid_cos_ped_pool is not None:
-                        cos_ped_pool_bg = (valid_cos_ped_pool * cls_bg_mask.float()).sum() / cls_bg_mask.float().sum()
-                        classwise_metrics['cos_scores_ped_pool_bg'][cind] = cos_ped_pool_bg
-                        cos_ped_pool_uc = (valid_cos_ped_pool * cc_uc_mask.float()).sum() / cc_uc_mask.float().sum()
-                        classwise_metrics['cos_scores_ped_pool_uc'][cind] = cos_ped_pool_uc
-                        cos_ped_pool_fg = (valid_cos_ped_pool * cc_fg_mask.float()).sum() / cc_fg_mask.sum()
-                        classwise_metrics['cos_scores_ped_pool_fg'][cind] = cos_ped_pool_fg
+                    if valid_cos_ped_pool_lb is not None:
+                        cos_ped_pool_bg = (valid_cos_ped_pool_lb * cls_bg_mask.float()).sum() / cls_bg_mask.float().sum()
+                        classwise_metrics['cos_scores_ped_pool_bg_lb'][cind] = cos_ped_pool_bg
+                        cos_ped_pool_uc = (valid_cos_ped_pool_lb * cc_uc_mask.float()).sum() / cc_uc_mask.float().sum()
+                        classwise_metrics['cos_scores_ped_pool_uc_lb'][cind] = cos_ped_pool_uc
+                        cos_ped_pool_fg = (valid_cos_ped_pool_lb * cc_fg_mask.float()).sum() / cc_fg_mask.sum()
+                        classwise_metrics['cos_scores_ped_pool_fg_lb'][cind] = cos_ped_pool_fg
                     
-                    if valid_cos_cyc_pool is not None:
-                        cos_cyc_pool_bg = (valid_cos_cyc_pool * cls_bg_mask.float()).sum() / cls_bg_mask.float().sum()
-                        classwise_metrics['cos_scores_cyc_pool_bg'][cind] = cos_cyc_pool_bg
-                        cos_cyc_pool_uc = (valid_cos_cyc_pool * cc_uc_mask.float()).sum() / cc_uc_mask.float().sum()
-                        classwise_metrics['cos_scores_cyc_pool_uc'][cind] = cos_cyc_pool_uc
-                        cos_cyc_pool_fg = (valid_cos_cyc_pool * cc_fg_mask.float()).sum() / cc_fg_mask.sum()
-                        classwise_metrics['cos_scores_cyc_pool_fg'][cind] = cos_cyc_pool_fg
+                    if valid_cos_cyc_pool_lb is not None:
+                        cos_cyc_pool_bg = (valid_cos_cyc_pool_lb * cls_bg_mask.float()).sum() / cls_bg_mask.float().sum()
+                        classwise_metrics['cos_scores_cyc_pool_bg_lb'][cind] = cos_cyc_pool_bg
+                        cos_cyc_pool_uc = (valid_cos_cyc_pool_lb * cc_uc_mask.float()).sum() / cc_uc_mask.float().sum()
+                        classwise_metrics['cos_scores_cyc_pool_uc_lb'][cind] = cos_cyc_pool_uc
+                        cos_cyc_pool_fg = (valid_cos_cyc_pool_lb * cc_fg_mask.float()).sum() / cc_fg_mask.sum()
+                        classwise_metrics['cos_scores_cyc_pool_fg_lb'][cind] = cos_cyc_pool_fg
+
+                    if valid_cos_car_pool_ulb is not None:
+                        cos_scores_car_pool_bg = (valid_cos_car_pool_ulb * cls_bg_mask.float()).sum() / cls_bg_mask.float().sum()
+                        classwise_metrics['cos_scores_car_pool_bg_ulb'][cind] = cos_scores_car_pool_bg
+                        cos_scores_car_pool_uc = (valid_cos_car_pool_ulb * cc_uc_mask.float()).sum() / cc_uc_mask.float().sum()
+                        classwise_metrics['cos_scores_car_pool_uc_ulb'][cind] = cos_scores_car_pool_uc
+                        cos_scores_car_pool_fg = (valid_cos_car_pool_ulb * cc_fg_mask.float()).sum() / cc_fg_mask.sum()
+                        classwise_metrics['cos_scores_car_pool_fg_ulb'][cind] = cos_scores_car_pool_fg
+                    
+                    if valid_cos_ped_pool_ulb is not None:
+                        cos_ped_pool_bg = (valid_cos_ped_pool_ulb * cls_bg_mask.float()).sum() / cls_bg_mask.float().sum()
+                        classwise_metrics['cos_scores_ped_pool_bg_ulb'][cind] = cos_ped_pool_bg
+                        cos_ped_pool_uc = (valid_cos_ped_pool_ulb * cc_uc_mask.float()).sum() / cc_uc_mask.float().sum()
+                        classwise_metrics['cos_scores_ped_pool_uc_ulb'][cind] = cos_ped_pool_uc
+                        cos_ped_pool_fg = (valid_cos_ped_pool_ulb * cc_fg_mask.float()).sum() / cc_fg_mask.sum()
+                        classwise_metrics['cos_scores_ped_pool_fg_ulb'][cind] = cos_ped_pool_fg
+                    
+                    if valid_cos_cyc_pool_ulb is not None:
+                        cos_cyc_pool_bg = (valid_cos_cyc_pool_ulb * cls_bg_mask.float()).sum() / cls_bg_mask.float().sum()
+                        classwise_metrics['cos_scores_cyc_pool_bg_ulb'][cind] = cos_cyc_pool_bg
+                        cos_cyc_pool_uc = (valid_cos_cyc_pool_ulb * cc_uc_mask.float()).sum() / cc_uc_mask.float().sum()
+                        classwise_metrics['cos_scores_cyc_pool_uc_ulb'][cind] = cos_cyc_pool_uc
+                        cos_cyc_pool_fg = (valid_cos_cyc_pool_ulb * cc_fg_mask.float()).sum() / cc_fg_mask.sum()
+                        classwise_metrics['cos_scores_cyc_pool_fg_ulb'][cind] = cos_cyc_pool_fg
                                        
                     if valid_pred_iou_wrt_pl is not None:
                         fg_threshs = self.config.ROI_HEAD.TARGET_CONFIG.UNLABELED_CLS_FG_THRESH
@@ -300,26 +333,26 @@ class PredQualityMetrics(Metric):
                             cls_pred_weight_cc_fp = (valid_pred_weights * fp_mask).sum() / fp_mask.float().sum()
                             classwise_metrics['pred_weight_fp'][cind] = cls_pred_weight_cc_fp
 
-                        if valid_cos_car_pool is not None:
-                            cos_car_pool_fg_mc = (valid_cos_car_pool * fn_mask.float()).sum() / fn_mask.sum()
+                        if valid_cos_car_pool_lb is not None:
+                            cos_car_pool_fg_mc = (valid_cos_car_pool_lb * fn_mask.float()).sum() / fn_mask.sum()
                             classwise_metrics['cos_scores_car_pool_fn'][cind] = cos_car_pool_fg_mc
-                            cos_car_pool_cc_tp = (valid_cos_car_pool * tp_mask).sum() / tp_mask.float().sum()
+                            cos_car_pool_cc_tp = (valid_cos_car_pool_lb * tp_mask).sum() / tp_mask.float().sum()
                             classwise_metrics['cos_scores_car_pool_tp'][cind] = cos_car_pool_cc_tp
-                            cos_car_pool_cc_fp = (valid_cos_car_pool * fp_mask).sum() / fp_mask.float().sum()
+                            cos_car_pool_cc_fp = (valid_cos_car_pool_lb * fp_mask).sum() / fp_mask.float().sum()
                             classwise_metrics['cos_scores_car_pool_fp'][cind] = cos_car_pool_cc_fp
-                        if valid_cos_ped_pool is not None:
-                            cos_ped_pool_fg_mc = (valid_cos_ped_pool * fn_mask.float()).sum() / fn_mask.sum()
+                        if valid_cos_ped_pool_lb is not None:
+                            cos_ped_pool_fg_mc = (valid_cos_ped_pool_lb * fn_mask.float()).sum() / fn_mask.sum()
                             classwise_metrics['cos_scores_ped_pool_fn'][cind] = cos_ped_pool_fg_mc
-                            cos_ped_pool_cc_tp = (valid_cos_ped_pool * tp_mask).sum() / tp_mask.float().sum()
+                            cos_ped_pool_cc_tp = (valid_cos_ped_pool_lb * tp_mask).sum() / tp_mask.float().sum()
                             classwise_metrics['cos_scores_ped_pool_tp'][cind] = cos_ped_pool_cc_tp
-                            cos_ped_pool_cc_fp = (valid_cos_ped_pool * fp_mask).sum() / fp_mask.float().sum()
+                            cos_ped_pool_cc_fp = (valid_cos_ped_pool_lb * fp_mask).sum() / fp_mask.float().sum()
                             classwise_metrics['cos_scores_ped_pool_fp'][cind] = cos_ped_pool_cc_fp
-                        if valid_cos_cyc_pool is not None:
-                            cos_cyc_pool_fg_mc = (valid_cos_cyc_pool * fn_mask.float()).sum() / fn_mask.sum()
+                        if valid_cos_cyc_pool_lb is not None:
+                            cos_cyc_pool_fg_mc = (valid_cos_cyc_pool_lb * fn_mask.float()).sum() / fn_mask.sum()
                             classwise_metrics['cos_scores_cyc_pool_fn'][cind] = cos_cyc_pool_fg_mc
-                            cos_cyc_pool_cc_tp = (valid_cos_cyc_pool * tp_mask).sum() / tp_mask.float().sum()
+                            cos_cyc_pool_cc_tp = (valid_cos_cyc_pool_lb * tp_mask).sum() / tp_mask.float().sum()
                             classwise_metrics['cos_scores_cyc_pool_tp'][cind] = cos_cyc_pool_cc_tp
-                            cos_cyc_pool_cc_fp = (valid_cos_cyc_pool * fp_mask).sum() / fp_mask.float().sum()
+                            cos_cyc_pool_cc_fp = (valid_cos_cyc_pool_lb * fp_mask).sum() / fp_mask.float().sum()
                             classwise_metrics['cos_scores_cyc_pool_fp'][cind] = cos_cyc_pool_cc_fp
                             
                         # ------ Foreground misclassification metrics for IoUs lying in UC region (wrt PLs) ------

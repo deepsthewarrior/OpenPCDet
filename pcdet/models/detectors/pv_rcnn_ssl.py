@@ -174,8 +174,7 @@ class PVRCNN_SSL(Detector3DTemplate):
         self.unlabeled_prototype = self.unlabeled_template.base_proto #base prototype same as labeled #TODO: ignore base prototype for ulb if needed
         vals_to_store = ['iou_roi_pl', 'iou_roi_gt', 'pred_scores', 'teacher_pred_scores', 
                         'weights', 'roi_scores', 'pcv_scores', 'num_points_in_roi', 'class_labels',
-                        'iteration','cos_scores_pool_raw','cos_scores_sh_raw','cos_scores_pool_norm',
-                        'cos_scores_sh_norm']
+                        'iteration','cos_scores_pool_raw','cos_scores_sh_raw','cos_scores_pool_norm_lb']
         self.val_dict = {val: [] for val in vals_to_store}
         self.classes = ['Car','Ped','Cyc']
         self.features_to_update_lb = []
@@ -203,6 +202,7 @@ class PVRCNN_SSL(Detector3DTemplate):
                 else:
                     batch_dict_ema[k] = batch_dict[k]
             batch_dict_ema['labeled_prototype'] = self.labeled_prototype
+            batch_dict_ema['unlabeled_prototype'] = self.unlabeled_prototype
             
             gt_boxes_check = torch.any(batch_dict['gt_boxes']!=0,dim=-1)
             instance_idx_check = batch_dict['instance_idx']!=0
@@ -279,18 +279,21 @@ class PVRCNN_SSL(Detector3DTemplate):
                 # PL metrics before filtering
                 self.update_metrics(batch_dict, pred_dicts_ens, batch_dict_ema,unlabeled_inds, labeled_inds)
 
-            # calculate features of pre-filtered_pl 
+
+            pseudo_boxes, pseudo_scores, pseudo_sem_scores, pseudo_boxes_var, pseudo_scores_var = \
+                self._filter_pseudo_labels(pred_dicts_ens, unlabeled_inds)
+
+            self._fill_with_pseudo_labels(batch_dict, pseudo_boxes, unlabeled_inds, labeled_inds)
+            # calculate features of post-filtered_pl 
             with torch.no_grad(): # creating a new dict as a safe practice. TODO: check if this is needed or send a copy of batch_dict_ema again
                     batch_dict_pl = {}
-                    ulb_roi= []
+                    pl = []
                     for uind in unlabeled_inds:
-                        selected_mask = pred_dicts_ens[uind]['selected']
-                        batch_dict_pl['gt_boxes'] = batch_dict_ema['gt_boxes']
-                        roi_bbox = (batch_dict_ema['rois'][uind])[selected_mask]
-                        ulb_roi.append(torch.cat(([roi_bbox,pred_dicts_ens[uind]['pred_labels'].unsqueeze(1)]),dim=1))
+                        pl_bbox = (batch_dict['gt_boxes'][uind]) # Aug is yet to happen. no aug here
+                        pl.append(pl_bbox)
                     # selected_rois = torch.cat(ulb_roi,dim=0)
                     batch_dict_pl['cal_gt_proto'] = True
-                    batch_dict_pl['gt_boxes'] = batch_dict_ema['gt_boxes']
+                    batch_dict_pl['gt_boxes'] = batch_dict_ema['gt_boxes'] #no aug gt_boxes, to preserve labeled gt_boxes
                     batch_dict_pl['unlabeled_inds'] = batch_dict_ema['unlabeled_inds']
                     batch_dict_pl['rois'] = batch_dict_ema['rois'].clone().detach()
                     batch_dict_pl['roi_scores'] = batch_dict_ema['roi_scores'].clone().detach()
@@ -300,7 +303,7 @@ class PVRCNN_SSL(Detector3DTemplate):
                     batch_dict_pl['point_features'] = batch_dict_ema['point_features'].clone().detach()
                     batch_dict_pl['point_coords'] = batch_dict_ema['point_coords'].clone().detach()
                     batch_dict_pl['point_cls_scores'] = batch_dict_ema['point_cls_scores'].clone().detach()
-            self._fill_with_pseudo_labels(batch_dict_pl, ulb_roi, unlabeled_inds, labeled_inds)                    
+            self._fill_with_pseudo_labels(batch_dict_pl, pl, unlabeled_inds, labeled_inds)                    
             self.pv_rcnn_ema.roi_head.forward(batch_dict_pl,
                                                       disable_gt_roi_when_pseudo_labeling=True)
             for ind in labeled_inds:
@@ -312,7 +315,7 @@ class PVRCNN_SSL(Detector3DTemplate):
                 cur_pooled_feat = (batch_dict_pl['pooled_features_gt'][ind])[:k + 1]
                 self.features_to_update_lb.append(cur_pooled_feat.view(cur_pooled_feat.shape[0], -1)) # N x 27648
                 self.labels_to_update_lb.append(cur_gt_boxes[:, -1])
-            self.labeled_prototype = self.labeled_template.update(self.features_to_update_lb,self.labels_to_update_lb)
+            self.labeled_prototype = self.labeled_template.update(self.features_to_update_lb,self.labels_to_update_lb,iter=batch_dict['cur_iteration'])
             self.features_to_update_lb = []
             self.labels_to_update_lb = []
 
@@ -323,17 +326,14 @@ class PVRCNN_SSL(Detector3DTemplate):
                     k -= 1
                 cur_gt_boxes = cur_gt_boxes[:k + 1]
                 cur_pooled_feat = (batch_dict_pl['pooled_features_gt'][uind])[:k + 1]
-                if len(self.features_to_update_ulb):
+                if len(cur_gt_boxes) > 0:
                     self.features_to_update_ulb.append(cur_pooled_feat.view(cur_pooled_feat.shape[0], -1)) # N x 27648
                     self.labels_to_update_ulb.append(cur_gt_boxes[:, -1])
-            self.unlabeled_prototype = self.unlabeled_template.update(self.features_to_update_ulb,self.labels_to_update_ulb)
+            self.unlabeled_prototype = self.unlabeled_template.update(self.features_to_update_ulb,self.labels_to_update_ulb,iter=batch_dict['cur_iteration'])
             self.features_to_update_ulb = []
             self.labels_to_update_ulb = []
 
-            pseudo_boxes, pseudo_scores, pseudo_sem_scores, pseudo_boxes_var, pseudo_scores_var = \
-                self._filter_pseudo_labels(pred_dicts_ens, unlabeled_inds)
 
-            self._fill_with_pseudo_labels(batch_dict, pseudo_boxes, unlabeled_inds, labeled_inds)
 
             # apply student's augs on teacher's pseudo-labels (filtered) only (not points)
             batch_dict = self.apply_augmentation(batch_dict, batch_dict, unlabeled_inds, key='gt_boxes')
@@ -550,8 +550,8 @@ class PVRCNN_SSL(Detector3DTemplate):
                         cur_iteration = torch.ones_like(preds_iou_max) * (batch_dict['cur_iteration'])
                         self.val_dict['iteration'].extend(cur_iteration.tolist())
 
-                        cur_cos_scores_pool_norm = self.pv_rcnn.roi_head.forward_ret_dict['cos_scores_pool_norm'][cur_unlabeled_ind]
-                        self.val_dict['cos_scores_pool_norm'].extend(cur_cos_scores_pool_norm.tolist())
+                        cur_cos_scores_pool_norm = self.pv_rcnn.roi_head.forward_ret_dict['cos_scores_pool_norm_lb'][cur_unlabeled_ind]
+                        self.val_dict['cos_scores_pool_norm_lb'].extend(cur_cos_scores_pool_norm.tolist())
 
 
                 # replace old pickle data (if exists) with updated one 
@@ -612,37 +612,73 @@ class PVRCNN_SSL(Detector3DTemplate):
 
             # apply student's augs on teacher's pseudo-boxes (w/o filtered)
             batch_dict = self.apply_augmentation(input_dict, input_dict, unlabeled_inds, key='pseudo_boxes_prefilter')
-            cos_scores_pool_softmax = torch.zeros(batch_dict['pseudo_boxes_prefilter'].shape[0],batch_dict['pseudo_boxes_prefilter'].shape[1],3).to(batch_dict['pseudo_boxes_prefilter'].device)
-            cos_scores_car_pool = torch.zeros(batch_dict['pseudo_boxes_prefilter'].shape[0],batch_dict['pseudo_boxes_prefilter'].shape[1]).to(batch_dict['pseudo_boxes_prefilter'].device)
-            cos_scores_cyc_pool = torch.zeros(batch_dict['pseudo_boxes_prefilter'].shape[0],batch_dict['pseudo_boxes_prefilter'].shape[1]).to(batch_dict['pseudo_boxes_prefilter'].device)
-            cos_scores_ped_pool = torch.zeros(batch_dict['pseudo_boxes_prefilter'].shape[0],batch_dict['pseudo_boxes_prefilter'].shape[1]).to(batch_dict['gt_boxes'].device)
+            cos_scores_pool_softmax_lb = torch.zeros(batch_dict['pseudo_boxes_prefilter'].shape[0],batch_dict['pseudo_boxes_prefilter'].shape[1],3).to(batch_dict['pseudo_boxes_prefilter'].device)
+            cos_scores_car_pool_lb = torch.zeros(batch_dict['pseudo_boxes_prefilter'].shape[0],batch_dict['pseudo_boxes_prefilter'].shape[1]).to(batch_dict['pseudo_boxes_prefilter'].device)
+            cos_scores_cyc_pool_lb = torch.zeros(batch_dict['pseudo_boxes_prefilter'].shape[0],batch_dict['pseudo_boxes_prefilter'].shape[1]).to(batch_dict['pseudo_boxes_prefilter'].device)
+            cos_scores_ped_pool_lb = torch.zeros(batch_dict['pseudo_boxes_prefilter'].shape[0],batch_dict['pseudo_boxes_prefilter'].shape[1]).to(batch_dict['gt_boxes'].device)
+            if 'cos_scores_car_pool_ulb' in batch_dict_ema.keys():
+                cos_scores_pool_softmax_ulb = torch.zeros(batch_dict['pseudo_boxes_prefilter'].shape[0],batch_dict['pseudo_boxes_prefilter'].shape[1],3).to(batch_dict['pseudo_boxes_prefilter'].device)
+                cos_scores_car_pool_ulb = torch.zeros(batch_dict['pseudo_boxes_prefilter'].shape[0],batch_dict['pseudo_boxes_prefilter'].shape[1]).to(batch_dict['pseudo_boxes_prefilter'].device)
+                cos_scores_cyc_pool_ulb = torch.zeros(batch_dict['pseudo_boxes_prefilter'].shape[0],batch_dict['pseudo_boxes_prefilter'].shape[1]).to(batch_dict['pseudo_boxes_prefilter'].device)
+                cos_scores_ped_pool_ulb = torch.zeros(batch_dict['pseudo_boxes_prefilter'].shape[0],batch_dict['pseudo_boxes_prefilter'].shape[1]).to(batch_dict['gt_boxes'].device)
+            else:
+                cos_scores_pool_softmax_ulb = None
+                cos_scores_car_pool_ulb = None
+                cos_scores_cyc_pool_ulb = None
+                cos_scores_ped_pool_ulb = None
 
             for uind in unlabeled_inds:
                 selected = pred_dict[uind]['selected']
-                cos_scores_softmax = (batch_dict_ema['cos_scores_pool_norm'][uind])[selected]
-                car_proto_pool_scores = (batch_dict_ema['cos_scores_car_pool'][uind])[selected]
-                ped_proto_pool_scores = (batch_dict_ema['cos_scores_ped_pool'][uind])[selected]
-                cyc_proto_pool_scores = (batch_dict_ema['cos_scores_cyc_pool'][uind])[selected]
+                cos_scores_softmax_lb = (batch_dict_ema['cos_scores_pool_norm_lb'][uind])[selected]
+                car_proto_pool_scores_lb = (batch_dict_ema['cos_scores_car_pool_lb'][uind])[selected]
+                ped_proto_pool_scores_lb = (batch_dict_ema['cos_scores_ped_pool_lb'][uind])[selected]
+                cyc_proto_pool_scores_lb = (batch_dict_ema['cos_scores_cyc_pool_lb'][uind])[selected]
 
-                diff = batch_dict['pseudo_boxes_prefilter'].shape[1] - cos_scores_softmax.shape[0] 
-                cos_scores_pool_softmax[uind] = torch.cat([cos_scores_softmax, torch.zeros(diff,3).to(selected.device)],dim=0)
-                cos_scores_car_pool[uind] = torch.cat([car_proto_pool_scores, torch.zeros(diff).to(selected.device)],dim=0)
-                cos_scores_cyc_pool[uind] = torch.cat([ped_proto_pool_scores, torch.zeros(diff).to(selected.device)],dim=0)
-                cos_scores_ped_pool[uind] = torch.cat([cyc_proto_pool_scores, torch.zeros(diff).to(selected.device)],dim=0)
-                assert torch.all((batch_dict['pseudo_boxes_prefilter'][uind].sum(-1)).nonzero() == cos_scores_car_pool[uind].nonzero()), "pred boxes and cos_scores_car_pool are not aligned"
-            
+                diff = batch_dict['pseudo_boxes_prefilter'].shape[1] - cos_scores_softmax_lb.shape[0] 
+                cos_scores_pool_softmax_lb[uind] = torch.cat([cos_scores_softmax_lb, torch.zeros(diff,3).to(selected.device)],dim=0)
+                cos_scores_car_pool_lb[uind] = torch.cat([car_proto_pool_scores_lb, torch.zeros(diff).to(selected.device)],dim=0)
+                cos_scores_cyc_pool_lb[uind] = torch.cat([ped_proto_pool_scores_lb, torch.zeros(diff).to(selected.device)],dim=0)
+                cos_scores_ped_pool_lb[uind] = torch.cat([cyc_proto_pool_scores_lb, torch.zeros(diff).to(selected.device)],dim=0)
+                assert torch.all((batch_dict['pseudo_boxes_prefilter'][uind].sum(-1)).nonzero() == cos_scores_car_pool_lb[uind].nonzero()), "pred boxes and cos_scores_car_pool are not aligned"
+                if 'cos_scores_car_pool_ulb' in batch_dict_ema.keys():                
+                    cos_scores_car_pool_ulb = cos_scores_car_pool_lb.clone()
+                    cos_scores_cyc_pool_ulb = cos_scores_cyc_pool_lb.clone()
+                    cos_scores_ped_pool_ulb = cos_scores_ped_pool_lb.clone()
+                if 'cos_scores_car_pool_ulb' in batch_dict_ema.keys():
+                    selected = pred_dict[uind]['selected']
+                    cos_scores_softmax_ulb = (batch_dict_ema['cos_scores_pool_norm_ulb'][uind])[selected]
+                    car_proto_pool_scores_ulb = (batch_dict_ema['cos_scores_car_pool_ulb'][uind])[selected]
+                    ped_proto_pool_scores_ulb = (batch_dict_ema['cos_scores_ped_pool_ulb'][uind])[selected]
+                    cyc_proto_pool_scores_ulb = (batch_dict_ema['cos_scores_cyc_pool_ulb'][uind])[selected]
+
+                    diff = batch_dict['pseudo_boxes_prefilter'].shape[1] - cos_scores_softmax_ulb.shape[0] 
+                    cos_scores_pool_softmax_ulb[uind] = torch.cat([cos_scores_softmax_ulb, torch.zeros(diff,3).to(selected.device)],dim=0)
+                    cos_scores_car_pool_ulb[uind] = torch.cat([car_proto_pool_scores_ulb, torch.zeros(diff).to(selected.device)],dim=0)
+                    cos_scores_cyc_pool_ulb[uind] = torch.cat([ped_proto_pool_scores_ulb, torch.zeros(diff).to(selected.device)],dim=0)
+                    cos_scores_ped_pool_ulb[uind] = torch.cat([cyc_proto_pool_scores_ulb, torch.zeros(diff).to(selected.device)],dim=0)
+                    assert torch.all((batch_dict['pseudo_boxes_prefilter'][uind].sum(-1)).nonzero() == cos_scores_car_pool_ulb[uind].nonzero()), "pred boxes and cos_scores_car_pool are not aligned"
+
             tag = f'pl_gt_metrics_before_filtering'
             metrics = self.metric_registry.get(tag)
 
-            cos_sem_pool_softmax = [cos_scores_pool_softmax[uind] for uind in unlabeled_inds]
-            cos_sem_car_pool = [cos_scores_car_pool[uind] for uind in unlabeled_inds]
-            cos_sem_ped_pool = [cos_scores_ped_pool[uind] for uind in unlabeled_inds]
-            cos_sem_cyc_pool = [cos_scores_cyc_pool[uind] for uind in unlabeled_inds]
+            cos_sem_pool_softmax_lb = [cos_scores_pool_softmax_lb[uind] for uind in unlabeled_inds]
+            cos_sem_car_pool_lb = [cos_scores_car_pool_lb[uind] for uind in unlabeled_inds]
+            cos_sem_ped_pool_lb = [cos_scores_ped_pool_lb[uind] for uind in unlabeled_inds]
+            cos_sem_cyc_pool_lb = [cos_scores_cyc_pool_lb[uind] for uind in unlabeled_inds]
+            if cos_scores_pool_softmax_ulb is not None:
+                cos_sem_pool_softmax_ulb = [cos_scores_pool_softmax_ulb[uind] for uind in unlabeled_inds]
+                cos_sem_car_pool_ulb = [cos_scores_car_pool_ulb[uind] for uind in unlabeled_inds]
+                cos_sem_ped_pool_ulb = [cos_scores_ped_pool_ulb[uind] for uind in unlabeled_inds]
+                cos_sem_cyc_pool_ulb = [cos_scores_cyc_pool_ulb[uind] for uind in unlabeled_inds]
+            else:
+                cos_sem_pool_softmax_ulb,cos_sem_car_pool_ulb,cos_sem_ped_pool_ulb,cos_sem_cyc_pool_ulb = None,None,None,None
+
             preds_prefilter = [batch_dict['pseudo_boxes_prefilter'][uind] for uind in unlabeled_inds]
             gts_prefilter = [batch_dict['gt_boxes'][uind] for uind in unlabeled_inds]
             metric_inputs = {'preds': preds_prefilter, 'pred_scores': pseudo_scores, 'roi_scores': pseudo_sem_scores,
-                             'ground_truths': gts_prefilter,'cos_scores_car_pool':cos_sem_car_pool,'cos_scores_ped_pool':cos_sem_ped_pool,
-                             'cos_scores_cyc_pool':cos_sem_cyc_pool,'cos_scores_softmax':cos_sem_pool_softmax}
+                             'ground_truths': gts_prefilter,'cos_scores_car_pool_lb':cos_sem_car_pool_lb,'cos_scores_ped_pool_lb':cos_sem_ped_pool_lb,
+                             'cos_scores_cyc_pool_lb':cos_sem_cyc_pool_lb,'cos_scores_softmax_lb':cos_sem_pool_softmax_lb,'cos_scores_car_pool_ulb':cos_sem_car_pool_ulb,'cos_scores_ped_pool_ulb':cos_sem_ped_pool_ulb,
+                             'cos_scores_cyc_pool_ulb':cos_sem_cyc_pool_ulb,'cos_scores_softmax_ulb':cos_sem_pool_softmax_ulb}
             metrics.update(**metric_inputs)
             batch_dict.pop('pseudo_boxes_prefilter')
 
