@@ -287,10 +287,6 @@ class PVRCNN_SSL(Detector3DTemplate):
             # calculate features of post-filtered_pl 
             with torch.no_grad(): # creating a new dict as a safe practice. TODO: check if this is needed or send a copy of batch_dict_ema again
                     batch_dict_pl = {}
-                    pl = []
-                    for uind in unlabeled_inds:
-                        pl_bbox = (batch_dict['gt_boxes'][uind]) # Aug is yet to happen. no aug here
-                        pl.append(pl_bbox)
                     # selected_rois = torch.cat(ulb_roi,dim=0)
                     batch_dict_pl['cal_gt_proto'] = True
                     batch_dict_pl['gt_boxes'] = batch_dict_ema['gt_boxes'] #no aug gt_boxes, to preserve labeled gt_boxes
@@ -303,7 +299,7 @@ class PVRCNN_SSL(Detector3DTemplate):
                     batch_dict_pl['point_features'] = batch_dict_ema['point_features'].clone().detach()
                     batch_dict_pl['point_coords'] = batch_dict_ema['point_coords'].clone().detach()
                     batch_dict_pl['point_cls_scores'] = batch_dict_ema['point_cls_scores'].clone().detach()
-            self._fill_with_pseudo_labels(batch_dict_pl, pl, unlabeled_inds, labeled_inds)                    
+            self._fill_with_pseudo_labels(batch_dict_pl, pseudo_boxes, unlabeled_inds, labeled_inds)                    
             self.pv_rcnn_ema.roi_head.forward(batch_dict_pl,
                                                       disable_gt_roi_when_pseudo_labeling=True)
             for ind in labeled_inds:

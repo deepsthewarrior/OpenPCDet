@@ -51,10 +51,12 @@ class Prototype(object):
                         self.proto[cls] = (self.momentum*self.proto[cls]) + ((1-self.momentum)*cls_features_mean)
                     elif self.tag == "unlabeled_prototype" and iter >= 20 and self.proto is not None: # MCL net implementation for ulb proto
                         self.proto[cls] = (self.momentum*self.proto[cls]) + ((1-self.momentum)*cls_features_mean)
+                        assert self.proto.shape[0] == 3, "proto should be of shape 3,27K"
                     else:
                         self.cur_features.append(cls_features_mean)
                         if cls == 2: # stack to tensor after cyc
-                            self.proto = torch.stack(self.cur_features).to(gathered_labels.device)                 
+                            self.proto = torch.stack(self.cur_features).to(gathered_labels.device)
+                            assert self.proto.shape[0] == 3, "proto should be of shape 3,27K"                 
 
             # Reset the lists         
             self.features = []
