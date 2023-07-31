@@ -258,7 +258,7 @@ class Detector3DTemplate(nn.Module):
                     label_preds = label_preds + 1
                 shared_features = batch_dict['shared_features'][index]
                 # reg_inter = batch_dict['rcnn_reg_interim'][index]
-                cls_inter = batch_dict['rcnn_cls_interim'][index]
+                # cls_inter = batch_dict['rcnn_cls_interim'][index]
                 pooled_features = batch_dict['pooled_features'][index]
                 
                 # Should be True to preserve the order of roi's passed from the student
@@ -297,7 +297,7 @@ class Detector3DTemplate(nn.Module):
                 final_scores = selected_scores
                 final_labels = label_preds[selected]
                 final_boxes = box_preds[selected]
-                final_cls_inter = cls_inter[selected]
+                # final_cls_inter = cls_inter[selected]
                 final_pooled_features = pooled_features[selected]
                 # final_reg_inter = reg_inter[selected]
                 final_shared = shared_features[selected]
@@ -323,7 +323,7 @@ class Detector3DTemplate(nn.Module):
                 'pred_labels': final_labels,
                 'shared_features': shared_features,
                 # 'rcnn_reg_interim': reg_inter,
-                'rcnn_cls_interim': cls_inter,
+                # 'rcnn_cls_interim': cls_inter,
                 'pooled_features': pooled_features,
                 'selected' : selected,
                 'iou' : max_overlaps,
