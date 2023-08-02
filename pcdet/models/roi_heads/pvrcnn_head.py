@@ -4,6 +4,7 @@ from ...ops.pointnet2.pointnet2_stack import pointnet2_modules as pointnet2_stac
 from ...utils import common_utils
 from .roi_head_template import RoIHeadTemplate
 from ...ops.roiaware_pool3d import roiaware_pool3d_utils
+import torch.nn.functional as F
 
 class PVRCNNHead(RoIHeadTemplate):
     def __init__(self, input_channels, model_cfg, num_class=1,
@@ -30,25 +31,9 @@ class PVRCNNHead(RoIHeadTemplate):
 
             if k != self.model_cfg.SHARED_FC.__len__() - 1 and self.model_cfg.DP_RATIO > 0:
                 shared_fc_list.append(nn.Dropout(self.model_cfg.DP_RATIO))
-
+        self.protos = None
         self.shared_fc_layer = nn.Sequential(*shared_fc_list)
-
-        self.cls_layers_1 = self.make_fc_layers_1(
-            input_channels=pre_channel, output_channels=self.num_class, fc_list=self.model_cfg.CLS_FC
-        )
-        self.cls_layers_2 = self.make_fc_layers_2(
-            input_channels=pre_channel, output_channels=self.num_class, fc_list=self.model_cfg.CLS_FC
-        )
-        # self.reg_layers_1 = self.make_half_fc_layers(
-        #     input_channels=pre_channel,
-        #     output_channels=self.box_coder.code_size * self.num_class,
-        #     fc_list=self.model_cfg.REG_FC
-        # )
-        # self.reg_layers_2 = self.make_final_fc_layers(
-        #     input_channels=pre_channel,
-        #     output_channels=self.box_coder.code_size * self.num_class,
-        #     fc_list=self.model_cfg.REG_FC
-        # )
+        self.projector_fc_layer = nn.Sequential(*shared_fc_list)
         self.cls_layers = self.make_fc_layers(
             input_channels=pre_channel, output_channels=self.num_class, fc_list=self.model_cfg.CLS_FC
         )
@@ -181,6 +166,7 @@ class PVRCNNHead(RoIHeadTemplate):
             pooled_features_gt= pooled_features_gt.permute(0, 2, 1).\
                 contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxNum_GT, C, 6, 6, 6)
             shared_features_gt = self.shared_fc_layer(pooled_features_gt.view(batch_size_rcnn, -1, 1))
+            projected_features_gt = self.projector_fc_layer(pooled_features_gt.view(batch_size_rcnn, -1, 1))
             
                             
         # RoI aware pooling
@@ -190,24 +176,15 @@ class PVRCNNHead(RoIHeadTemplate):
         batch_size_rcnn = pooled_features.shape[0] 
         pooled_features = pooled_features.permute(0, 2, 1).\
             contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxN, C, 6, 6, 6)
-
-        shared_features = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
+        pooled_features_permute = pooled_features.view(batch_size_rcnn, -1, 1)
+        shared_features = self.shared_fc_layer(pooled_features_permute)
+        projected_features = self.projector_fc_layer(pooled_features_permute)
         rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
-        # rcnn_cls_interim = self.cls_layers[:-1](shared_features)
-        # rcnn_cls = self.cls_layers[-1](rcnn_cls_interim).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
         rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)
-        
-        # x = pooled_features.view(batch_size_rcnn, -1, 1).clone().detach()
-        # shared_features = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
-        # rcnn_cls_interim = self.cls_layers_1(shared_features)  # (B, 1 or 2)
-        # rcnn_cls = self.cls_layers_2(rcnn_cls_interim).transpose(1, 2).contiguous().squeeze(dim=1)
-        # rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)
 
-        # rcnn_reg_interim = self.reg_layers_1(shared_features)
-        # rcnn_reg = self.reg_layers_2(rcnn_reg_interim).transpose(1, 2).contiguous().squeeze(dim=1)
-        # rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
-        # rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)
-
+        if self.protos is not None:
+            cos_sim = F.normalize(projected_features.permute(0,2,1).squeeze(1)) @ F.normalize(self.protos).t()
+            targets_dict['cos_sim'] = F.softmax(cos_sim,dim=1)
         if not self.training or self.predict_boxes_when_training:
             batch_cls_preds, batch_box_preds = self.generate_predicted_boxes(
                 batch_size=batch_dict['batch_size'], rois=batch_dict['rois'], cls_preds=rcnn_cls, box_preds=rcnn_reg
@@ -218,10 +195,12 @@ class PVRCNNHead(RoIHeadTemplate):
             batch_dict['cls_preds_normalized'] = False
             batch_dict['shared_features'] = shared_features.view(batch_box_preds.shape[0],-1,shared_features.shape[1])
             batch_dict['shared_features_gt'] = shared_features_gt.view(batch_box_preds.shape[0],-1,shared_features_gt.shape[1])
+            batch_dict['projected_features_gt'] = projected_features_gt.view(batch_box_preds.shape[0],-1,projected_features_gt.shape[1])
             batch_dict['pooled_features_gt'] = pooled_features_gt.view(batch_box_preds.shape[0],-1,128,6,6,6)
             batch_dict['pooled_points_gt'] = pooled_points_gt.view(batch_box_preds.shape[0],-1,3,6,6,6)
             # batch_dict['rcnn_cls_interim'] = rcnn_cls_interim.view(batch_box_preds.shape[0],-1,rcnn_cls_interim.shape[1])
             batch_dict['pooled_features'] = pooled_features.view(batch_box_preds.shape[0],-1,128,6,6,6)
+            batch_dict['projected_features'] = projected_features.view(batch_box_preds.shape[0],-1,shared_features.shape[1])
             # batch_dict['rcnn_reg_interim'] = rcnn_reg_interim.view(batch_box_preds.shape[0],-1,rcnn_reg_interim.shape[1])
             # Temporarily add infos to targets_dict for metrics
             targets_dict['batch_box_preds'] = batch_box_preds
@@ -229,7 +208,6 @@ class PVRCNNHead(RoIHeadTemplate):
         if self.training or self.print_loss_when_eval:
             targets_dict['rcnn_cls'] = rcnn_cls
             targets_dict['rcnn_reg'] = rcnn_reg
-
+            targets_dict['projected_features'] = (projected_features.clone()).detach().permute(0,2,1).contiguous()
             self.forward_ret_dict = targets_dict
-
         return batch_dict

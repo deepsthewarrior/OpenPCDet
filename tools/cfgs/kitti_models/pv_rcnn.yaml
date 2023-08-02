@@ -209,7 +209,8 @@ MODEL:
                 'rcnn_cls_weight': 1.0,
                 'rcnn_reg_weight': 1.0,
                 'rcnn_corner_weight': 1.0,
-                'code_weights': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+                'code_weights': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+                'rcnn_proto_weight': 1.0
             }
 
     POST_PROCESSING:

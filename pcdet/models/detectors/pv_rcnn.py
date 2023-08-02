@@ -1,5 +1,5 @@
 from .detector3d_template import Detector3DTemplate
-
+import torch
 
 class PVRCNN(Detector3DTemplate):
     def __init__(self, model_cfg, num_class, dataset):
@@ -12,7 +12,29 @@ class PVRCNN(Detector3DTemplate):
 
         if self.training:
             loss, tb_dict, disp_dict = self.get_training_loss()
-
+            # if self.roi_head.protos is None: # first pass in which all classes' ROIs are generated
+            #         cur_features = []
+            #         for cls in range(0,3):
+            #             cls_mask = self.roi_head.forward_ret_dict['roi_labels'] == cls + 1
+            #             fg_mask = self.roi_head.forward_ret_dict['rcnn_cls_labels'] >= 0.6
+            #             cls_fg_mask = cls_mask & fg_mask
+            #             # if one of the classes is not predicted the protos will be None, waiting for the model to learn all classes
+            #             if not torch.any(cls_fg_mask):
+            #                 cur_features = []
+            #                 break
+            #             else:
+            #                 cls_features = self.roi_head.forward_ret_dict['projected_features'].view(batch_dict['batch_size'],-1, 256)[cls_fg_mask]
+            #                 cur_features.append(cls_features.mean(dim=0))
+            #                 if cls == 2:
+            #                     self.roi_head.protos = torch.stack(cur_features, dim=0)    
+            # else: # all other passes where EMA is done
+            #         for cls in range(0,3):
+            #             cls_mask = self.roi_head.forward_ret_dict['roi_labels'] == cls + 1
+            #             fg_mask = self.roi_head.forward_ret_dict['rcnn_cls_labels'] >= 0.6
+            #             cls_fg_mask = cls_mask & fg_mask
+            #             if torch.any(cls_fg_mask):
+            #                 cls_features = self.roi_head.forward_ret_dict['projected_features'].view(batch_dict['batch_size'],-1, 256)[cls_fg_mask]
+            #                 self.roi_head.protos[cls] = (self.roi_head.protos[cls] * 0.9) + (cls_features.mean(dim=0) * 0.1)        
             ret_dict = {
                 'loss': loss
             }
