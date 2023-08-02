@@ -453,7 +453,7 @@ class PVRCNN_SSL(Detector3DTemplate):
             disp_dict = {}
             loss_rpn_cls, loss_rpn_box, tb_dict = self.pv_rcnn.dense_head.get_loss(scalar=False)
             loss_point, tb_dict = self.pv_rcnn.point_head.get_loss(tb_dict, scalar=False)
-            loss_rcnn_cls, loss_rcnn_box, ulb_loss_cls_dist, tb_dict = self.pv_rcnn.roi_head.get_loss(tb_dict, scalar=False)
+            loss_rcnn_cls, loss_rcnn_box, ulb_loss_cls_dist, loss_rcnn_projection, tb_dict = self.pv_rcnn.roi_head.get_loss(tb_dict, scalar=False)
 
             # Use the same reduction method as the baseline model (3diou) by the default
             reduce_loss = getattr(torch, self.model_cfg.REDUCE_LOSS, 'sum')
@@ -472,10 +472,14 @@ class PVRCNN_SSL(Detector3DTemplate):
                 loss_rcnn_box = reduce_loss(loss_rcnn_box[labeled_inds, ...])
             else:
                 loss_rcnn_box = reduce_loss(loss_rcnn_box[labeled_inds, ...]) + reduce_loss(loss_rcnn_box[unlabeled_inds, ...]) * self.unlabeled_weight
+            if self.model_cfg['ROI_HEAD'].get('ENABLE_RCNN_PROJECTION_LOSS', False):
+                loss_rcnn_projection = reduce_loss(loss_rcnn_projection[labeled_inds, ...]) + reduce_loss(loss_rcnn_projection[unlabeled_inds, ...]) * self.unlabeled_weight
             if self.model_cfg['ROI_HEAD'].get('ENABLE_ULB_CLS_DIST_LOSS', False):
-                    loss = loss_rpn_cls + loss_rpn_box + loss_point + loss_rcnn_cls + loss_rcnn_box + ulb_loss_cls_dist
-            else:
+                    loss = loss_rpn_cls + loss_rpn_box + loss_point + loss_rcnn_cls + loss_rcnn_box + ulb_loss_cls_dist + loss_rcnn_projection
+            else: 
                 loss = loss_rpn_cls + loss_rpn_box + loss_point + loss_rcnn_cls + loss_rcnn_box
+            if self.model_cfg['ROI_HEAD'].get('ENABLE_RCNN_PROJECTION_LOSS', False):
+                loss += loss_rcnn_projection
             tb_dict_ = {}
             for key in tb_dict.keys():
                 if 'loss' in key:
@@ -612,37 +616,51 @@ class PVRCNN_SSL(Detector3DTemplate):
 
             # apply student's augs on teacher's pseudo-boxes (w/o filtered)
             batch_dict = self.apply_augmentation(input_dict, input_dict, unlabeled_inds, key='pseudo_boxes_prefilter')
-            cos_scores_pool_softmax = torch.zeros(batch_dict['pseudo_boxes_prefilter'].shape[0],batch_dict['pseudo_boxes_prefilter'].shape[1],3).to(batch_dict['pseudo_boxes_prefilter'].device)
-            cos_scores_car_pool = torch.zeros(batch_dict['pseudo_boxes_prefilter'].shape[0],batch_dict['pseudo_boxes_prefilter'].shape[1]).to(batch_dict['pseudo_boxes_prefilter'].device)
-            cos_scores_cyc_pool = torch.zeros(batch_dict['pseudo_boxes_prefilter'].shape[0],batch_dict['pseudo_boxes_prefilter'].shape[1]).to(batch_dict['pseudo_boxes_prefilter'].device)
-            cos_scores_ped_pool = torch.zeros(batch_dict['pseudo_boxes_prefilter'].shape[0],batch_dict['pseudo_boxes_prefilter'].shape[1]).to(batch_dict['gt_boxes'].device)
+            cos_scores_proj_softmax = torch.zeros(batch_dict['pseudo_boxes_prefilter'].shape[0],batch_dict['pseudo_boxes_prefilter'].shape[1],3).to(batch_dict['pseudo_boxes_prefilter'].device)
+            cos_scores_car_proj = torch.zeros(batch_dict['pseudo_boxes_prefilter'].shape[0],batch_dict['pseudo_boxes_prefilter'].shape[1]).to(batch_dict['pseudo_boxes_prefilter'].device)
+            cos_scores_cyc_proj = torch.zeros(batch_dict['pseudo_boxes_prefilter'].shape[0],batch_dict['pseudo_boxes_prefilter'].shape[1]).to(batch_dict['pseudo_boxes_prefilter'].device)
+            cos_scores_ped_proj = torch.zeros(batch_dict['pseudo_boxes_prefilter'].shape[0],batch_dict['pseudo_boxes_prefilter'].shape[1]).to(batch_dict['gt_boxes'].device)
+            cos_scores_car_sh = torch.zeros(batch_dict['pseudo_boxes_prefilter'].shape[0],batch_dict['pseudo_boxes_prefilter'].shape[1]).to(batch_dict['pseudo_boxes_prefilter'].device)
+            cos_scores_cyc_sh = torch.zeros(batch_dict['pseudo_boxes_prefilter'].shape[0],batch_dict['pseudo_boxes_prefilter'].shape[1]).to(batch_dict['pseudo_boxes_prefilter'].device)
+            cos_scores_ped_sh = torch.zeros(batch_dict['pseudo_boxes_prefilter'].shape[0],batch_dict['pseudo_boxes_prefilter'].shape[1]).to(batch_dict['gt_boxes'].device)
 
             for uind in unlabeled_inds:
                 selected = pred_dict[uind]['selected']
-                cos_scores_softmax = (batch_dict_ema['cos_scores_pool_norm'][uind])[selected]
-                car_proto_pool_scores = (batch_dict_ema['cos_scores_car_pool'][uind])[selected]
-                ped_proto_pool_scores = (batch_dict_ema['cos_scores_ped_pool'][uind])[selected]
-                cyc_proto_pool_scores = (batch_dict_ema['cos_scores_cyc_pool'][uind])[selected]
+                cos_scores_softmax = (batch_dict_ema['cos_scores_proj_norm'][uind])[selected]
+                car_proto_proj_scores = (batch_dict_ema['cos_scores_car_proj'][uind])[selected]
+                ped_proto_proj_scores = (batch_dict_ema['cos_scores_ped_proj'][uind])[selected]
+                cyc_proto_proj_scores = (batch_dict_ema['cos_scores_cyc_proj'][uind])[selected]
+                car_proto_sh_scores = (batch_dict_ema['cos_scores_car_sh'][uind])[selected]
+                ped_proto_sh_scores = (batch_dict_ema['cos_scores_ped_sh'][uind])[selected]
+                cyc_proto_sh_scores = (batch_dict_ema['cos_scores_cyc_sh'][uind])[selected]
 
                 diff = batch_dict['pseudo_boxes_prefilter'].shape[1] - cos_scores_softmax.shape[0] 
-                cos_scores_pool_softmax[uind] = torch.cat([cos_scores_softmax, torch.zeros(diff,3).to(selected.device)],dim=0)
-                cos_scores_car_pool[uind] = torch.cat([car_proto_pool_scores, torch.zeros(diff).to(selected.device)],dim=0)
-                cos_scores_cyc_pool[uind] = torch.cat([ped_proto_pool_scores, torch.zeros(diff).to(selected.device)],dim=0)
-                cos_scores_ped_pool[uind] = torch.cat([cyc_proto_pool_scores, torch.zeros(diff).to(selected.device)],dim=0)
-                assert torch.all((batch_dict['pseudo_boxes_prefilter'][uind].sum(-1)).nonzero() == cos_scores_car_pool[uind].nonzero()), "pred boxes and cos_scores_car_pool are not aligned"
+                cos_scores_proj_softmax[uind] = torch.cat([cos_scores_softmax, torch.zeros(diff,3).to(selected.device)],dim=0)
+                cos_scores_car_proj[uind] = torch.cat([car_proto_proj_scores, torch.zeros(diff).to(selected.device)],dim=0)
+                cos_scores_cyc_proj[uind] = torch.cat([ped_proto_proj_scores, torch.zeros(diff).to(selected.device)],dim=0)
+                cos_scores_ped_proj[uind] = torch.cat([cyc_proto_proj_scores, torch.zeros(diff).to(selected.device)],dim=0)
+                cos_scores_car_sh[uind] = torch.cat([car_proto_sh_scores, torch.zeros(diff).to(selected.device)],dim=0)
+                cos_scores_cyc_sh[uind] = torch.cat([ped_proto_sh_scores, torch.zeros(diff).to(selected.device)],dim=0)
+                cos_scores_ped_sh[uind] = torch.cat([cyc_proto_sh_scores, torch.zeros(diff).to(selected.device)],dim=0)
+
+                assert torch.all((batch_dict['pseudo_boxes_prefilter'][uind].sum(-1)).nonzero() == cos_scores_car_proj[uind].nonzero()), "pred boxes and cos_scores_car_proj are not aligned"
             
             tag = f'pl_gt_metrics_before_filtering'
             metrics = self.metric_registry.get(tag)
 
-            cos_sem_pool_softmax = [cos_scores_pool_softmax[uind] for uind in unlabeled_inds]
-            cos_sem_car_pool = [cos_scores_car_pool[uind] for uind in unlabeled_inds]
-            cos_sem_ped_pool = [cos_scores_ped_pool[uind] for uind in unlabeled_inds]
-            cos_sem_cyc_pool = [cos_scores_cyc_pool[uind] for uind in unlabeled_inds]
+            cos_sem_proj_softmax = [cos_scores_proj_softmax[uind] for uind in unlabeled_inds]
+            cos_sem_car_proj = [cos_scores_car_proj[uind] for uind in unlabeled_inds]
+            cos_sem_ped_proj = [cos_scores_ped_proj[uind] for uind in unlabeled_inds]
+            cos_sem_cyc_proj = [cos_scores_cyc_proj[uind] for uind in unlabeled_inds]
+            cos_sem_car_sh = [cos_scores_car_sh[uind] for uind in unlabeled_inds]
+            cos_sem_ped_sh = [cos_scores_ped_sh[uind] for uind in unlabeled_inds]
+            cos_sem_cyc_sh = [cos_scores_cyc_sh[uind] for uind in unlabeled_inds]
             preds_prefilter = [batch_dict['pseudo_boxes_prefilter'][uind] for uind in unlabeled_inds]
             gts_prefilter = [batch_dict['gt_boxes'][uind] for uind in unlabeled_inds]
             metric_inputs = {'preds': preds_prefilter, 'pred_scores': pseudo_scores, 'roi_scores': pseudo_sem_scores,
-                             'ground_truths': gts_prefilter,'cos_scores_car_pool':cos_sem_car_pool,'cos_scores_ped_pool':cos_sem_ped_pool,
-                             'cos_scores_cyc_pool':cos_sem_cyc_pool,'cos_scores_softmax':cos_sem_pool_softmax}
+                             'ground_truths': gts_prefilter,'cos_scores_car_proj':cos_sem_car_proj,'cos_scores_ped_proj':cos_sem_ped_proj,
+                             'cos_scores_cyc_proj':cos_sem_cyc_proj,'cos_scores_softmax':cos_sem_proj_softmax,'cos_scores_pool':cos_sem_proj_softmax, 'cos_scores_car_sh':cos_sem_car_sh,
+                             'cos_scores_ped_sh':cos_sem_ped_sh,'cos_scores_cyc_sh':cos_sem_cyc_sh}
             metrics.update(**metric_inputs)
             batch_dict.pop('pseudo_boxes_prefilter')
 

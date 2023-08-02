@@ -39,6 +39,10 @@ class RoIHeadTemplate(nn.Module):
             'reg_loss_func',
             loss_utils.WeightedSmoothL1Loss(code_weights=losses_cfg.LOSS_WEIGHTS['code_weights'])
         )
+        self.add_module(
+            'proto_contrastive_loss_func',
+            nn.CrossEntropyLoss(reduction='none')
+        )
 
     def make_fc_layers(self, input_channels, output_channels, fc_list):
         fc_layers = []
@@ -197,11 +201,14 @@ class RoIHeadTemplate(nn.Module):
         ema_preds_of_std_rois, ema_pred_scores_of_std_rois = [], []
         sample_gts = []
         sample_gt_iou_of_rois = []
-        sample_cos_scores_car_pool = []
-        sample_cos_scores_ped_pool = []
-        sample_cos_scores_cyc_pool = []
+        sample_cos_scores_car_sh = []
+        sample_cos_scores_ped_sh = []
+        sample_cos_scores_cyc_sh = []
         sample_cos_scores_softmax = []
-    
+        sample_cos_scores_car_proj = []
+        sample_cos_scores_ped_proj = []
+        sample_cos_scores_cyc_proj = []
+        sample_cos_scores_scores_proj = []
     
         for i, uind in enumerate(unlabeled_inds):
             mask = (targets_dict['reg_valid_mask'][uind] > 0) if mask_type == 'reg' else (
@@ -230,15 +237,23 @@ class RoIHeadTemplate(nn.Module):
             sample_pred_scores.append(pred_scores)
 
             # Cosine similarity
-            car_cos_scores_pool = targets_dict['cos_scores_car_pool'][uind][mask].detach().clone()
-            ped_cos_scores_pool = targets_dict['cos_scores_ped_pool'][uind][mask].detach().clone()
-            cyc_cos_scores_pool = targets_dict['cos_scores_cyc_pool'][uind][mask].detach().clone()
-            sample_cos_scores_car_pool.append(car_cos_scores_pool)
-            sample_cos_scores_ped_pool.append(ped_cos_scores_pool)
-            sample_cos_scores_cyc_pool.append(cyc_cos_scores_pool)
-            cos_scores_softmax = targets_dict['cos_scores_pool_norm'][uind][mask].detach().clone()
+            car_cos_scores_sh = targets_dict['cos_scores_car_sh'][uind][mask].detach().clone()
+            ped_cos_scores_sh = targets_dict['cos_scores_ped_sh'][uind][mask].detach().clone()
+            cyc_cos_scores_sh = targets_dict['cos_scores_cyc_sh'][uind][mask].detach().clone()
+            sample_cos_scores_car_sh.append(car_cos_scores_sh)
+            sample_cos_scores_ped_sh.append(ped_cos_scores_sh)
+            sample_cos_scores_cyc_sh.append(cyc_cos_scores_sh)
+            cos_scores_softmax = targets_dict['cos_scores_sh_norm'][uind][mask].detach().clone()
             sample_cos_scores_softmax.append(cos_scores_softmax)
 
+            car_cos_scores_proj = targets_dict['cos_scores_car_proj'][uind][mask].detach().clone()
+            ped_cos_scores_proj = targets_dict['cos_scores_ped_proj'][uind][mask].detach().clone()
+            cyc_cos_scores_proj = targets_dict['cos_scores_cyc_proj'][uind][mask].detach().clone()
+            sample_cos_scores_car_proj.append(car_cos_scores_proj)
+            sample_cos_scores_ped_proj.append(ped_cos_scores_proj)
+            sample_cos_scores_cyc_proj.append(cyc_cos_scores_proj)
+            cos_scores_scores_proj = targets_dict['cos_scores_proj_norm'][uind][mask].detach().clone()
+            sample_cos_scores_scores_proj.append(cos_scores_scores_proj)
 
             # (Real labels) GT info
             gt_labeled_boxes = targets_dict['ori_unlabeled_boxes'][i]
@@ -325,9 +340,11 @@ class RoIHeadTemplate(nn.Module):
                              'ground_truths': sample_gts, 'targets': sample_targets,
                              'pseudo_labels': sample_pls, 'pseudo_label_scores': sample_pl_scores,
                              'target_scores': sample_target_scores, 'pred_weights': sample_pred_weights,
-                             'pred_iou_wrt_pl': sample_gt_iou_of_rois,'cos_scores_car_pool': sample_cos_scores_car_pool, 
-                             'cos_scores_ped_pool': sample_cos_scores_ped_pool,'cos_scores_cyc_pool': sample_cos_scores_cyc_pool,
-                             'cos_scores_softmax': sample_cos_scores_softmax}
+                             'pred_iou_wrt_pl': sample_gt_iou_of_rois,'cos_scores_car_sh': sample_cos_scores_car_sh, 
+                             'cos_scores_ped_sh': sample_cos_scores_ped_sh,'cos_scores_cyc_sh': sample_cos_scores_cyc_sh,
+                             'cos_scores_softmax': sample_cos_scores_softmax,'cos_scores_car_proj': sample_cos_scores_car_proj,
+                             'cos_scores_ped_proj': sample_cos_scores_ped_proj,'cos_scores_cyc_proj': sample_cos_scores_cyc_proj,
+                             'cos_scores_scores_proj': sample_cos_scores_scores_proj}
             metrics.update(**metric_inputs)
 
     def assign_targets(self, batch_dict):
@@ -732,11 +749,49 @@ class RoIHeadTemplate(nn.Module):
         tb_dict.update(cls_tb_dict)
         tb_dict.update(reg_tb_dict)
         tb_dict.update(cls_dist_dict)
+    def get_projection_layer_loss(self, forward_ret_dict, scalar=True):
+        roi_labels = forward_ret_dict['roi_labels'].view(-1)
+        rcnn_cls_labels = forward_ret_dict['rcnn_cls_labels'].view(-1)
+        cos_sim = forward_ret_dict['cos_sim']
+        batch_loss_proto = self.proto_contrastive_loss_func(cos_sim, (roi_labels-1)).view(forward_ret_dict['roi_labels'].shape[0],-1) 
+        cls_valid_mask = (rcnn_cls_labels >= 0.7).float().view(forward_ret_dict['roi_labels'].shape[0],-1)    # calculate loss only on foreground rois
+        rcnn_loss_proto = (batch_loss_proto * cls_valid_mask).sum(-1) / torch.clamp(cls_valid_mask.sum(), min=1.0)
+        tb_dict = {
+            'rcnn_loss_proto': rcnn_loss_proto.item() if scalar else rcnn_loss_proto,
+        }
+        return rcnn_loss_proto, tb_dict
+
+    def get_loss(self, tb_dict=None, scalar=True):
+        tb_dict = {} if tb_dict is None else tb_dict
+
+        self.pre_loss_filtering()
+
+        if self.model_cfg.get("ENABLE_EVAL", None):
+            # self.update_metrics(self.forward_ret_dict, mask_type='reg')
+            metrics_pred_types = self.model_cfg.get("METRICS_PRED_TYPES", None)
+            if metrics_pred_types is not None:
+                self.update_metrics(self.forward_ret_dict, mask_type='cls', pred_type=metrics_pred_types, vis_type='roi_pl')
+
+        rcnn_loss_cls, cls_tb_dict = self.get_box_cls_layer_loss(self.forward_ret_dict, scalar=scalar)
+        #rcnn_loss = rcnn_loss_cls
+        ulb_loss_cls_dist, cls_dist_dict = self.get_ulb_cls_dist_loss(self.forward_ret_dict)
+        rcnn_loss_reg, reg_tb_dict = self.get_box_reg_layer_loss(self.forward_ret_dict, scalar=scalar)
+        #rcnn_loss += rcnn_loss_reg  #if scalar is False, rcnn_loss_cls is (rcnn_loss_cls + rcnn_loss_reg)
+        tb_dict.update(cls_tb_dict)
+        tb_dict.update(cls_dist_dict)
+        tb_dict.update(reg_tb_dict)
+        rcnn_loss = rcnn_loss_cls + rcnn_loss_reg 
+
+        if 'cos_sim' in self.forward_ret_dict.keys():
+            rcnn_loss_projection, projection_tb_dict = self.get_projection_layer_loss(self.forward_ret_dict, scalar=scalar)
+            tb_dict.update(projection_tb_dict)
+            rcnn_loss += rcnn_loss_projection
+
         tb_dict['rcnn_loss'] = rcnn_loss.item() if scalar else rcnn_loss
         if scalar:
             return rcnn_loss, tb_dict
         else:
-            return rcnn_loss_cls, rcnn_loss_reg, ulb_loss_cls_dist, tb_dict
+            return rcnn_loss_cls, rcnn_loss_reg, ulb_loss_cls_dist, rcnn_loss_projection, tb_dict
 
     def generate_predicted_boxes(self, batch_size, rois, cls_preds, box_preds):
         """

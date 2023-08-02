@@ -30,9 +30,9 @@ class PVRCNNHead(RoIHeadTemplate):
 
             if k != self.model_cfg.SHARED_FC.__len__() - 1 and self.model_cfg.DP_RATIO > 0:
                 shared_fc_list.append(nn.Dropout(self.model_cfg.DP_RATIO))
-
+        self.protos = None
         self.shared_fc_layer = nn.Sequential(*shared_fc_list)
-
+        self.projector_fc_layer = nn.Sequential(*shared_fc_list)
         self.cls_layers = self.make_fc_layers(
             input_channels=pre_channel, output_channels=self.num_class, fc_list=self.model_cfg.CLS_FC
         )
@@ -44,15 +44,24 @@ class PVRCNNHead(RoIHeadTemplate):
         self.init_weights(weight_init='xavier')
 
         self.print_loss_when_eval = False
-        self.pooled_prototype_lb_ = []
+        self.pooled_prototype_proj_lb_ = []
+        self.pooled_prototype_sh_lb_ = []
         pkl_file = self.model_cfg.BASE_PROTOTYPE
         with open(pkl_file, 'rb') as file:
         # Load the data from the .pkl file
             data = pickle.load(file) # 0->Car, 1->Ped, 2->Cyc
-        self.pooled_prototype_lb_.append((data['Car']['mean']['pool'].cuda()).contiguous().view(-1)) # (128,6,6,6) to (27648)
-        self.pooled_prototype_lb_.append((data['Ped']['mean']['pool'].cuda()).contiguous().view(-1))
-        self.pooled_prototype_lb_.append((data['Cyc']['mean']['pool'].cuda()).contiguous().view(-1))
-        self.pooled_prototype_lb = torch.stack(self.pooled_prototype_lb_,dim=0).cuda() # [3, 27648] == [num_protos, C]
+        self.pooled_prototype_proj_lb_.append((data['Car']['mean']['proj'].cuda()).contiguous().view(-1)) # (256)
+        self.pooled_prototype_proj_lb_.append((data['Ped']['mean']['proj'].cuda()).contiguous().view(-1))
+        self.pooled_prototype_proj_lb_.append((data['Cyc']['mean']['proj'].cuda()).contiguous().view(-1))
+        self.pooled_prototype_proj_lb = torch.stack(self.pooled_prototype_proj_lb_,dim=0).cuda() # [3, 27648] == [num_protos, 256]
+        with open(pkl_file, 'rb') as file:
+        # Load the data from the .pkl file
+            data = pickle.load(file) # 0->Car, 1->Ped, 2->Cyc
+        self.pooled_prototype_sh_lb_.append((data['Car']['mean']['sh'].cuda()).contiguous().view(-1)) # (256)
+        self.pooled_prototype_sh_lb_.append((data['Ped']['mean']['sh'].cuda()).contiguous().view(-1))
+        self.pooled_prototype_sh_lb_.append((data['Cyc']['mean']['sh'].cuda()).contiguous().view(-1))
+        self.pooled_prototype_sh_lb = torch.stack(self.pooled_prototype_sh_lb_,dim=0).cuda() # [3, 27648] == [num_protos, 256]
+        
     def init_weights(self, weight_init='xavier'):
         if weight_init == 'kaiming':
             init_func = nn.init.kaiming_normal_
@@ -190,7 +199,9 @@ class PVRCNNHead(RoIHeadTemplate):
         batch_size_rcnn = pooled_features.shape[0]
         pooled_features = pooled_features.permute(0, 2, 1).\
             contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxN, C, 6, 6, 6)
-        shared_features = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
+        pooled_features_permute = pooled_features.view(batch_size_rcnn, -1, 1)
+        shared_features = self.shared_fc_layer(pooled_features_permute)
+        projected_features = self.projector_fc_layer(pooled_features_permute)
         rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
         rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)
         
@@ -202,14 +213,28 @@ class PVRCNNHead(RoIHeadTemplate):
             pooled_features_clone = pooled_features.view(batch_size_rcnn,-1).clone().detach() #(N,128,6,6,6) => (N,27648)
             pool_protos_lb = batch_dict['labeled_prototype'].to(labels.device) #[3, 27648]
             pool_proposals = pooled_features_clone.squeeze()
-            pool_cos_sim = F.normalize(pool_proposals) @ F.normalize(pool_protos_lb).t()
+            projected_features_permute = projected_features.permute(0,1,2)
+            shared_feat_proposals = shared_features.clone().detach().squeeze(dim=-1)
+            shared_cos_sim = F.normalize(shared_feat_proposals) @ F.normalize(self.pooled_prototype_sh_lb).t()
+            proj_cos_sim = F.normalize(projected_features_permute.squeeze()) @ F.normalize(self.pooled_prototype_proj_lb.to(labels.device)).t()
 
-            targets_dict['cos_scores_car_pool'] = pool_cos_sim[:,0].view(batch_dict['roi_scores'].shape[0],-1)
-            targets_dict['cos_scores_ped_pool'] = pool_cos_sim[:,1].view(batch_dict['roi_scores'].shape[0],-1)
-            targets_dict['cos_scores_cyc_pool'] = pool_cos_sim[:,2].view(batch_dict['roi_scores'].shape[0],-1)
-            batched_pool_cos_sim = pool_cos_sim.view(batch_dict['roi_scores'].shape[0],-1,3)
-            targets_dict['cos_scores_pool_norm'] = F.softmax(batched_pool_cos_sim,dim=-1) # (N,128,3)
+            targets_dict['cos_scores_car_sh'] = shared_cos_sim[:,0].view(batch_dict['roi_scores'].shape[0],-1)
+            targets_dict['cos_scores_ped_sh'] = shared_cos_sim[:,1].view(batch_dict['roi_scores'].shape[0],-1)
+            targets_dict['cos_scores_cyc_sh'] = shared_cos_sim[:,2].view(batch_dict['roi_scores'].shape[0],-1)
+            batched_shared_cos_sim = shared_cos_sim.view(batch_dict['roi_scores'].shape[0],-1,3)
+            targets_dict['cos_scores_sh_norm'] = F.softmax(batched_shared_cos_sim,dim=-1) # (N,128,3)
+            
 
+            targets_dict['cos_scores_car_proj'] = proj_cos_sim[:,0].view(batch_dict['roi_scores'].shape[0],-1)
+            targets_dict['cos_scores_ped_proj'] = proj_cos_sim[:,1].view(batch_dict['roi_scores'].shape[0],-1)
+            targets_dict['cos_scores_cyc_proj'] = proj_cos_sim[:,2].view(batch_dict['roi_scores'].shape[0],-1)
+            batched_proj_cos_sim = proj_cos_sim.view(batch_dict['roi_scores'].shape[0],-1,3)
+            targets_dict['cos_scores_proj_norm'] = F.softmax(batched_proj_cos_sim,dim=-1) # (N,128,3)
+            targets_dict['cos_sim'] = F.softmax(proj_cos_sim,dim=-1) 
+            
+        # if self.protos is not None:
+        #     cos_sim = F.normalize(projected_features.permute(0,2,1).squeeze(1)) @ F.normalize(self.protos).t()
+        #     targets_dict['cos_sim'] = F.softmax(cos_sim,dim=1)
         if not self.training or self.predict_boxes_when_training:
             batch_cls_preds, batch_box_preds = self.generate_predicted_boxes(
                 batch_size=batch_dict['batch_size'], rois=batch_dict['rois'], cls_preds=rcnn_cls, box_preds=rcnn_reg
@@ -224,7 +249,6 @@ class PVRCNNHead(RoIHeadTemplate):
         if self.training or self.print_loss_when_eval:
             targets_dict['rcnn_cls'] = rcnn_cls
             targets_dict['rcnn_reg'] = rcnn_reg
-
+            targets_dict['projected_features'] = (projected_features.clone()).detach().permute(0,2,1).contiguous()
             self.forward_ret_dict = targets_dict
-
         return batch_dict
