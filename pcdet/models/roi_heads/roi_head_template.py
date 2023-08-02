@@ -26,6 +26,10 @@ class RoIHeadTemplate(nn.Module):
             'reg_loss_func',
             loss_utils.WeightedSmoothL1Loss(code_weights=losses_cfg.LOSS_WEIGHTS['code_weights'])
         )
+        self.add_module(
+            'proto_contrastive_loss_func',
+            nn.CrossEntropyLoss(reduction='none')
+        )
 
     def make_fc_layers(self, input_channels, output_channels, fc_list):
         fc_layers = []
@@ -260,16 +264,35 @@ class RoIHeadTemplate(nn.Module):
         }
         return rcnn_loss_cls, tb_dict
 
+    def get_projection_layer_loss(self, forward_ret_dict, scalar=True):
+        roi_labels = forward_ret_dict['roi_labels'].view(-1)
+        rcnn_cls_labels = forward_ret_dict['rcnn_cls_labels'].view(-1)
+        cos_sim = forward_ret_dict['cos_sim']
+        batch_loss_proto = self.proto_contrastive_loss_func(cos_sim, (roi_labels-1)) 
+        cls_valid_mask = (rcnn_cls_labels >= 0.7).float()    # calculate loss only on foreground rois
+        rcnn_loss_proto = (batch_loss_proto * cls_valid_mask).sum() / torch.clamp(cls_valid_mask.sum(), min=1.0)
+        rcnn_loss_proto = rcnn_loss_proto * self.model_cfg.LOSS_CONFIG.LOSS_WEIGHTS['rcnn_proto_weight']
+        tb_dict = {
+            'rcnn_loss_proto': rcnn_loss_proto.item() if scalar else rcnn_loss_proto,
+        }
+        return rcnn_loss_proto, tb_dict
+
     def get_loss(self, tb_dict=None, scalar=True):
         tb_dict = {} if tb_dict is None else tb_dict
         rcnn_loss_cls, cls_tb_dict = self.get_box_cls_layer_loss(self.forward_ret_dict, scalar=scalar)
         #rcnn_loss = rcnn_loss_cls
         tb_dict.update(cls_tb_dict)
-
+        
         rcnn_loss_reg, reg_tb_dict = self.get_box_reg_layer_loss(self.forward_ret_dict, scalar=scalar)
         #rcnn_loss += rcnn_loss_reg  #if scalar is False, rcnn_loss_cls is (rcnn_loss_cls + rcnn_loss_reg)
-        rcnn_loss = rcnn_loss_cls + rcnn_loss_reg
         tb_dict.update(reg_tb_dict)
+        rcnn_loss = rcnn_loss_cls + rcnn_loss_reg 
+
+        if 'cos_sim' in self.forward_ret_dict.keys():
+            rcnn_loss_projection, projection_tb_dict = self.get_projection_layer_loss(self.forward_ret_dict, scalar=scalar)
+            tb_dict.update(projection_tb_dict)
+            rcnn_loss += rcnn_loss_projection
+
         tb_dict['rcnn_loss'] = rcnn_loss.item() if scalar else rcnn_loss
         if scalar:
             return rcnn_loss, tb_dict
