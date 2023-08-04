@@ -53,7 +53,7 @@ class FeatureBank(Metric):
             self.smpl_ids.append(smpl_ids[i].view(-1))  # (1,)
             rois_iter = torch.tensor(iteration, device=feats[0].device).expand_as(ins_ids[i].view(-1))
             self.iterations.append(rois_iter)           # (N,)
-
+            
     def compute(self):
         unique_smpl_ids = torch.unique(torch.cat(self.smpl_ids))
         if len(unique_smpl_ids) < self.reset_state_interval:

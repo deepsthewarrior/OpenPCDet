@@ -2,7 +2,8 @@ import torch.nn as nn
 from ...ops.pointnet2.pointnet2_stack import pointnet2_modules as pointnet2_stack_modules
 from ...utils import common_utils
 from .roi_head_template import RoIHeadTemplate
-from prototype_utils import feature_bank_registry
+import torch.nn.functional as F
+from ...utils.prototype_utils import feature_bank_registry
 
 
 class PVRCNNHead(RoIHeadTemplate):
@@ -44,6 +45,7 @@ class PVRCNNHead(RoIHeadTemplate):
         self.init_weights(weight_init='xavier')
 
         self.print_loss_when_eval = False
+        pkl_file = self.model_cfg.BASE_PROTOTYPE 
 
     def init_weights(self, weight_init='xavier'):
         if weight_init == 'kaiming':

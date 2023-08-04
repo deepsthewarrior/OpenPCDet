@@ -8,12 +8,95 @@ from pcdet.ops.iou3d_nms import iou3d_nms_utils
 from pcdet.ops.roiaware_pool3d import roiaware_pool3d_utils
 from .detector3d_template import Detector3DTemplate
 from .pv_rcnn import PVRCNN
-
-import common_utils
-from stats_utils import metrics_registry
-from prototype_utils import feature_bank_registry
 from collections import defaultdict
-from visual_utils import open3d_vis_utils as V
+
+from ...utils import common_utils
+from ...utils.stats_utils import metrics_registry
+from ...utils.prototype_utils import feature_bank_registry
+
+from visual_utils import visualize_utils as V
+
+def _to_dict_of_tensors(list_of_dicts, agg_mode='stack'):
+    new_dict = {}
+    for k in list_of_dicts[0].keys():
+        vals = []
+        for i in range(len(list_of_dicts)):
+            vals.append(list_of_dicts[i][k])
+        agg_vals = torch.cat(vals, dim=0) if agg_mode == 'cat' else torch.stack(vals, dim=0)
+        new_dict[k] = agg_vals
+    return new_dict
+
+
+def _to_list_of_dicts(dict_of_tensors, batch_size):
+    new_list = []
+    for batch_index in range(batch_size):
+        inner_dict = {}
+        for key in dict_of_tensors.keys():
+            assert dict_of_tensors[key].shape[0] == batch_size
+            inner_dict[key] = dict_of_tensors[key][batch_index]
+        new_list.append(inner_dict)
+
+    return new_list
+
+
+def _mean_and_var(batch_dict_a, batch_dict_b, unlabeled_inds, keys=()):
+    # !!! Note that the function is inplace !!!
+    if isinstance(batch_dict_a, dict) and isinstance(batch_dict_b, dict):
+        for k in keys:
+            batch_dict_mean_k = torch.zeros_like(batch_dict_a[k])
+            batch_dict_emas = torch.stack([batch_dict_a[k][unlabeled_inds], batch_dict_b[k][unlabeled_inds]], dim=-1)
+            batch_dict_mean_k[unlabeled_inds] = torch.mean(batch_dict_emas, dim=-1)
+            batch_dict_a[k + '_mean'] = batch_dict_mean_k
+            batch_dict_var_k = torch.zeros_like(batch_dict_a[k])
+            batch_dict_var_k[unlabeled_inds] = torch.var(batch_dict_emas, dim=-1)
+            batch_dict_a[k + '_var'] = batch_dict_var_k
+
+    elif isinstance(batch_dict_a, list) and isinstance(batch_dict_b, list):
+        for ind in unlabeled_inds:
+            for k in keys:
+                batch_dict_emas = torch.stack([batch_dict_a[ind][k], batch_dict_b[ind][k]], dim=-1)
+                batch_dict_a[ind][k + '_mean'] = torch.mean(batch_dict_emas, dim=-1)
+                batch_dict_a[ind][k + '_var'] = torch.var(batch_dict_emas, dim=-1)
+    else:
+        raise TypeError
+
+def _normalize_scores(batch_dict, score_keys=('batch_cls_preds',)):
+    # !!! Note that the function is inplace !!!
+    assert all([key in ['batch_cls_preds', 'roi_scores'] for key in score_keys])
+    for score_key in score_keys:
+        if score_key == 'batch_cls_preds':
+            if not batch_dict['cls_preds_normalized']:
+                batch_dict[score_key] = torch.sigmoid(batch_dict[score_key])
+                batch_dict['cls_preds_normalized'] = True
+        else:
+            batch_dict[score_key] = torch.sigmoid(batch_dict[score_key])
+
+# TODO(farzad) should be tested and debugged
+def _weighted_mean(batch_dict_a, batch_dict_b, unlabeled_inds, score_key='batch_cls_preds', keys=()):
+    assert score_key in ['batch_cls_preds', 'roi_scores']
+    _normalize_scores(batch_dict_a, score_keys=(score_key,))
+    _normalize_scores(batch_dict_b, score_keys=(score_key,))
+    scores_a = batch_dict_a[score_key][unlabeled_inds]
+    scores_b = batch_dict_b[score_key][unlabeled_inds]
+    weights = scores_a / (scores_a + scores_b)
+
+    for k in keys:
+        batch_dict_mean_k = torch.zeros_like(batch_dict_a[k])
+        batch_dict_mean_k[unlabeled_inds] = weights * batch_dict_a[k][unlabeled_inds] + \
+                                          (1 - weights) * batch_dict_b[k][unlabeled_inds]
+        batch_dict_a[k + '_mean'] = batch_dict_mean_k
+
+# TODO(farzad) should be tested and debugged
+def _max_score_replacement(batch_dict_a, batch_dict_b, unlabeled_inds, score_key='batch_cls_preds', keys=()):
+    # !!! Note that the function is inplace !!!
+    assert score_key in ['batch_cls_preds', 'roi_scores']
+    _normalize_scores(batch_dict_a, score_keys=(score_key,))
+    _normalize_scores(batch_dict_b, score_keys=(score_key,))
+    batch_dict_cat = torch.stack([batch_dict_a[score_key], batch_dict_b[score_key]], dim=-1)
+    max_inds = torch.argmax(batch_dict_cat, dim=-1)
+    for key in keys:
+        batch_dict_a[key][unlabeled_inds] = batch_dict_cat[key][unlabeled_inds, ..., max_inds]
+
 
 class PVRCNN_SSL(Detector3DTemplate):
     def __init__(self, model_cfg, num_class, dataset):
@@ -314,8 +397,8 @@ class PVRCNN_SSL(Detector3DTemplate):
                 cur_pcv_score = self.pv_rcnn.roi_head.forward_ret_dict['pcv_scores'][cur_unlabeled_ind]
                 self.val_dict['pcv_scores'].extend(cur_pcv_score.tolist())
 
-                cur_num_points_roi = self.pv_rcnn.roi_head.forward_ret_dict['num_points_in_roi'][cur_unlabeled_ind]
-                self.val_dict['num_points_in_roi'].extend(cur_num_points_roi.tolist())
+                # cur_num_points_roi = self.pv_rcnn.roi_head.forward_ret_dict['num_points_in_roi'][cur_unlabeled_ind]
+                # self.val_dict['num_points_in_roi'].extend(cur_num_points_roi.tolist())
 
                 cur_roi_label = self.pv_rcnn.roi_head.forward_ret_dict['roi_labels'][cur_unlabeled_ind].squeeze()
                 self.val_dict['class_labels'].extend(cur_roi_label.tolist())
