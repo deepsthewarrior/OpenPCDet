@@ -30,9 +30,21 @@ class PVRCNNHead(RoIHeadTemplate):
 
             if k != self.model_cfg.SHARED_FC.__len__() - 1 and self.model_cfg.DP_RATIO > 0:
                 shared_fc_list.append(nn.Dropout(self.model_cfg.DP_RATIO))
+        pre_channel_projector = GRID_SIZE * GRID_SIZE * GRID_SIZE * num_c_out
+        projected_fc_list = []
+        for k in range(0, self.model_cfg.SHARED_FC.__len__()):
+            projected_fc_list.extend([
+                nn.Conv1d(pre_channel_projector, self.model_cfg.SHARED_FC[k], kernel_size=1, bias=False),
+                nn.BatchNorm1d(self.model_cfg.SHARED_FC[k]),
+                nn.ReLU()
+            ])
+            pre_channel_projector = self.model_cfg.SHARED_FC[k]
+
+            if k != self.model_cfg.SHARED_FC.__len__() - 1 and self.model_cfg.DP_RATIO > 0:
+                projected_fc_list.append(nn.Dropout(self.model_cfg.DP_RATIO))
         self.protos = None
         self.shared_fc_layer = nn.Sequential(*shared_fc_list)
-        self.projector_fc_layer = nn.Sequential(*shared_fc_list)
+        self.projector_fc_layer = nn.Sequential(*projected_fc_list)
         self.cls_layers = self.make_fc_layers(
             input_channels=pre_channel, output_channels=self.num_class, fc_list=self.model_cfg.CLS_FC
         )
@@ -161,7 +173,7 @@ class PVRCNNHead(RoIHeadTemplate):
             contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxN, C, 6, 6, 6)
         pooled_features_permute = pooled_features.view(batch_size_rcnn, -1, 1)
         shared_features = self.shared_fc_layer(pooled_features_permute)
-        projected_features = self.projector_fc_layer(pooled_features_permute.clone().detach())
+        projected_features = self.projector_fc_layer((pooled_features_permute.clone()).detach())
         rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
         rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)
         if self.protos is not None:
