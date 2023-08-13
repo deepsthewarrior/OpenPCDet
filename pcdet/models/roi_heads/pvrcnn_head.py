@@ -30,9 +30,21 @@ class PVRCNNHead(RoIHeadTemplate):
 
             if k != self.model_cfg.SHARED_FC.__len__() - 1 and self.model_cfg.DP_RATIO > 0:
                 shared_fc_list.append(nn.Dropout(self.model_cfg.DP_RATIO))
+        pre_channel_projector = GRID_SIZE * GRID_SIZE * GRID_SIZE * num_c_out
+        projected_fc_list = []
+        for k in range(0, self.model_cfg.SHARED_FC.__len__()):
+            projected_fc_list.extend([
+                nn.Conv1d(pre_channel_projector, self.model_cfg.SHARED_FC[k], kernel_size=1, bias=False),
+                nn.BatchNorm1d(self.model_cfg.SHARED_FC[k]),
+                nn.ReLU()
+            ])
+            pre_channel_projector = self.model_cfg.SHARED_FC[k]
+
+            if k != self.model_cfg.SHARED_FC.__len__() - 1 and self.model_cfg.DP_RATIO > 0:
+                projected_fc_list.append(nn.Dropout(self.model_cfg.DP_RATIO))
         self.protos = None
         self.shared_fc_layer = nn.Sequential(*shared_fc_list)
-        self.projector_fc_layer = nn.Sequential(*shared_fc_list)
+        self.projector_fc_layer = nn.Sequential(*projected_fc_list)
         self.cls_layers = self.make_fc_layers(
             input_channels=pre_channel, output_channels=self.num_class, fc_list=self.model_cfg.CLS_FC
         )

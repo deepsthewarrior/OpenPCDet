@@ -268,9 +268,11 @@ class RoIHeadTemplate(nn.Module):
         roi_labels = forward_ret_dict['roi_labels'].view(-1)
         rcnn_cls_labels = forward_ret_dict['rcnn_cls_labels'].view(-1)
         cos_sim = forward_ret_dict['cos_sim']
-        batch_loss_proto = self.proto_contrastive_loss_func(cos_sim, (roi_labels-1)) 
-        cls_valid_mask = (rcnn_cls_labels >= 0.7).float()    # calculate loss only on foreground rois
-        rcnn_loss_proto = (batch_loss_proto * cls_valid_mask).sum() / torch.clamp(cls_valid_mask.sum(), min=1.0)
+        batch_loss_proto = self.proto_contrastive_loss_func(cos_sim, (roi_labels-1))
+        iou_fg_thresh = rcnn_cls_labels.new_tensor([0.7,0.5,0.5]).unsqueeze(0).repeat(len(rcnn_cls_labels), 1)
+        iou_fg_thresh = torch.gather(iou_fg_thresh, dim=-1, index=(roi_labels-1).unsqueeze(-1)).squeeze(-1)
+        cls_valid_mask = (rcnn_cls_labels >= iou_fg_thresh).float()  # calculate loss only on foreground rois
+        rcnn_loss_proto = (batch_loss_proto * cls_valid_mask).sum(-1) / torch.clamp(cls_valid_mask.sum(), min=1.0) # batchsize
         rcnn_loss_proto = rcnn_loss_proto * self.model_cfg.LOSS_CONFIG.LOSS_WEIGHTS['rcnn_proto_weight']
         tb_dict = {
             'rcnn_loss_proto': rcnn_loss_proto.item() if scalar else rcnn_loss_proto,
