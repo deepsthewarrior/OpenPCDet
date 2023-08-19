@@ -60,6 +60,7 @@ class PVRCNNHead(RoIHeadTemplate):
         self.pooled_prototype_sh_lb_.append((data['Ped']['mean']['sh'].cuda()).contiguous().view(-1))
         self.pooled_prototype_sh_lb_.append((data['Cyc']['mean']['sh'].cuda()).contiguous().view(-1))
         self.pooled_prototype_sh_lb = torch.stack(self.pooled_prototype_sh_lb_,dim=0).cuda() # [3, 27648] == [num_protos, 256]
+        self.temperature = self.model_cfg.SIM_TEMPERATURE
         
     def init_weights(self, weight_init='xavier'):
         if weight_init == 'kaiming':
@@ -198,9 +199,9 @@ class PVRCNNHead(RoIHeadTemplate):
         batch_size_rcnn = pooled_features.shape[0]
         pooled_features = pooled_features.permute(0, 2, 1).\
             contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxN, C, 6, 6, 6)
-        pooled_features_permute = pooled_features.view(batch_size_rcnn, -1, 1)
-        shared_features = self.shared_fc_layer(pooled_features_permute)
-        projected_features = self.projector_fc_layer(pooled_features_permute.clone().detach())
+        self.pooled_features_permute = pooled_features.view(batch_size_rcnn, -1, 1)
+        shared_features = self.shared_fc_layer(self.pooled_features_permute)
+        projected_features = self.projector_fc_layer(self.pooled_features_permute.clone().detach())
         rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
         rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)
         
@@ -229,7 +230,7 @@ class PVRCNNHead(RoIHeadTemplate):
             targets_dict['cos_scores_cyc_proj'] = proj_cos_sim[:,2].view(batch_dict['roi_scores'].shape[0],-1)
             batched_proj_cos_sim = proj_cos_sim.view(batch_dict['roi_scores'].shape[0],-1,3)
             targets_dict['cos_scores_proj_norm'] = F.softmax(batched_proj_cos_sim,dim=-1) # (N,128,3)
-            targets_dict['cos_sim'] = F.softmax(proj_cos_sim,dim=-1) 
+            targets_dict['cos_sim'] = F.softmax(proj_cos_sim/self.temperature,dim=-1) 
             
         # if self.protos is not None:
         #     cos_sim = F.normalize(projected_features.permute(0,2,1).squeeze(1)) @ F.normalize(self.protos).t()

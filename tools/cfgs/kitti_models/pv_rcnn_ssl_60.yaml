@@ -172,6 +172,7 @@ MODEL:
         REG_FC: [256, 256]
         DP_RATIO: 0.3
         BASE_PROTOTYPE: 'prototypes_pooled_shared_0.01_gt_proto.pkl'
+        SIM_TEMPERATURE: 0.1
 
         NMS_CONFIG:
             TRAIN:
