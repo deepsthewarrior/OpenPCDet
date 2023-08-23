@@ -787,6 +787,7 @@ class RoIHeadTemplate(nn.Module):
         if 'cos_sim' in self.forward_ret_dict.keys():
             rcnn_loss_projection, projection_tb_dict = self.get_projection_layer_loss(self.forward_ret_dict, scalar=scalar)
             tb_dict.update(projection_tb_dict)
+            rcnn_loss_projection = self.model_cfg.LOSS_CONFIG.LOSS_WEIGHTS.rcnn_proto_weight * rcnn_loss_projection
             rcnn_loss += rcnn_loss_projection
 
         tb_dict['rcnn_loss'] = rcnn_loss.item() if scalar else rcnn_loss
