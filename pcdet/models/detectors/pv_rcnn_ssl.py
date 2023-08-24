@@ -156,7 +156,8 @@ class PVRCNN_SSL(Detector3DTemplate):
         self.features_to_update_ulb = []
         self.labels_to_update_ulb = []
         self.momentum = 0.9
-        self.shared_pkl = {'ens': []}
+        self.shared_pkl_lb = {'ens': []}
+        self.shared_pkl_ulb = {'ens': []}
 
 
     def forward(self, batch_dict):
@@ -250,16 +251,55 @@ class PVRCNN_SSL(Detector3DTemplate):
                 temp['gt_classes'] = ((batch_dict_ema['gt_boxes'][inds])[..., -1].int())[:k + 1].clone().detach().cpu().numpy()
                 temp['gt_boxes_bev'] = (batch_dict_ema['gt_boxes_bev'][inds])[:k + 1].clone().detach().cpu().numpy()
                 temp['gt_boxes'] = cur_gt_boxes.clone().detach().cpu().numpy()
-                self.shared_pkl['ens'].append(temp)
+                self.shared_pkl_lb['ens'].append(temp)
 
             # self.shared_pkl['rcnn_cls_interim'].append(rcnn_interim)
             # self.shared_pkl['rcnn_reg_interim'].append(reg_interm)
             # self.shared_pkl['']
-
+            rank=''
+            if dist.is_initialized():
+                rank = os.getenv('RANK')  
             output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]
-            shared_path = os.path.join(output_dir, 'only_sh_cls.pkl')
-            pickle.dump(self.shared_pkl, open(shared_path, 'wb'))
+            shared_path = os.path.join(output_dir, f'only_sh_cls_lb_{rank}.pkl')
+            pickle.dump(self.shared_pkl_lb, open(shared_path, 'wb'))
+            for inds in unlabeled_inds:
+                temp = {}
+                # temp['pred_scores'] = pred_dicts_gap[inds]['pred_scores_all'].to('cuda:0')
+                # temp['pred_labels'] = (pred_dicts_gap[inds]['label_preds']).to('cuda:0')
+                # temp['iou'] = (pred_dicts_gap[inds]['iou']).to('cuda:0')
+                # temp['gt_assignment'] = (pred_dicts_gap[inds]['gt_assignment']).to('cuda:0')
+                # temp['selected'] = (pred_dicts_gap[inds]['selected']).to('cuda:0')
+                # temp['shared_features'] = (pred_dicts_gap[inds]['shared_features']).to('cuda:0')
+                # temp['rcnn_cls_interim'] = (pred_dicts_gap[inds]['rcnn_cls_interim']).to('cuda:0')
+                # temp['pooled_features'] = (pred_dicts_gap[inds]['pooled_features']).to('cuda:0')
+                # # temp['rcnn_reg_interim'] = (pred_dicts_gap[inds]['rcnn_reg_interim'])
+                # temp['gt_label'] = (pred_dicts_gap[inds]['gt_label']).to('cuda:0')
+                cur_gt_boxes = batch_dict_ema['gt_boxes'][inds]
+                cur_shared_features_gt = batch_dict_ema['shared_features_gt'][inds]
+                cur_cls_preds = batch_dict_ema['batch_cls_preds'][inds]
+                k = cur_gt_boxes.__len__() - 1
+                while k >= 0 and cur_gt_boxes[k].sum() == 0:
+                    k -= 1
+                cur_gt_boxes = cur_gt_boxes[:k + 1]
+                # temp['rcnn_cls_preds'] = cur_cls_preds[:k + 1]
+                # temp['encoded_spconv_tensor_dense'] = (batch_dict_ema['encoded_spconv_tensor'].dense())[inds]
+                # temp['anchors'] = (batch_dict_ema['anchors'][inds]).clone().detach().cpu().numpy()
+                temp['shared_features_gt'] = cur_shared_features_gt[:k + 1].clone().detach().cpu().numpy()
+                temp['spatial_features'] = (batch_dict_ema['spatial_features'][inds])[:k + 1].clone().detach().cpu().numpy()
+                temp['spatial_features_2d'] = (batch_dict_ema['spatial_features_2d'][inds])[:k + 1].clone().detach().cpu().numpy()
+                temp['pooled_features_gt'] = (batch_dict_ema['pooled_features_gt'][inds])[:k + 1].clone().detach().cpu().numpy()
+                temp['instance_idx'] = (batch_dict_ema['instance_idx'][inds])[:k + 1].clone().detach().cpu().numpy()
+                temp['gt_classes'] = ((batch_dict_ema['gt_boxes'][inds])[..., -1].int())[:k + 1].clone().detach().cpu().numpy()
+                temp['gt_boxes_bev'] = (batch_dict_ema['gt_boxes_bev'][inds])[:k + 1].clone().detach().cpu().numpy()
+                temp['gt_boxes'] = cur_gt_boxes.clone().detach().cpu().numpy()
+                self.shared_pkl_ulb['ens'].append(temp)
 
+            # self.shared_pkl['rcnn_cls_interim'].append(rcnn_interim)
+            # self.shared_pkl['rcnn_reg_interim'].append(reg_interm)
+            # self.shared_pkl['']
+            output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]
+            shared_path = os.path.join(output_dir, f'only_sh_cls_ulb_{rank}.pkl')
+            pickle.dump(self.shared_pkl_ulb, open(shared_path, 'wb'))
             # Create new dict for weakly aug.(WA) data for teacher - Eg. flip along x axis
         #     batch_dict_ema_wa = {}
         #     # If ENABLE_RELIABILITY is True, run WA (Humble Teacher) along with original teacher
