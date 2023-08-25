@@ -41,7 +41,7 @@ class KittiDatasetSSL(DatasetTemplate):
 
         self.kitti_infos = []
         self.include_kitti_data(self.mode)
-
+        self.ulb_index = 0
         if self.training:
             all_train = len(self.kitti_infos)
             self.unlabeled_index_list = list(set(list(range(all_train))) - set(self.sample_index_list))  # float()!!!
@@ -393,9 +393,13 @@ class KittiDatasetSSL(DatasetTemplate):
         if self.training:
             # index_unlabeled = np.random.choice(self.unlabeled_index_list, 1)[0]
             # info_unlabeled = copy.deepcopy(self.unlabeled_kitti_infos[index_unlabeled])
-            info_unlabeled = np.random.choice(self.unlabeled_kitti_infos, 1)[0]
-
+            # info_unlabeled = np.random.choice(self.unlabeled_kitti_infos, 1)[0]
+            info_unlabeled = copy.deepcopy(self.unlabeled_kitti_infos[self.ulb_index])
+            self.ulb_index += 1
+            self.ulb_index = self.ulb_index % len(self.unlabeled_kitti_infos)
             data_dict_unlabeled = self.get_item_single(info_unlabeled, unlabeled=True)
+            assert data_dict_labeled['gt_boxes'].shape[0] == data_dict_labeled['instance_idx'].shape[0], "gt_boxes and instance_idx do not match in get_item LB"
+            assert data_dict_unlabeled['gt_boxes'].shape[0] == data_dict_unlabeled['instance_idx'].shape[0], "gt_boxes and instance_idx do not match in get_item ULB"
             return [data_dict_labeled, data_dict_unlabeled]
         else:
             return data_dict_labeled
@@ -446,8 +450,8 @@ class KittiDatasetSSL(DatasetTemplate):
             except:
                 print('Error in collate_batch: key=%s' % key)
                 raise TypeError
-
         ret['batch_size'] = batch_size
+        assert ret['instance_idx'].shape[0] == ret['gt_boxes'].shape[0], "gt_boxes and instance_idx do not match in collate_batch"
         return ret
 
     def get_item_single(self, info, unlabeled=False):
