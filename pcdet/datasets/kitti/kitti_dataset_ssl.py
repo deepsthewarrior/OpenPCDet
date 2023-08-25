@@ -10,6 +10,7 @@ from ...ops.roiaware_pool3d import roiaware_pool3d_utils
 from ...utils import box_utils, calibration_kitti, common_utils, object3d_kitti
 from ..dataset import DatasetTemplate
 from collections import Counter
+import sys
 
 class KittiDatasetSSL(DatasetTemplate):
     def __init__(self, dataset_cfg, class_names, training=True, root_path=None, logger=None):
@@ -42,6 +43,7 @@ class KittiDatasetSSL(DatasetTemplate):
         self.kitti_infos = []
         self.include_kitti_data(self.mode)
         self.ulb_index = 0
+        self.rounds = -1
         if self.training:
             all_train = len(self.kitti_infos)
             self.unlabeled_index_list = list(set(list(range(all_train))) - set(self.sample_index_list))  # float()!!!
@@ -398,6 +400,11 @@ class KittiDatasetSSL(DatasetTemplate):
             self.ulb_index += 1
             self.ulb_index = self.ulb_index % len(self.unlabeled_kitti_infos)
             data_dict_unlabeled = self.get_item_single(info_unlabeled, unlabeled=True)
+            if self.ulb_index == 0:
+                self.rounds += 1
+            if self.rounds == 1:
+                print(f'Exiting the code, ulb_index at {self.ulb_index}')
+                sys.exit(0)
             assert data_dict_labeled['gt_boxes'].shape[0] == data_dict_labeled['instance_idx'].shape[0], "gt_boxes and instance_idx do not match in get_item LB"
             assert data_dict_unlabeled['gt_boxes'].shape[0] == data_dict_unlabeled['instance_idx'].shape[0], "gt_boxes and instance_idx do not match in get_item ULB"
             return [data_dict_labeled, data_dict_unlabeled]
