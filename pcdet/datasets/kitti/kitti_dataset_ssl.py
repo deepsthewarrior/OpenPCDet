@@ -41,8 +41,6 @@ class KittiDatasetSSL(DatasetTemplate):
 
         self.kitti_infos = []
         self.include_kitti_data(self.mode)
-        self.ulb_index = 0
-        self.rounds = -1
         if self.training:
             all_train = len(self.kitti_infos)
             self.unlabeled_index_list = list(set(list(range(all_train))) - set(self.sample_index_list))  # float()!!!
@@ -394,16 +392,8 @@ class KittiDatasetSSL(DatasetTemplate):
         if self.training:
             # index_unlabeled = np.random.choice(self.unlabeled_index_list, 1)[0]
             # info_unlabeled = copy.deepcopy(self.unlabeled_kitti_infos[index_unlabeled])
-            # info_unlabeled = np.random.choice(self.unlabeled_kitti_infos, 1)[0]
-            info_unlabeled = copy.deepcopy(self.unlabeled_kitti_infos[self.ulb_index])
+            info_unlabeled = np.random.choice(self.unlabeled_kitti_infos, 1)[0]
             data_dict_unlabeled = self.get_item_single(info_unlabeled, unlabeled=True)
-            if self.ulb_index == 0:
-                self.rounds += 1
-            if self.rounds == 1:
-                print(f'Exiting the code, ulb_index at {self.ulb_index}')
-                raise ValueError
-            self.ulb_index += 1
-            self.ulb_index = self.ulb_index % len(self.unlabeled_kitti_infos)
             return [data_dict_labeled, data_dict_unlabeled]
         else:
             return data_dict_labeled
