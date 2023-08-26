@@ -299,7 +299,7 @@ class PVRCNN_SSL(Detector3DTemplate):
                 # temp['gt_boxes_bev'] = (batch_dict['gt_boxes_bev'][inds])[:k + 1].clone().detach().cpu().numpy()
                 temp['gt_boxes'] = cur_gt_boxes.clone().detach().cpu().numpy()
                 temp['sample_idx'] = batch_dict['sample_idx'][inds].clone().detach().cpu().numpy()
-                temp['cur_epoch'] = np.array(batch_dict['cur_epoch'])
+                temp['cur_iteration'] = torch.tensor([batch_dict['cur_iteration']]).repeat(unlabeled_inds.shape[0])
                 self.shared_pkl_ulb['ens'].append(temp)
 
             # self.shared_pkl['rcnn_cls_interim'].append(rcnn_interim)
