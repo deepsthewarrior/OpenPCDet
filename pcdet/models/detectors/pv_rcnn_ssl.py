@@ -82,8 +82,8 @@ class PVRCNN_SSL(Detector3DTemplate):
     def _prep_bank_inputs(self, batch_dict, inds, num_points_threshold=20):
         selected_batch_dict = self._clone_gt_boxes_and_feats(batch_dict)
         with torch.no_grad():
-            batch_gt_feats = self.pv_rcnn.roi_head.pool_features(selected_batch_dict, use_gtboxes=True)
-
+            batch_gt_pool_feats = self.pv_rcnn.roi_head.pool_features(selected_batch_dict, use_gtboxes=True)
+            batch_gt_feats = self.pv_rcnn.roi_head.projected_layer(batch_gt_pool_feats.view(batch_gt_pool_feats.shape[0],-1,1))
         batch_gt_feats = batch_gt_feats.view(*batch_dict['gt_boxes'].shape[:2], -1)
         bank_inputs = defaultdict(list)
         for ix in inds:
@@ -265,7 +265,7 @@ class PVRCNN_SSL(Detector3DTemplate):
             for tag in feature_bank_registry.tags():
                 feature_bank_registry.get(tag).compute()
 
-        # update dynamic thresh results
+        # update dynamic thresh results 
         for tag in self.thresh_registry.tags():
             if results := self.thresh_registry.get(tag).compute():
                 tag = f"{tag}/" if tag else ''
@@ -284,7 +284,8 @@ class PVRCNN_SSL(Detector3DTemplate):
     def _get_proto_contrastive_loss(self, batch_dict, bank, ulb_inds):
         gt_boxes = batch_dict['gt_boxes']
         B, N = gt_boxes.shape[:2]
-        sa_pl_feats = self.pv_rcnn.roi_head.pool_features(batch_dict, use_gtboxes=True).view(B * N, -1)
+        sa_pl_pool_feats = self.pv_rcnn.roi_head.pool_features(batch_dict, use_gtboxes=True).view(B * N, -1, 1)
+        sa_pl_feats = self.pv_rcnn.roi_head.projected_layer(sa_pl_pool_feats).view(B * N, -1)
         pl_labels = batch_dict['gt_boxes'][..., -1].view(-1).long() - 1
         proto_cont_loss = bank.get_proto_contrastive_loss(sa_pl_feats, pl_labels)
         if proto_cont_loss is None:
@@ -292,7 +293,7 @@ class PVRCNN_SSL(Detector3DTemplate):
         nonzero_mask = torch.logical_not(torch.eq(gt_boxes, 0).all(dim=-1))
         ulb_nonzero_mask = nonzero_mask[ulb_inds]
         if ulb_nonzero_mask.sum() == 0:
-            print(f"No pl instances predicted for strongly augmented frame(s) {batch_dict['frame_id'][ulb_inds]}")
+            print(f"No pl instances predicted for strongly augmented frame(s) {batch_dict['frame_id'][ulb_inds.cpu().numpy()]}")
             return
         return proto_cont_loss.view(B, N)[ulb_inds][ulb_nonzero_mask].mean()
 
