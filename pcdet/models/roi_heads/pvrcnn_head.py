@@ -1,8 +1,8 @@
 import torch.nn as nn
-
 from ...ops.pointnet2.pointnet2_stack import pointnet2_modules as pointnet2_stack_modules
 from ...utils import common_utils
 from .roi_head_template import RoIHeadTemplate
+from pcdet.utils.prototype_utils import feature_bank_registry
 
 
 class PVRCNNHead(RoIHeadTemplate):
@@ -33,6 +33,20 @@ class PVRCNNHead(RoIHeadTemplate):
 
         self.shared_fc_layer = nn.Sequential(*shared_fc_list)
 
+        GRID_SIZE = self.model_cfg.ROI_GRID_POOL.GRID_SIZE
+        pre_channel = GRID_SIZE * GRID_SIZE * GRID_SIZE * num_c_out
+        projected_fc_list = []
+        for k in range(0, self.model_cfg.SHARED_FC.__len__()):
+            projected_fc_list.extend([
+                nn.Conv1d(pre_channel, self.model_cfg.SHARED_FC[k], kernel_size=1, bias=False),
+                nn.BatchNorm1d(self.model_cfg.SHARED_FC[k]),
+                nn.ReLU()
+            ])
+            pre_channel = self.model_cfg.SHARED_FC[k]
+
+            if k != self.model_cfg.SHARED_FC.__len__() - 1 and self.model_cfg.DP_RATIO > 0:
+                projected_fc_list.append(nn.Dropout(self.model_cfg.DP_RATIO))        
+        self.projected_layer = nn.Sequential(*projected_fc_list)
         self.cls_layers = self.make_fc_layers(
             input_channels=pre_channel, output_channels=self.num_class, fc_list=self.model_cfg.CLS_FC
         )
@@ -65,7 +79,7 @@ class PVRCNNHead(RoIHeadTemplate):
                     nn.init.constant_(m.bias, 0)
         nn.init.normal_(self.reg_layers[-1].weight, mean=0, std=0.001)
 
-    def roi_grid_pool(self, batch_dict):
+    def roi_grid_pool(self, batch_dict, use_gtboxes=False):
         """
         Args:
             batch_dict:
@@ -79,11 +93,12 @@ class PVRCNNHead(RoIHeadTemplate):
 
         """
         batch_size = batch_dict['batch_size']
-        rois = batch_dict['rois']
-        point_coords = batch_dict['point_coords']
-        point_features = batch_dict['point_features']
+        rois = batch_dict['gt_boxes'][..., 0:7] if use_gtboxes else batch_dict['rois']
+        point_coords = batch_dict["point_coords"]
+        point_features = batch_dict["point_features"]
+        point_cls_scores = batch_dict["point_cls_scores"]
 
-        point_features = point_features * batch_dict['point_cls_scores'].view(-1, 1)
+        point_features = point_features * point_cls_scores.view(-1, 1)
 
         global_roi_grid_points, local_roi_grid_points = self.get_global_grid_points_of_roi(
             rois, grid_size=self.model_cfg.ROI_GRID_POOL.GRID_SIZE
@@ -135,46 +150,64 @@ class PVRCNNHead(RoIHeadTemplate):
                           - (local_roi_size.unsqueeze(dim=1) / 2)  # (B, 6x6x6, 3)
         return roi_grid_points
 
+    def pool_features(self, batch_dict, use_gtboxes=False):
+        pooled_features = self.roi_grid_pool(batch_dict, use_gtboxes=use_gtboxes)  # (BxN, 6x6x6, C)
+        grid_size = self.model_cfg.ROI_GRID_POOL.GRID_SIZE
+        batch_size_rcnn = pooled_features.shape[0]
+        pooled_features = pooled_features.permute(0, 2, 1). \
+            contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxN, C, 6, 6, 6)
+
+        return pooled_features
+
     def forward(self, batch_dict, disable_gt_roi_when_pseudo_labeling=False):
         """
         :param input_data: input dict
         :return:
         """
-
         # use test-time nms for pseudo label generation
+
         targets_dict = self.proposal_layer(
             batch_dict, nms_config=self.model_cfg.NMS_CONFIG['TRAIN' if self.training and not disable_gt_roi_when_pseudo_labeling else 'TEST']
         )
-
         # should not use gt_roi for pseudo label generation
         if (self.training or self.print_loss_when_eval) and not disable_gt_roi_when_pseudo_labeling:
             targets_dict = self.assign_targets(batch_dict)
             batch_dict['rois'] = targets_dict['rois']
+            batch_dict['roi_scores'] = targets_dict['roi_scores']
             batch_dict['roi_labels'] = targets_dict['roi_labels']
 
-        # RoI aware pooling
-        pooled_features = self.roi_grid_pool(batch_dict)  # (BxN, 6x6x6, C)
 
-        grid_size = self.model_cfg.ROI_GRID_POOL.GRID_SIZE
+        pooled_features = self.pool_features(batch_dict)
         batch_size_rcnn = pooled_features.shape[0]
-        pooled_features = pooled_features.permute(0, 2, 1).\
-            contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxN, C, 6, 6, 6)
-
         shared_features = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
+        projected_features = self.projected_layer(pooled_features.view(batch_size_rcnn, -1, 1))
         rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
         rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)
+
+        if (self.training or self.print_loss_when_eval) and not disable_gt_roi_when_pseudo_labeling:
+            # RoI-level similarity.
+            # calculate cosine similarity between unlabeled augmented RoI features and labeled augmented prototypes.
+            # roi_features = pooled_features.clone().detach().view(batch_size_rcnn, -1)
+            projected_features_clone = projected_features.clone().detach().view(batch_size_rcnn, -1)
+            roi_scores_shape = batch_dict['roi_scores'].shape  # (B, N)
+            bank = feature_bank_registry.get('gt_aug_lbl_prototypes')
+            sim_scores = bank.get_sim_scores(projected_features_clone)
+            targets_dict['roi_sim_scores'] = sim_scores.view(*roi_scores_shape, -1)
 
         if not self.training or self.predict_boxes_when_training:
             batch_cls_preds, batch_box_preds = self.generate_predicted_boxes(
                 batch_size=batch_dict['batch_size'], rois=batch_dict['rois'], cls_preds=rcnn_cls, box_preds=rcnn_reg
             )
+            # note that the rpn batch_cls_preds and batch_box_preds are being overridden here by rcnn preds
             batch_dict['batch_cls_preds'] = batch_cls_preds
             batch_dict['batch_box_preds'] = batch_box_preds
             batch_dict['cls_preds_normalized'] = False
+            # Temporarily add infos to targets_dict for metrics
+            targets_dict['batch_box_preds'] = batch_box_preds
+
         if self.training or self.print_loss_when_eval:
             targets_dict['rcnn_cls'] = rcnn_cls
             targets_dict['rcnn_reg'] = rcnn_reg
-
             self.forward_ret_dict = targets_dict
 
         return batch_dict
