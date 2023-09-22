@@ -182,7 +182,7 @@ class PVRCNNHead(RoIHeadTemplate):
         pooled_features = self.pool_features(batch_dict)
         batch_size_rcnn = pooled_features.shape[0]
         shared_features = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
-        projected_features = self.projected_layer(pooled_features.view(batch_size_rcnn, -1, 1))
+        projected_features = self.projected_layer(pooled_features.view(batch_size_rcnn, -1, 1)).detach()
         rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
         rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)
 
@@ -190,10 +190,10 @@ class PVRCNNHead(RoIHeadTemplate):
             # RoI-level similarity.
             # calculate cosine similarity between unlabeled augmented RoI features and labeled augmented prototypes.
             # roi_features = pooled_features.clone().detach().view(batch_size_rcnn, -1)
-            projected_features_clone = projected_features.clone().detach().view(batch_size_rcnn, -1)
+            projected_features = projected_features.view(batch_size_rcnn, -1)
             roi_scores_shape = batch_dict['roi_scores'].shape  # (B, N)
             bank = feature_bank_registry.get('gt_aug_lbl_prototypes')
-            sim_scores = bank.get_sim_scores(projected_features_clone)
+            sim_scores = bank.get_sim_scores(projected_features)
             targets_dict['roi_sim_scores'] = sim_scores.view(*roi_scores_shape, -1)
 
         if not self.training or self.predict_boxes_when_training:
