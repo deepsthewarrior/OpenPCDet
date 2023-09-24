@@ -13,10 +13,10 @@ class FeatureBank(Metric):
         super().__init__()
         self.tag = kwargs.get('NAME', None)
 
-        self.temperature = kwargs.get('TEMPERATURE')
-        self.feat_size = kwargs.get('FEATURE_SIZE')
+        self.temperature = kwargs.get('TEMPERATURE',0.1)
+        self.feat_size = kwargs.get('FEATURE_SIZE',256)
         self.bank_size = kwargs.get('BANK_SIZE')  # e.g., num. of classes or labeled instances
-        self.momentum = kwargs.get('MOMENTUM')
+        self.momentum = kwargs.get('MOMENTUM',0.9)
         self.direct_update = kwargs.get('DIRECT_UPDATE')
         self.reset_state_interval = kwargs.get('RESET_STATE_INTERVAL')  # reset the state when N unique samples are seen
         self.num_points_thresh = kwargs.get('FILTER_MIN_POINTS_IN_GT', 0)
@@ -57,16 +57,26 @@ class FeatureBank(Metric):
             self.iterations.append(rois_iter)           # (N,)
 
     def compute(self):
-        unique_smpl_ids = torch.unique(torch.cat((self.smpl_ids,), dim=0))
+        try:
+            unique_smpl_ids = torch.unique(torch.cat((self.smpl_ids,), dim=0))
+        except:
+            unique_smpl_ids = torch.unique(torch.cat((self.smpl_ids), dim=0))
         if len(unique_smpl_ids) < self.reset_state_interval:
             return None
-        
-        features = torch.cat((self.feats,), dim=0)
-        ins_ids = torch.cat(self.ins_ids).int().cpu().numpy()
-        labels = torch.cat((self.labels,), dim=0).int()
-        iterations = torch.cat(self.iterations).int().cpu().numpy()
-        ins_ids = torch.cat((self.ins_ids,), dim=0).int().cpu().numpy()
-        iterations = torch.cat((self.iterations,), dim=0).int().cpu().numpy()
+        try:
+            features = torch.cat((self.feats,), dim=0)
+            ins_ids = torch.cat(self.ins_ids).int().cpu().numpy()
+            labels = torch.cat((self.labels,), dim=0).int()
+            iterations = torch.cat(self.iterations).int().cpu().numpy()
+            ins_ids = torch.cat((self.ins_ids,), dim=0).int().cpu().numpy()
+            iterations = torch.cat((self.iterations,), dim=0).int().cpu().numpy()
+        except:
+            features = torch.cat((self.feats), dim=0)
+            ins_ids = torch.cat(self.ins_ids).int().cpu().numpy()
+            labels = torch.cat((self.labels), dim=0).int()
+            iterations = torch.cat(self.iterations).int().cpu().numpy()
+            ins_ids = torch.cat((self.ins_ids), dim=0).int().cpu().numpy()
+            iterations = torch.cat((self.iterations), dim=0).int().cpu().numpy()            
         
         assert len(features) == len(labels) == len(ins_ids) == len(iterations), \
             "length of features, labels, ins_ids, and iterations should be the same"
@@ -143,7 +153,7 @@ class FeatureBank(Metric):
         :return:
         """
         if not self.initialized:
-            return None
+            return F.normalize(feats) @ torch.zeros(1,self.feat_size).t().to(feats.device)
         sim_scores = F.normalize(feats) @ F.normalize(self.classwise_prototypes).t()
         log_probs = F.log_softmax(sim_scores / self.temperature, dim=-1)
         return -log_probs[torch.arange(len(labels)), labels]

@@ -1,4 +1,5 @@
 import torch.nn as nn
+import torch
 from ...ops.pointnet2.pointnet2_stack import pointnet2_modules as pointnet2_stack_modules
 from ...utils import common_utils
 from .roi_head_template import RoIHeadTemplate
@@ -180,9 +181,9 @@ class PVRCNNHead(RoIHeadTemplate):
             targets_dict['points'] = batch_dict['points']
 
         pooled_features = self.pool_features(batch_dict)
+        pooled_features_clone = pooled_features.clone().detach()
         batch_size_rcnn = pooled_features.shape[0]
         shared_features = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
-        projected_features = self.projected_layer(pooled_features.view(batch_size_rcnn, -1, 1))
         rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
         rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)
 
@@ -190,7 +191,9 @@ class PVRCNNHead(RoIHeadTemplate):
             # RoI-level similarity.
             # calculate cosine similarity between unlabeled augmented RoI features and labeled augmented prototypes.
             # roi_features = pooled_features.clone().detach().view(batch_size_rcnn, -1)
-            projected_features_clone = projected_features.clone().detach().view(batch_size_rcnn, -1)
+            with torch.no_grad():
+                projected_features = self.projected_layer(pooled_features_clone.view(batch_size_rcnn, -1, 1))
+                projected_features_clone = projected_features.view(batch_size_rcnn, -1)
             roi_scores_shape = batch_dict['roi_scores'].shape  # (B, N)
             bank = feature_bank_registry.get('gt_aug_lbl_prototypes')
             sim_scores = bank.get_sim_scores(projected_features_clone)
