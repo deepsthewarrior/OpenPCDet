@@ -44,12 +44,13 @@ def train_one_epoch(model, optimizer, train_loader, model_func, lr_scheduler, ac
 
         model.train()
         optimizer.zero_grad()
-
+        for name, param in model.named_parameters():
+            if param.grad is None:
+                print(f'{name} has no grad')
         loss, tb_dict, disp_dict = model_func(model, batch)
 
         forward_timer = time.time()
         cur_forward_time = forward_timer - data_timer
-
         loss.backward()
         clip_grad_norm_(model.parameters(), optim_cfg.GRAD_NORM_CLIP)
         optimizer.step()

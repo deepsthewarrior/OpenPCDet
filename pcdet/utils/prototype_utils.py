@@ -50,12 +50,16 @@ class FeatureBank(Metric):
 
     def compute(self):
         # unique_smpl_ids = torch.unique(torch.cat((self.smpl_ids,), dim=0))
-        
-        features = torch.cat((self.feats), dim=0)
-        # ins_ids = torch.cat(self.ins_ids).int().cpu().numpy()
-        labels = torch.cat((self.labels), dim=0).int()
-        iterations = torch.cat(self.iterations).int().cpu().numpy()
-
+        try:
+            features = torch.cat((self.feats,), dim=0)
+            # ins_ids = torch.cat(self.ins_ids).int().cpu().numpy()
+            labels = torch.cat((self.labels,), dim=0).int()
+            iterations = torch.cat((self.iterations,), dim=0).int().cpu().numpy()
+        except:
+            features = torch.cat((self.feats), dim=0)
+            # ins_ids = torch.cat(self.ins_ids).int().cpu().numpy()
+            labels = torch.cat((self.labels), dim=0).int()
+            iterations = torch.cat(self.iterations).int().cpu().numpy()
         
         assert len(features) == len(labels) == len(iterations), \
             "length of features, labels, ins_ids, and iterations should be the same"
@@ -91,8 +95,8 @@ class FeatureBank(Metric):
         :param labels: pseudo-labels of the strongly augmented unlabeled samples (N,)
         :return:
         """
-        if not self.initialized:
-            return None
+        if not self.initialized: 
+            return F.normalize(feats) @ torch.zeros(1,256).t().to(feats.device)
         sim_scores = F.normalize(feats) @ F.normalize(self.classwise_prototypes).t()
         log_probs = F.log_softmax(sim_scores / self.temperature, dim=-1)
         return -log_probs[torch.arange(len(labels)), labels]

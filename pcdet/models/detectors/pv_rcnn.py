@@ -24,7 +24,7 @@ class PVRCNN(Detector3DTemplate):
         with torch.no_grad():
             batch_gt_pool_feats = self.roi_head.pool_features(selected_batch_dict, use_gtboxes=True)
             batch_gt_feats = self.roi_head.projected_layer(batch_gt_pool_feats.view(batch_gt_pool_feats.shape[0],-1,1))
-        batch_gt_feats = batch_gt_feats.view(*batch_dict['gt_boxes'].shape[:2], -1)
+            batch_gt_feats = batch_gt_feats.view(*batch_dict['gt_boxes'].shape[:2], -1)
         bank_inputs = defaultdict(list)
         for ix in range(batch_dict['gt_boxes'].shape[0]):
             gt_boxes = selected_batch_dict['gt_boxes'][ix]
@@ -88,6 +88,8 @@ class PVRCNN(Detector3DTemplate):
         if protocon_loss is not None:
             protocon_loss *= self.model_cfg.ROI_HEAD.LOSS_CONFIG.LOSS_WEIGHTS.protocon_weight
             loss += protocon_loss
+        else:
+            protocon_loss = torch.zeros(1, device=loss.device)
             tb_dict['protocon_loss'] = protocon_loss
         return loss, tb_dict, disp_dict
     
