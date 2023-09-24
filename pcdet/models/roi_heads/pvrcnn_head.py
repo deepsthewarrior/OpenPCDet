@@ -193,10 +193,10 @@ class PVRCNNHead(RoIHeadTemplate):
             # roi_features = pooled_features.clone().detach().view(batch_size_rcnn, -1)
             with torch.no_grad():
                 projected_features = self.projected_layer(pooled_features_clone.view(batch_size_rcnn, -1, 1))
-                projected_features_clone = projected_features.view(batch_size_rcnn, -1)
+                projected_features = projected_features.view(batch_size_rcnn, -1)
             roi_scores_shape = batch_dict['roi_scores'].shape  # (B, N)
             bank = feature_bank_registry.get('gt_aug_lbl_prototypes')
-            sim_scores = bank.get_sim_scores(projected_features_clone)
+            sim_scores = bank.get_sim_scores(projected_features)
             targets_dict['roi_sim_scores'] = sim_scores.view(*roi_scores_shape, -1)
 
         if not self.training or self.predict_boxes_when_training:
