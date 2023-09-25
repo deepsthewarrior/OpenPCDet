@@ -251,9 +251,8 @@ class PVRCNN_SSL(Detector3DTemplate):
             loss += ulb_loss_cls_dist
         if self.model_cfg['ROI_HEAD'].get('ENABLE_PROTO_CONTRASTIVE_LOSS', False):
             proto_cont_loss = self._get_proto_contrastive_loss(batch_dict, bank, ulb_inds)
-            if proto_cont_loss is not None:
-                loss += proto_cont_loss * self.model_cfg['ROI_HEAD']['PROTO_CONTRASTIVE_LOSS_WEIGHT']
-                tb_dict['proto_cont_loss'] = proto_cont_loss.item()
+            loss += proto_cont_loss * self.model_cfg['ROI_HEAD']['PROTO_CONTRASTIVE_LOSS_WEIGHT']
+            tb_dict['proto_cont_loss'] = proto_cont_loss.item()
 
         tb_dict_ = self._prep_tb_dict(tb_dict, lbl_inds, ulb_inds, reduce_loss_fn)
 
@@ -294,7 +293,7 @@ class PVRCNN_SSL(Detector3DTemplate):
         ulb_nonzero_mask = nonzero_mask[ulb_inds]
         if ulb_nonzero_mask.sum() == 0:
             print(f"No pl instances predicted for strongly augmented frame(s) {batch_dict['frame_id'][ulb_inds.cpu().numpy()]}")
-            return
+            return (sa_pl_feats @ torch.zeros(sa_pl_feats.shape[1],1).to(sa_pl_feats.device)).mean()
         return proto_cont_loss.view(B, N)[ulb_inds][ulb_nonzero_mask].mean()
 
     @staticmethod
