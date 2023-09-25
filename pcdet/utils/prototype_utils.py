@@ -65,9 +65,9 @@ class FeatureBank(Metric):
             return None
         try:
             features = torch.cat((self.feats,), dim=0)
-            ins_ids = torch.cat(self.ins_ids).int().cpu().numpy()
+            ins_ids = torch.cat((self.ins_ids,),dim=0).int().cpu().numpy()
             labels = torch.cat((self.labels,), dim=0).int()
-            iterations = torch.cat(self.iterations).int().cpu().numpy()
+            iterations = torch.cat((self.iterations,),dim=0).int().cpu().numpy()
             ins_ids = torch.cat((self.ins_ids,), dim=0).int().cpu().numpy()
             iterations = torch.cat((self.iterations,), dim=0).int().cpu().numpy()
         except:
