@@ -214,9 +214,10 @@ class PVRCNN_SSL(Detector3DTemplate):
             self.thresh_registry.get(tag='pl_adaptive_thresh').update(**metrics_input)
 
         # Update the bank with student's features from augmented labeled data
-        bank = feature_bank_registry.get('gt_aug_lbl_prototypes')
-        sa_gt_lbl_inputs = self._prep_bank_inputs(batch_dict, lbl_inds, bank.num_points_thresh)
-        bank.update(**sa_gt_lbl_inputs, iteration=batch_dict['cur_iteration'])
+        if self.model_cfg['ROI_HEAD'].get('ENABLE_PROTO_CONTRASTIVE_LOSS', False): # Initialize feature bank only if proto_con_loss used
+            bank = feature_bank_registry.get('gt_aug_lbl_prototypes')
+            sa_gt_lbl_inputs = self._prep_bank_inputs(batch_dict, lbl_inds, bank.num_points_thresh)
+            bank.update(**sa_gt_lbl_inputs, iteration=batch_dict['cur_iteration'])
 
         # For metrics calculation
         self.pv_rcnn.roi_head.forward_ret_dict['unlabeled_inds'] = ulb_inds
@@ -259,8 +260,10 @@ class PVRCNN_SSL(Detector3DTemplate):
         if self.model_cfg.get('STORE_SCORES_IN_PKL', False):
             self.dump_statistics(batch_dict, ulb_inds)
 
-        for tag in feature_bank_registry.tags():
-            feature_bank_registry.get(tag).compute()
+
+        if self.model_cfg['ROI_HEAD'].get('ENABLE_PROTO_CONTRASTIVE_LOSS', False):
+            for tag in feature_bank_registry.tags():
+                feature_bank_registry.get(tag).compute()
 
         # update dynamic thresh results
         for tag in self.thresh_registry.tags():
