@@ -290,11 +290,10 @@ class PVRCNN_SSL(Detector3DTemplate):
         if proto_cont_loss is None:
             return
         nonzero_mask = torch.logical_not(torch.eq(gt_boxes, 0).all(dim=-1))
-        ulb_nonzero_mask = nonzero_mask[ulb_inds]
-        if ulb_nonzero_mask.sum() == 0:
+        if nonzero_mask.sum() == 0:
             print(f"No pl instances predicted for strongly augmented frame(s) {batch_dict['frame_id'][ulb_inds.cpu().numpy()]}")
             return (sa_pl_feats @ torch.zeros(sa_pl_feats.shape[1],1).to(sa_pl_feats.device)).mean()
-        return proto_cont_loss.view(B, N)[ulb_inds][ulb_nonzero_mask].mean()
+        return proto_cont_loss.view(B, N)[nonzero_mask].mean()
 
     @staticmethod
     def _prep_tb_dict(tb_dict, lbl_inds, ulb_inds, reduce_loss_fn):
