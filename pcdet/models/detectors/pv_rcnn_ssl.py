@@ -46,8 +46,8 @@ class PVRCNN_SSL(Detector3DTemplate):
             unlabeled_inds = torch.nonzero(1-labeled_mask).squeeze(1).long()
             batch_dict_ema = {}
             keys = list(batch_dict.keys())
-            self.debug_dict['ulb'].append(batch_dict['gt_boxes'][labeled_inds][...,-1])
-            self.debug_dict['lb'].append(batch_dict['gt_boxes'][unlabeled_inds][...,-1])
+            self.debug_dict['lb'].append(batch_dict['gt_boxes'][labeled_inds].cpu().numpy())
+            self.debug_dict['ulb'].append(batch_dict['gt_boxes'][unlabeled_inds].cpu().numpy())
             self.debug_dict['epochs'].append(batch_dict['cur_epoch'])
             self.debug_dict['iters'].append(batch_dict['cur_iteration'])
             output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]
