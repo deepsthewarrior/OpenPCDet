@@ -2,6 +2,7 @@ import os
 
 import torch
 import copy
+import pickle
 
 from pcdet.datasets.augmentor.augmentor_utils import *
 from pcdet.ops.iou3d_nms import iou3d_nms_utils
@@ -27,7 +28,7 @@ class PVRCNN_SSL(Detector3DTemplate):
             param.detach_()
         self.add_module('pv_rcnn', self.pv_rcnn)
         self.add_module('pv_rcnn_ema', self.pv_rcnn_ema)
-
+    
         # self.module_list = self.build_networks()
         # self.module_list_ema = self.build_networks()
         self.thresh = model_cfg.THRESH
@@ -37,7 +38,7 @@ class PVRCNN_SSL(Detector3DTemplate):
         self.unlabeled_weight = model_cfg.UNLABELED_WEIGHT
         self.no_nms = model_cfg.NO_NMS
         self.supervise_mode = model_cfg.SUPERVISE_MODE
-
+        self.debug_dict = {'ulb': [], 'lb': [], 'epochs': [], 'iters': []}
     def forward(self, batch_dict):
         if self.training:
             labeled_mask = batch_dict['labeled_mask'].view(-1)
@@ -45,6 +46,13 @@ class PVRCNN_SSL(Detector3DTemplate):
             unlabeled_inds = torch.nonzero(1-labeled_mask).squeeze(1).long()
             batch_dict_ema = {}
             keys = list(batch_dict.keys())
+            self.debug_dict['ulb'].append(batch_dict['gt_boxes'][labeled_inds][...,-1])
+            self.debug_dict['lb'].append(batch_dict['gt_boxes'][unlabeled_inds][...,-1])
+            self.debug_dict['epochs'].append(batch_dict['cur_epoch'])
+            self.debug_dict['iters'].append(batch_dict['cur_iteration'])
+            output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]
+            file_path = os.path.join(output_dir, 'gt_labels.pkl')
+            pickle.dump(self.debug_dict, open(file_path, 'wb'))
             for k in keys:
                 if k + '_ema' in keys:
                     continue
