@@ -68,6 +68,9 @@ class PVRCNN_SSL(Detector3DTemplate):
         vals_to_store = ['iou_roi_pl', 'iou_roi_gt', 'pred_scores', 'teacher_pred_scores',
                          'weights', 'roi_scores', 'pcv_scores', 'num_points_in_roi', 'class_labels', 'iteration']
         self.val_dict = {val: [] for val in vals_to_store}
+        debug_keys = ['ulb','lb','epochs','iters']
+        self.debug_dict = {debug_keys: [] for debug_keys in debug_keys}
+
 
     @staticmethod
     def _clone_gt_boxes_and_feats(batch_dict):
@@ -123,7 +126,7 @@ class PVRCNN_SSL(Detector3DTemplate):
     def forward(self, batch_dict):
         if self.training:
             return self._forward_training(batch_dict)
-
+        
         for cur_module in self.pv_rcnn.module_list:
             batch_dict = cur_module(batch_dict)
         pred_dicts, recall_dicts = self.pv_rcnn.post_processing(batch_dict)
@@ -196,6 +199,14 @@ class PVRCNN_SSL(Detector3DTemplate):
 
         # apply student's augs on teacher's pseudo-labels (filtered) only (not points)
         batch_dict = self.apply_augmentation(batch_dict, batch_dict, ulb_inds, key='gt_boxes')
+
+        self.debug_dict['ulb'].append(batch_dict['gt_boxes'][ulb_inds][...,-1])
+        self.debug_dict['lb'].append(batch_dict['gt_boxes'][lbl_inds][...,-1])
+        self.debug_dict['epochs'].append(batch_dict['cur_epoch'])
+        self.debug_dict['iters'].append(batch_dict['cur_iteration'])
+        output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]
+        file_path = os.path.join(output_dir, 'gt_labels.pkl')
+        pickle.dump(self.val_dict, open(file_path, 'wb'))
 
         for cur_module in self.pv_rcnn.module_list:
             batch_dict = cur_module(batch_dict)
