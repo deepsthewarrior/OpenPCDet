@@ -12,7 +12,7 @@ from .pv_rcnn import PVRCNN
 from pcdet.utils import common_utils
 from pcdet.utils.stats_utils import metrics_registry
 from pcdet.utils.prototype_utils import feature_bank_registry
-from tools.visual_utils import open3d_vis_utils as V
+# from tools.visual_utils import open3d_vis_utils as V
 from collections import defaultdict
 from pcdet.utils.weighting_methods import build_thresholding_method
 
@@ -206,7 +206,7 @@ class PVRCNN_SSL(Detector3DTemplate):
         self.debug_dict['iters'].append(batch_dict['cur_iteration'])
         output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]
         file_path = os.path.join(output_dir, 'gt_labels.pkl')
-        pickle.dump(self.val_dict, open(file_path, 'wb'))
+        pickle.dump(self.debug_dict, open(file_path, 'wb'))
 
         for cur_module in self.pv_rcnn.module_list:
             batch_dict = cur_module(batch_dict)
