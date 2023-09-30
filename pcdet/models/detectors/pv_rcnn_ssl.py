@@ -200,8 +200,8 @@ class PVRCNN_SSL(Detector3DTemplate):
         # apply student's augs on teacher's pseudo-labels (filtered) only (not points)
         batch_dict = self.apply_augmentation(batch_dict, batch_dict, ulb_inds, key='gt_boxes')
 
-        self.debug_dict['ulb'].append(batch_dict['gt_boxes'][ulb_inds][...,-1])
-        self.debug_dict['lb'].append(batch_dict['gt_boxes'][lbl_inds][...,-1])
+        self.debug_dict['ulb'].append(batch_dict['gt_boxes'][ulb_inds].cpu().numpy())
+        self.debug_dict['lb'].append(batch_dict['gt_boxes'][lbl_inds].cpu().numpy())
         self.debug_dict['epochs'].append(batch_dict['cur_epoch'])
         self.debug_dict['iters'].append(batch_dict['cur_iteration'])
         output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]
