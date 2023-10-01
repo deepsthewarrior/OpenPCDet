@@ -60,13 +60,22 @@ class FeatureBank(Metric):
         unique_smpl_ids = torch.unique(torch.cat((self.smpl_ids,), dim=0))
         if len(unique_smpl_ids) < self.reset_state_interval:
             return None
-        
-        features = torch.cat((self.feats,), dim=0)
-        ins_ids = torch.cat(self.ins_ids).int().cpu().numpy()
-        labels = torch.cat((self.labels,), dim=0).int()
-        iterations = torch.cat(self.iterations).int().cpu().numpy()
-        ins_ids = torch.cat((self.ins_ids,), dim=0).int().cpu().numpy()
-        iterations = torch.cat((self.iterations,), dim=0).int().cpu().numpy()
+        try:
+            features = torch.cat((self.feats,), dim=0)
+            ins_ids = torch.cat((self.ins_ids,)).int().cpu().numpy()
+            labels = torch.cat((self.labels,), dim=0).int()
+            iterations = torch.cat((self.iterations,)).int().cpu().numpy()
+            ins_ids = torch.cat((self.ins_ids,),dim=0).int().cpu().numpy()
+            iterations = torch.cat((self.iterations,),dim=0).int().cpu().numpy()
+
+
+        except:
+            features = torch.cat(self.feats, dim=0)
+            ins_ids = torch.cat(self.ins_ids).int().cpu().numpy()
+            labels = torch.cat(self.labels, dim=0).int()
+            iterations = torch.cat(self.iterations).int().cpu().numpy()
+            ins_ids = torch.cat(self.ins_ids, dim=0).int().cpu().numpy()
+            iterations = torch.cat(self.iterations, dim=0).int().cpu().numpy()        
         
         assert len(features) == len(labels) == len(ins_ids) == len(iterations), \
             "length of features, labels, ins_ids, and iterations should be the same"
