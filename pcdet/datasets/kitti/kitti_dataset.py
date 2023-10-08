@@ -417,10 +417,11 @@ class KittiDataset(DatasetTemplate):
             gt_names = annos['name']
             gt_boxes_camera = np.concatenate([loc, dims, rots[..., np.newaxis]], axis=1).astype(np.float32)
             gt_boxes_lidar = box_utils.boxes3d_kitti_camera_to_lidar(gt_boxes_camera, calib)
-
+            instance_index = np.asarray([int(sample_idx) * 100 + int(idx) for idx in annos['index']])
             input_dict.update({
                 'gt_names': gt_names,
-                'gt_boxes': gt_boxes_lidar
+                'gt_boxes': gt_boxes_lidar,
+                'instance_idx': instance_index,
             })
             if "gt_boxes2d" in get_item_list:
                 input_dict['gt_boxes2d'] = annos["bbox"]

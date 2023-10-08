@@ -9,7 +9,7 @@ from pcdet.datasets.augmentor.augmentor_utils import *
 from ...ops.roiaware_pool3d import roiaware_pool3d_utils
 from ...utils import box_utils, calibration_kitti, common_utils, object3d_kitti
 from ..dataset import DatasetTemplate
-
+from collections import Counter
 
 class KittiDatasetSSL(DatasetTemplate):
     def __init__(self, dataset_cfg, class_names, training=True, root_path=None, logger=None):
@@ -36,7 +36,7 @@ class KittiDatasetSSL(DatasetTemplate):
         else:
             self.sample_id_list = [x.strip().split(' ')[0] for x in
                                open(split_dir).readlines()] if split_dir.exists() else None
-            self.sample_index_list = [x.strip().split(' ')[1] for x in
+            self.sample_index_list = [int(x.strip().split(' ')[1]) for x in
                                   open(split_dir).readlines()] if split_dir.exists() else None
 
         self.kitti_infos = []
@@ -62,6 +62,11 @@ class KittiDatasetSSL(DatasetTemplate):
             self.kitti_infos = temp
             assert len(self.kitti_infos) == len(self.sample_id_list)
 
+        self.class_counter = Counter()
+        for info in self.kitti_infos:
+            for name in info['annos']['name']:
+                self.class_counter[name] += 1
+        print("Labeled instances before gt_sampling: ", self.class_counter)
         if self.logger is not None:
             self.logger.info('Total samples for KITTI dataset: %d' % (len(self.kitti_infos)))
 
@@ -406,8 +411,7 @@ class KittiDatasetSSL(DatasetTemplate):
             for cur_sample in batch_list:
                 for key, val in cur_sample[1].items():
                     data_dict[key].append(val)
-
-            batch_size = len(batch_list) * 2
+            batch_size = len(batch_list) * 2    
         else:
             for cur_sample in batch_list:
                 for key, val in cur_sample.items():
@@ -431,6 +435,12 @@ class KittiDatasetSSL(DatasetTemplate):
                     for k in range(batch_size):
                         batch_gt_boxes3d[k, :val[k].__len__(), :] = val[k]
                     ret[key] = batch_gt_boxes3d
+                elif key in ['instance_idx']:
+                    max_ind = max([len(x) for x in val])
+                    batch_ind = np.zeros((batch_size, max_ind), dtype=np.int32)
+                    for k in range(batch_size):
+                        batch_ind[k, :val[k].__len__()] = val[k]
+                    ret[key] = batch_ind.astype(np.int32)
                 else:
                     ret[key] = np.stack(val, axis=0)
             except:
@@ -466,10 +476,11 @@ class KittiDatasetSSL(DatasetTemplate):
             gt_names = annos['name']
             gt_boxes_camera = np.concatenate([loc, dims, rots[..., np.newaxis]], axis=1).astype(np.float32)
             gt_boxes_lidar = box_utils.boxes3d_kitti_camera_to_lidar(gt_boxes_camera, calib)
-
+            instance_index = np.asarray([int(sample_idx) * 100 + int(index) for index in annos['index']])
             input_dict.update({
                 'gt_names': gt_names,
-                'gt_boxes': gt_boxes_lidar
+                'gt_boxes': gt_boxes_lidar,
+                'instance_idx': instance_index,
             })
             road_plane = self.get_road_plane(sample_idx)
             if road_plane is not None:
@@ -506,7 +517,6 @@ class KittiDatasetSSL(DatasetTemplate):
         if self.training:
             assert 'gt_boxes' in data_dict, 'gt_boxes should be provided for training'
             gt_boxes_mask = np.array([n in self.class_names for n in data_dict['gt_names']], dtype=np.bool_)
-
             data_dict = self.data_augmentor.forward(
                 data_dict={
                     **data_dict,
@@ -514,24 +524,36 @@ class KittiDatasetSSL(DatasetTemplate):
                 },
                 no_db_sample=no_db_sample
             )
-            # print(data_dict)
             points_ema = data_dict['points'].copy()
             gt_boxes_ema = data_dict['gt_boxes'].copy()
+            # Reverses the student's augmentations applied on points/gt_boxes. Thus, teacher's input has no augs.
             gt_boxes_ema, points_ema, _ = global_scaling(gt_boxes_ema, points_ema, [0, 2],
                                                          scale_=1/data_dict['scale'])
             gt_boxes_ema, points_ema, _ = global_rotation(gt_boxes_ema, points_ema, [-1, 1],
                                                           rot_angle_=-data_dict['rot_angle'])
+            
+            # # Weakly augment the data for teacher ensemble
+            # points_ema_wa = points_ema.copy()
+            # gt_boxes_ema_wa = gt_boxes_ema.copy()
+            # # Apply random-flip-along-x on samples where it was not applied previously
+            # rem_samples = ~data_dict['flip_x']
+            # gt_boxes_ema_wa, points_ema_wa, _ = random_flip_along_x(gt_boxes_ema_wa, points_ema_wa, enable_=rem_samples)
+            # data_dict['points_ema_wa'] = points_ema_wa
+            # data_dict['gt_boxes_ema_wa'] = gt_boxes_ema_wa
+            
             gt_boxes_ema, points_ema, _ = random_flip_along_x(gt_boxes_ema, points_ema, enable_=data_dict['flip_x'])
             gt_boxes_ema, points_ema, _ = random_flip_along_y(gt_boxes_ema, points_ema, enable_=data_dict['flip_y'])
+            # Store this for original dataset for teacher ensemble
             data_dict['points_ema'] = points_ema
             data_dict['gt_boxes_ema'] = gt_boxes_ema
 
         if data_dict.get('gt_boxes', None) is not None:
             selected = common_utils.keep_arrays_by_name(data_dict['gt_names'], self.class_names)
             data_dict['gt_boxes'] = data_dict['gt_boxes'][selected]
-            
+            data_dict['instance_idx'] = data_dict['instance_idx'][selected]
             if self.training:
                 data_dict['gt_boxes_ema'] = data_dict['gt_boxes_ema'][selected]
+                # data_dict['gt_boxes_ema_wa'] = data_dict['gt_boxes_ema_wa'][selected]
             data_dict['gt_names'] = data_dict['gt_names'][selected]
             gt_classes = np.array([self.class_names.index(n) + 1 for n in data_dict['gt_names']], dtype=np.int32)
             gt_boxes = np.concatenate((data_dict['gt_boxes'], gt_classes.reshape(-1, 1).astype(np.float32)), axis=1)
@@ -540,10 +562,14 @@ class KittiDatasetSSL(DatasetTemplate):
                 gt_boxes_ema = np.concatenate((data_dict['gt_boxes_ema'], gt_classes.reshape(-1, 1).astype(np.float32)), axis=1)
                 data_dict['gt_boxes_ema'] = gt_boxes_ema
 
+                # gt_boxes_ema_wa = np.concatenate((data_dict['gt_boxes_ema_wa'], gt_classes.reshape(-1, 1).astype(np.float32)), axis=1)
+                # data_dict['gt_boxes_ema_wa'] = gt_boxes_ema_wa
+
         # print((data_dict['points'] ** 2).sum(), (data_dict['points_ema'] ** 2).sum()*(data_dict['scale']**2))
         if self.training:
             points = data_dict['points'].copy()
             gt_boxes = data_dict['gt_boxes'].copy()
+            instance_idx = data_dict['instance_idx'].copy()
             # points_ema = data_dict['points_ema'].copy()
             data_dict['points'] = data_dict['points_ema']
             data_dict['gt_boxes'] = data_dict['gt_boxes_ema']
@@ -558,9 +584,23 @@ class KittiDatasetSSL(DatasetTemplate):
             data_dict['voxels_ema'] = data_dict['voxels']
             data_dict['voxel_coords_ema'] = data_dict['voxel_coords']
             data_dict['voxel_num_points_ema'] = data_dict['voxel_num_points']
+            data_dict['instance_idx_ema'] = data_dict['instance_idx']
+
+            # data_dict['points'] = data_dict['points_ema_wa']
+            # data_dict['gt_boxes'] = data_dict['gt_boxes_ema_wa']
+            # data_dict = self.point_feature_encoder.forward(data_dict)
+            # data_dict = self.data_processor.forward(
+            #     data_dict=data_dict
+            # )
+            # data_dict['points_ema_wa'] = data_dict['points']
+            # data_dict['gt_boxes_ema_wa'] = data_dict['gt_boxes']
+            # data_dict['voxels_ema_wa'] = data_dict['voxels']
+            # data_dict['voxel_coords_ema_wa'] = data_dict['voxel_coords']
+            # data_dict['voxel_num_points_ema_wa'] = data_dict['voxel_num_points']
 
             data_dict['points'] = points
             data_dict['gt_boxes'] = gt_boxes
+            data_dict['instance_idx'] = instance_idx
             data_dict.pop('voxels', None)
             data_dict.pop('voxel_coords', None)
             data_dict.pop('voxel_num_points', None)
@@ -568,7 +608,8 @@ class KittiDatasetSSL(DatasetTemplate):
             data_dict = self.data_processor.forward(
                 data_dict=data_dict
             )
-
+            assert data_dict['instance_idx'].shape[0] == data_dict['gt_boxes'].shape[0],\
+                "gt_boxes and instance_idx do not match in the end of prepare data"
         '''if self.training:
             if no_db_sample:
                 data_dict['gt_boxes_ema'].fill(0)
@@ -580,7 +621,6 @@ class KittiDatasetSSL(DatasetTemplate):
         #    return self.__getitem__(new_index)
 
         data_dict.pop('gt_names', None)
-
         return data_dict
 
 

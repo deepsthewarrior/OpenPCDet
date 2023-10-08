@@ -3,7 +3,7 @@ from pcdet.utils.prototype_utils import feature_bank_registry
 import torch
 from collections import defaultdict
 from pcdet.ops.roiaware_pool3d import roiaware_pool3d_utils
-
+import numpy as np
 class PVRCNN(Detector3DTemplate):
     def __init__(self, model_cfg, num_class, dataset):
         super().__init__(model_cfg=model_cfg, num_class=num_class, dataset=dataset)
@@ -38,21 +38,21 @@ class PVRCNN(Detector3DTemplate):
             gt_feat = batch_gt_feats[ix][nonzero_mask]
             gt_labels = gt_boxes[:, -1].int() - 1
             gt_boxes = gt_boxes[:, :7]
-            # ins_idxs = batch_dict['instance_idx'][ix][nonzero_mask].int()
-            # smpl_id = torch.from_numpy(batch_dict['frame_id'].astype(np.int32))[ix].to(gt_boxes.device)
+            ins_idxs = batch_dict['instance_idx'][ix][nonzero_mask].int()
+            smpl_id = torch.from_numpy(batch_dict['frame_id'].astype(np.int32))[ix].to(gt_boxes.device)
 
             # filter out gt instances with too few points when updating the bank
             num_points_in_gt = roiaware_pool3d_utils.points_in_boxes_cpu(points.cpu(), gt_boxes.cpu()).sum(dim=-1)
             valid_gts_mask = (num_points_in_gt >= num_points_threshold)
-            # print(f"{(~valid_gts_mask).sum()} gt instance(s) with id(s) {ins_idxs[~valid_gts_mask].tolist()}"
-            #       f" and num points {num_points_in_gt[~valid_gts_mask].tolist()} are filtered")
+            print(f"{(~valid_gts_mask).sum()} gt instance(s) with id(s) {ins_idxs[~valid_gts_mask].tolist()}"
+                  f" and num points {num_points_in_gt[~valid_gts_mask].tolist()} are filtered")
             if valid_gts_mask.sum() == 0:
                 print(f"no valid gt instances with enough points in frame {batch_dict['frame_id'][ix]}")
                 continue
             bank_inputs['feats'].append(gt_feat[valid_gts_mask])
             bank_inputs['labels'].append(gt_labels[valid_gts_mask])
-            # bank_inputs['ins_ids'].append(ins_idxs[valid_gts_mask])
-            # bank_inputs['smpl_ids'].append(smpl_id)
+            bank_inputs['ins_ids'].append(ins_idxs[valid_gts_mask])
+            bank_inputs['smpl_ids'].append(smpl_id)
 
             # valid_boxes = gt_boxes[valid_gts_mask]
             # valid_box_labels = gt_labels[valid_gts_mask]

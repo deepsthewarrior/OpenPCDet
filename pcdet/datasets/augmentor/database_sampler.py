@@ -25,13 +25,17 @@ class DataBaseSampler(object):
         for db_info_path in sampler_cfg.DB_INFO_PATH:
             db_info_path = self.root_path.resolve() / db_info_path
             try:
-                with open(str(db_info_path), 'rb') as f:
+                with open(str(db_info_path), 'rb') as f: # read classwise info CAR:187 ...
                     infos = pickle.load(f)
                     [self.db_infos[cur_class].extend(infos[cur_class]) for cur_class in class_names]
             except FileNotFoundError:
                 print(f"{str(db_info_path)} not found.")
                 return
-
+ 
+        for class_name in self.class_names:
+            for i,val in enumerate(self.db_infos[class_name]):
+                val['instance_idx'] = int(val['image_idx']) * 100 + int(val['gt_idx'])
+                val['class_name'] = class_name
         for func_name, val in sampler_cfg.PREPARE.items():
             self.db_infos = getattr(self, func_name)(self.db_infos, val)
 
@@ -46,10 +50,12 @@ class DataBaseSampler(object):
             if class_name not in class_names:
                 continue
             self.sample_class_num[class_name] = sample_num
+            instance_idx = [val['instance_idx'] for val in self.db_infos[class_name]]
             self.sample_groups[class_name] = {
                 'sample_num': sample_num,
                 'pointer': len(self.db_infos[class_name]),
-                'indices': np.arange(len(self.db_infos[class_name]))
+                'indices': np.arange(len(self.db_infos[class_name])),
+                'instance_idx': np.asarray(instance_idx)
             }
 
     def __getstate__(self):
@@ -161,6 +167,8 @@ class DataBaseSampler(object):
         gt_boxes_mask = data_dict['gt_boxes_mask']
         gt_boxes = data_dict['gt_boxes'][gt_boxes_mask]
         gt_names = data_dict['gt_names'][gt_boxes_mask]
+        gt_instance_idx = data_dict['instance_idx'][gt_boxes_mask]
+        assert gt_boxes.shape[0] == gt_names.shape[0] == gt_instance_idx.shape[0], "gt_boxes, gt_names, gt_instance_idx should have same length"
         points = data_dict['points']
         if self.sampler_cfg.get('USE_ROAD_PLANE', False):
             sampled_gt_boxes, mv_height = self.put_boxes_on_road_planes(
@@ -195,6 +203,7 @@ class DataBaseSampler(object):
 
         obj_points = np.concatenate(obj_points_list, axis=0)
         sampled_gt_names = np.array([x['name'] for x in total_valid_sampled_dict])
+        sampled_instance_idx = np.array([x['instance_idx'] for x in total_valid_sampled_dict])
 
         large_sampled_gt_boxes = box_utils.enlarge_box3d(
             sampled_gt_boxes[:, 0:7], extra_width=self.sampler_cfg.REMOVE_EXTRA_WIDTH
@@ -203,9 +212,12 @@ class DataBaseSampler(object):
         points = np.concatenate([obj_points, points], axis=0)
         gt_names = np.concatenate([gt_names, sampled_gt_names], axis=0)
         gt_boxes = np.concatenate([gt_boxes, sampled_gt_boxes], axis=0)
+        gt_instance_idx = np.concatenate([gt_instance_idx, sampled_instance_idx], axis=0)
+        assert gt_names.shape[0] == gt_boxes.shape[0] == gt_instance_idx.shape[0], "gt_boxes, gt_names, gt_instance_idx should have same length"
         data_dict['gt_boxes'] = gt_boxes
         data_dict['gt_names'] = gt_names
         data_dict['points'] = points
+        data_dict['instance_idx'] = gt_instance_idx
         return data_dict
 
     def __call__(self, data_dict, no_db_sample=False):
@@ -219,10 +231,11 @@ class DataBaseSampler(object):
         """
         gt_boxes = data_dict['gt_boxes']
         gt_names = data_dict['gt_names'].astype(str)
+        assert gt_boxes.shape[0] == data_dict['instance_idx'].shape[0], "gt_boxes, instance_idx in call"
         existed_boxes = gt_boxes
         total_valid_sampled_dict = []
         for class_name, sample_group in self.sample_groups.items():
-            if self.limit_whole_scene:
+            if self.limit_whole_scene: 
                 num_gt = np.sum(class_name == gt_names)
                 sample_group['sample_num'] = str(int(self.sample_class_num[class_name]) - num_gt)
             if int(sample_group['sample_num']) > 0:
@@ -247,8 +260,10 @@ class DataBaseSampler(object):
         sampled_gt_boxes = existed_boxes[gt_boxes.shape[0]:, :]
 
         # do not use db sampler if we do not know gt boxes
+        # TODO(farzad) what if we only do db_sampling on the limited labeled data? e.g., 1% of samples.
         if total_valid_sampled_dict.__len__() > 0 and not no_db_sample:
             data_dict = self.add_sampled_boxes_to_scene(data_dict, sampled_gt_boxes, total_valid_sampled_dict)
 
         data_dict.pop('gt_boxes_mask')
+        assert data_dict['gt_boxes'].shape[0] == data_dict['gt_names'].shape[0] == data_dict['instance_idx'].shape[0], "gt_boxes, gt_names, gt_instance_idx should have same length"
         return data_dict

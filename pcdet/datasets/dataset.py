@@ -190,6 +190,12 @@ class DatasetTemplate(torch_data.Dataset):
                         if val[k].size > 0:
                             batch_boxes2d[k, :val[k].__len__(), :] = val[k]
                     ret[key] = batch_boxes2d
+                elif key in ['instance_idx']:
+                    max_ind = max([len(x) for x in val])
+                    batch_ind = np.zeros((batch_size, max_ind), dtype=np.int32)
+                    for k in range(batch_size):
+                        batch_ind[k, :val[k].__len__()] = val[k]
+                    ret[key] = batch_ind.astype(np.int32)
                 elif key in ["images", "depth_maps"]:
                     # Get largest image size (H, W)
                     max_h = 0
