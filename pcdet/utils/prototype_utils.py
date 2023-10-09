@@ -57,7 +57,11 @@ class FeatureBank(Metric):
             self.iterations.append(rois_iter)           # (N,)
 
     def compute(self):
-        unique_smpl_ids = torch.unique(torch.cat((self.smpl_ids), dim=0))
+        try:
+            unique_smpl_ids = torch.unique(torch.cat((self.smpl_ids,), dim=0))
+        except:
+            unique_smpl_ids = torch.unique(torch.cat((self.smpl_ids), dim=0))
+            
         if len(unique_smpl_ids) < self.reset_state_interval:
             return None
         try:    
