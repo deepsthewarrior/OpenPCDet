@@ -13,10 +13,10 @@ class FeatureBank(Metric):
         super().__init__()
         self.tag = kwargs.get('NAME', None)
 
-        self.temperature = kwargs.get('TEMPERATURE',0.1)
-        self.feat_size = kwargs.get('FEATURE_SIZE',256)
+        self.temperature = kwargs.get('TEMPERATURE')
+        self.feat_size = kwargs.get('FEATURE_SIZE')
         self.bank_size = kwargs.get('BANK_SIZE')  # e.g., num. of classes or labeled instances
-        self.momentum = kwargs.get('MOMENTUM',0.9)
+        self.momentum = kwargs.get('MOMENTUM')
         self.direct_update = kwargs.get('DIRECT_UPDATE')
         self.reset_state_interval = kwargs.get('RESET_STATE_INTERVAL',1)  # reset the state when N unique samples are seen
         self.num_points_thresh = kwargs.get('FILTER_MIN_POINTS_IN_GT', 0)

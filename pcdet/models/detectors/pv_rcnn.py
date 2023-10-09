@@ -8,7 +8,12 @@ class PVRCNN(Detector3DTemplate):
     def __init__(self, model_cfg, num_class, dataset):
         super().__init__(model_cfg=model_cfg, num_class=num_class, dataset=dataset)
         self.module_list = self.build_networks()
-        feature_bank_registry.register('gt_aug_lbl_prototypes')
+        bank_configs = {
+            'TEMPERATURE': model_cfg.ROI_HEAD.LOSS_CONFIG.TEMPERATURE,
+            'MOMENTUM': model_cfg.ROI_HEAD.LOSS_CONFIG.MOMENTUM,
+            'FEATURE_SIZE': model_cfg.ROI_HEAD.LOSS_CONFIG.FEAT_SIZE,
+        }
+        feature_bank_registry.register('gt_aug_lbl_prototypes',**bank_configs)
         self.model_cfg = model_cfg
     @staticmethod
     def _clone_gt_boxes_and_feats(batch_dict):
