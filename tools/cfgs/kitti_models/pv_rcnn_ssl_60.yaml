@@ -18,7 +18,7 @@ DATA_CONFIG:
               NUM_POINT_FEATURES: 4
               DATABASE_WITH_FAKELIDAR: False
               REMOVE_EXTRA_WIDTH: [0.0, 0.0, 0.0]
-              LIMIT_WHOLE_SCENE: True  # Temporarily enabled to fix KeyError bug in prototyping
+              LIMIT_WHOLE_SCENE: False  # Temporarily enabled to fix KeyError bug in prototyping
 
             - NAME: random_world_flip
               ALONG_AXIS_LIST: ['x']
@@ -284,7 +284,7 @@ MODEL:
         - NAME: gt_aug_lbl_prototypes
           BANK_SIZE: null # Determined the total number of labeled instances in all classes for each split during runtime
           FEATURE_SIZE: 256  # projected_features 
-          TEMPERATURE: 0.1
+          TEMPERATURE: 0.5
           DIRECT_UPDATE: False
           RESET_STATE_INTERVAL: 37  # 1% setting for ~3700 KITTI samples
           MOMENTUM: 0.9
