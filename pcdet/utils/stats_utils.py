@@ -124,11 +124,16 @@ class PredQualityMetrics(Metric):
             self.roi_scores.append(sample_roi_scores)
             self.roi_sim_scores.append(sample_sim_scores)
             self.roi_iou_wrt_gt.append(sample_roi_iou_wrt_gt)
-            self.roi_iou_wrt_pl.append(roi_iou_wrt_pl[i] if roi_iou_wrt_pl is not None else None)
             self.roi_labels.append(sample_roi_labels)
-            self.roi_weights.append(roi_weights[i] if roi_weights is not None else None)
-            self.roi_target_scores.append(roi_target_scores[i] if roi_target_scores is not None else None)
-
+            if roi_iou_wrt_pl is not None:
+                self.roi_iou_wrt_pl.append(roi_iou_wrt_pl[i])
+                self.roi_weights.append(roi_weights[i])
+                self.roi_target_scores.append(roi_target_scores[i])
+            else:
+                tensor = torch.full(sample_roi_labels.shape, float('nan'), device=sample_roi_labels.device)
+                self.roi_iou_wrt_pl.append(tensor)
+                self.roi_weights.append(tensor)
+                self.roi_target_scores.append(tensor)
         # Draw the last sample in batch
         # pred_boxes = sample_rois[:, :-1].clone().cpu().numpy()
         # pred_labels = sample_roi_labels.clone().int().cpu().numpy()
