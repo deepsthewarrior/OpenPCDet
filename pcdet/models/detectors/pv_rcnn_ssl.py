@@ -15,7 +15,7 @@ from pcdet.utils.prototype_utils import feature_bank_registry
 # from tools.visual_utils import open3d_vis_utils as V
 from collections import defaultdict
 from pcdet.utils.weighting_methods import build_thresholding_method
-
+from pcdet.ops.iou3d_nms import iou3d_nms_utils
 class DynamicThreshRegistry(object):
     def __init__(self, **kwargs):
         self._tag_metrics = {}
@@ -63,7 +63,8 @@ class PVRCNN_SSL(Detector3DTemplate):
             feature_bank_registry.register(tag=bank_configs["NAME"], **bank_configs)
 
         for metrics_configs in model_cfg.get("METRICS_BANK_LIST", []):
-            metrics_registry.register(tag=metrics_configs["NAME"], dataset=self.dataset, **metrics_configs)
+            for name in metrics_configs['NAME']:
+                metrics_registry.register(tag=name, dataset=self.dataset, **metrics_configs)
 
         vals_to_store = ['iou_roi_pl', 'iou_roi_gt', 'pred_scores', 'teacher_pred_scores',
                          'weights', 'roi_scores', 'pcv_scores', 'num_points_in_roi', 'class_labels', 'iteration']
@@ -159,7 +160,7 @@ class PVRCNN_SSL(Detector3DTemplate):
 
         pseudo_labels, _ = self.pv_rcnn_ema.post_processing(batch_dict_ema, no_recall_dict=True)
 
-        return pseudo_labels
+        return batch_dict_ema,pseudo_labels
 
     @staticmethod
     def _split_ema_batch(batch_dict):
@@ -188,14 +189,15 @@ class PVRCNN_SSL(Detector3DTemplate):
         lbl_inds, ulb_inds = self._prep_batch_dict(batch_dict)
         batch_dict_ema = self._split_ema_batch(batch_dict)
 
-        pseudo_labels = self._gen_pseudo_labels(batch_dict_ema, ulb_inds)
-
-        pseudo_boxes, pseudo_scores, pseudo_sem_scores = self._filter_pseudo_labels(pseudo_labels, ulb_inds)
-
-        self._fill_with_pseudo_labels(batch_dict, pseudo_boxes, ulb_inds, lbl_inds)
-
+        batch_dict_ema,pseudo_labels = self._gen_pseudo_labels(batch_dict_ema, ulb_inds)
+        batch_dict_prefilter = copy.deepcopy(batch_dict)
+        self.update_metrics_pred(targets_dict=batch_dict_prefilter,pseudo_labels=pseudo_labels)
+        pseudo_boxes, pseudo_scores, pseudo_sem_scores,pseudo_sem_scores_multiclass,pseudo_sim_scores = self._filter_pseudo_labels(pseudo_labels, ulb_inds)
+        self._fill_with_pseudo_labels(batch_dict, pseudo_boxes, pseudo_sem_scores_multiclass, pseudo_sim_scores, ulb_inds, lbl_inds)
+        
         # apply student's augs on teacher's pseudo-labels (filtered) only (not points)
         batch_dict = self.apply_augmentation(batch_dict, batch_dict, ulb_inds, key='gt_boxes')
+        self.update_metrics_pl(targets_dict=batch_dict)
 
         for cur_module in self.pv_rcnn.module_list:
             batch_dict = cur_module(batch_dict)
@@ -456,11 +458,15 @@ class PVRCNN_SSL(Detector3DTemplate):
         pseudo_labels = []
         pseudo_boxes_var = []
         pseudo_scores_var = []
+        pseudo_sem_scores_multiclass = []
+        pseudo_sim_scores = []
         for ind in unlabeled_inds:
             pseudo_score = pred_dicts[ind]['pred_scores']
             pseudo_box = pred_dicts[ind]['pred_boxes']
             pseudo_label = pred_dicts[ind]['pred_labels']
             pseudo_sem_score = pred_dicts[ind]['pred_sem_scores']
+            pseudo_sem_score_multiclass = pred_dicts[ind]['pred_sem_scores_multiclass']
+            pseudo_sim_score = pred_dicts[ind]['pred_sim_scores']
             # TODO(farzad) REFACTOR LATER!
             pseudo_box_var = -1 * torch.ones_like(pseudo_box)
             if "pred_boxes_var" in pred_dicts[ind].keys():
@@ -475,6 +481,8 @@ class PVRCNN_SSL(Detector3DTemplate):
                 pseudo_scores.append(pseudo_label.new_zeros((1,)).float())
                 pseudo_scores_var.append(pseudo_label.new_zeros((1,)).float())
                 pseudo_labels.append(pseudo_label.new_zeros((1,)).float())
+                pseudo_sem_scores_multiclass.append(pseudo_label.new_zeros((1,3)).float())
+                pseudo_sim_scores.append(pseudo_label.new_zeros((1,3)).float())
                 continue
 
             pseudo_boxes.append(pseudo_box)
@@ -483,21 +491,31 @@ class PVRCNN_SSL(Detector3DTemplate):
             pseudo_scores.append(pseudo_score)
             pseudo_scores_var.append(pseudo_score_var)
             pseudo_labels.append(pseudo_label)
+            pseudo_sem_scores_multiclass.append(pseudo_sem_score_multiclass)
+            pseudo_sim_scores.append(pseudo_sim_score)
 
-        return pseudo_boxes, pseudo_labels, pseudo_scores, pseudo_sem_scores, pseudo_boxes_var, pseudo_scores_var
+        return pseudo_boxes, pseudo_labels, pseudo_scores, pseudo_sem_scores, pseudo_boxes_var, pseudo_scores_var, pseudo_sem_scores_multiclass, pseudo_sim_scores
 
     # TODO(farzad) refactor and remove this!
     def _filter_pseudo_labels(self, pred_dicts, unlabeled_inds):
         pseudo_boxes = []
         pseudo_scores = []
         pseudo_sem_scores = []
-        for pseudo_box, pseudo_label, pseudo_score, pseudo_sem_score, pseudo_box_var, pseudo_score_var in zip(
+        pseudo_sem_scores_multiclass = []
+        pseudo_sim_scores = []
+        for pseudo_box, pseudo_label, pseudo_score, pseudo_sem_score, pseudo_box_var, pseudo_score_var,pseudo_sem_score_multiclass,pseudo_sim_score in zip(
                 *self._unpack_predictions(pred_dicts, unlabeled_inds)):
-
-            if pseudo_label[0] == 0:
+            assert isinstance(pseudo_sem_score_multiclass, torch.Tensor), "stupid assert"
+            if pseudo_box.sum() == 0:
                 pseudo_boxes.append(torch.cat([pseudo_box, pseudo_label.view(-1, 1).float()], dim=1))
                 pseudo_sem_scores.append(pseudo_sem_score)
                 pseudo_scores.append(pseudo_score)
+                assert isinstance(pseudo_sem_score_multiclass, torch.Tensor), "stupid assert"
+                pseudo_sem_score_multiclass = torch.zeros((pseudo_box.shape[0], 3), device=pseudo_box.device)
+                pseudo_sim_score = torch.zeros((pseudo_box.shape[0], 3), device=pseudo_box.device)
+                assert pseudo_sem_score_multiclass.shape[-1] == 3, "stupid assert"
+                pseudo_sem_scores_multiclass.append(pseudo_sem_score_multiclass)
+                pseudo_sim_scores.append(pseudo_sim_score)
                 continue
 
             pl_thresh = self.thresh
@@ -520,17 +538,23 @@ class PVRCNN_SSL(Detector3DTemplate):
             pseudo_box = pseudo_box[valid_inds]
             pseudo_label = pseudo_label[valid_inds]
             pseudo_score = pseudo_score[valid_inds]
-
+            pseudo_sem_score_multiclass = pseudo_sem_score_multiclass[valid_inds]
+            assert isinstance(pseudo_sem_score_multiclass, torch.Tensor), "stupid assert"
+            pseudo_sim_score = pseudo_sim_score[valid_inds] if pseudo_sim_score is not None else None
+            assert isinstance(pseudo_sim_score, torch.Tensor), "stupid assert"
             pseudo_boxes.append(torch.cat([pseudo_box, pseudo_label.view(-1, 1).float()], dim=1))
             pseudo_sem_scores.append(pseudo_sem_score)
             pseudo_scores.append(pseudo_score)
+            pseudo_sem_scores_multiclass.append(pseudo_sem_score_multiclass)
+            pseudo_sim_scores.append(pseudo_sim_score)
 
-        return pseudo_boxes, pseudo_scores, pseudo_sem_scores
+        return pseudo_boxes, pseudo_scores, pseudo_sem_scores, pseudo_sem_scores_multiclass, pseudo_sim_scores
 
-    def _fill_with_pseudo_labels(self, batch_dict, pseudo_boxes, unlabeled_inds, labeled_inds, key=None):
+    def _fill_with_pseudo_labels(self, batch_dict, pseudo_boxes, pseudo_sem_scores_multiclass, pseudo_sim_scores, unlabeled_inds, labeled_inds, key=None):
         key = 'gt_boxes' if key is None else key
         max_box_num = batch_dict['gt_boxes'].shape[1]
-
+        batch_dict['pseudo_sem_scores_multiclass'] = torch.zeros((batch_dict['gt_boxes'].shape[1], max_box_num, 3), device=batch_dict['gt_boxes'].device)
+        batch_dict['pseudo_sim_scores'] = torch.zeros((batch_dict['gt_boxes'].shape[1], max_box_num, 3), device=batch_dict['gt_boxes'].device)
         # Ignore the count of pseudo boxes if filled with default values(zeros) when no preds are made
         max_pseudo_box_num = max(
             [torch.logical_not(torch.all(ps_box == 0, dim=-1)).sum().item() for ps_box in pseudo_boxes])
@@ -540,26 +564,46 @@ class PVRCNN_SSL(Detector3DTemplate):
                 diff = max_box_num - pseudo_box.shape[0]
                 if diff > 0:
                     pseudo_box = torch.cat([pseudo_box, torch.zeros((diff, 8), device=pseudo_box.device)], dim=0)
+                    assert isinstance(pseudo_sem_scores_multiclass[i],torch.Tensor), "stupid assert"
+                    pseudo_sem_score_multiclass = torch.cat([pseudo_sem_scores_multiclass[i], torch.zeros((diff, 3), device=pseudo_box.device)], dim=0)
+                    pseudo_sim_score = torch.cat([pseudo_sim_scores[i], torch.zeros((diff, 3), device=pseudo_box.device)], dim=0) 
+                else:
+                    pseudo_sem_score_multiclass = pseudo_sem_scores_multiclass[i]
+                    pseudo_sim_score = pseudo_sim_scores[i]
                 batch_dict[key][unlabeled_inds[i]] = pseudo_box
+                batch_dict['pseudo_sem_scores_multiclass'][unlabeled_inds[i]] = pseudo_sem_score_multiclass
+                batch_dict['pseudo_sim_scores'][unlabeled_inds[i]] = pseudo_sim_score 
         else:
             ori_boxes = batch_dict['gt_boxes']
             ori_ins_ids = batch_dict['instance_idx']
             new_boxes = torch.zeros((ori_boxes.shape[0], max_pseudo_box_num, ori_boxes.shape[2]),
                                     device=ori_boxes.device)
             new_ins_idx = torch.full((ori_boxes.shape[0], max_pseudo_box_num), fill_value=-1, device=ori_boxes.device)
+            new_sem_boxes = torch.zeros((ori_boxes.shape[0], max_pseudo_box_num, 3),device=ori_boxes.device)
+            new_sim_boxes = torch.zeros((ori_boxes.shape[0], max_pseudo_box_num, 3),device=ori_boxes.device)
             for idx in labeled_inds:
                 diff = max_pseudo_box_num - ori_boxes[idx].shape[0]
                 new_box = torch.cat([ori_boxes[idx], torch.zeros((diff, 8), device=ori_boxes[idx].device)], dim=0)
                 new_boxes[idx] = new_box
                 new_ins_idx[idx] = torch.cat([ori_ins_ids[idx], -torch.ones((diff,), device=ori_boxes[idx].device)], dim=0)
+                new_sem_boxes[idx] = torch.cat([batch_dict['pseudo_sem_scores_multiclass'][idx], torch.zeros((diff, 3), device=ori_boxes[idx].device)], dim=0)
+                new_sim_boxes[idx] = torch.cat([batch_dict['pseudo_sim_scores'][idx], torch.zeros((diff, 3), device=ori_boxes[idx].device)], dim=0) if batch_dict['pseudo_sim_scores'][idx] is not None else None
             for i, pseudo_box in enumerate(pseudo_boxes):
-
                 diff = max_pseudo_box_num - pseudo_box.shape[0]
                 if diff > 0:
                     pseudo_box = torch.cat([pseudo_box, torch.zeros((diff, 8), device=pseudo_box.device)], dim=0)
+                    pseudo_sem_score_multiclass = torch.cat([pseudo_sem_scores_multiclass[i], torch.zeros((diff, 3), device=pseudo_box.device)], dim=0)
+                    pseudo_sim_score = torch.cat([pseudo_sim_scores[i], torch.zeros((diff, 3), device=pseudo_box.device)], dim=0) if batch_dict['pseudo_sim_scores'][idx] is not None else None
+                else:
+                    pseudo_sem_score_multiclass = pseudo_sem_scores_multiclass[i]
+                    pseudo_sim_score = pseudo_sim_scores[i]
                 new_boxes[unlabeled_inds[i]] = pseudo_box
+                new_sem_boxes[unlabeled_inds[i]] = pseudo_sem_score_multiclass
+                new_sim_boxes[unlabeled_inds[i]] = pseudo_sim_score
             batch_dict[key] = new_boxes
             batch_dict['instance_idx'] = new_ins_idx
+            batch_dict['pseudo_sem_scores_multiclass'] = new_sem_boxes
+            batch_dict['pseudo_sim_scores'] = new_sim_boxes
 
     @staticmethod
     def apply_augmentation(batch_dict, batch_dict_org, unlabeled_inds, key='rois'):
@@ -654,3 +698,78 @@ class PVRCNN_SSL(Detector3DTemplate):
                 metrics_input['pseudo_score'].append(pseudo_score)
                 metrics_input['pseudo_sem_score'].append(pseudo_sem_score)
         self.thresh_registry.get(tag).update(**metrics_input)
+
+    def update_metrics_pred(self, targets_dict,pseudo_labels,mask_type='cls'):
+        pseudo_boxes, pseudo_labels, pseudo_score, pseudo_sem_score, pseudo_box_var, pseudo_score_var,pseudo_sem_score_multiclass,pseudo_sim_score = self._unpack_predictions(pseudo_labels, targets_dict['unlabeled_inds'])
+        pseudo_boxes = [torch.cat([pseudo_box, pseudo_label.view(-1, 1).float()], dim=1) \
+                            for (pseudo_box, pseudo_label) in zip(pseudo_boxes, pseudo_labels)]
+        # pseudo_sem_scores_multiclass = [pseudo_sem_score_multiclass]
+        # pseudo_sim_scores = torch.cat(pseudo_sim_score, dim=0).unsqueeze(0)
+        self._fill_with_pseudo_labels(targets_dict, pseudo_boxes, pseudo_sem_score_multiclass, pseudo_sim_score, targets_dict['unlabeled_inds'], targets_dict['labeled_inds'])
+        self.apply_augmentation(targets_dict, targets_dict, targets_dict['unlabeled_inds'], key='gt_boxes')
+        metrics_input = defaultdict(list)
+        for i, uind in enumerate(targets_dict['unlabeled_inds']):
+            # mask = (targets_dict['reg_valid_mask'][uind] > 0) if mask_type == 'reg' else (
+            #             targets_dict['rcnn_cls_labels'][uind] >= 0)
+            # if mask.sum() == 0:
+            #     # print(f'Warning: No {mask_type} rois for unlabeled index {uind}')
+            #     continue
+
+            # (Proposals) ROI info
+            rois = targets_dict['gt_boxes'][uind].detach().clone()
+            roi_labels = targets_dict['gt_boxes'][...,-1][uind].unsqueeze(-1).detach().clone()
+            roi_scores_multiclass = targets_dict['pseudo_sem_scores_multiclass'][uind].detach().clone()
+            roi_sim_scores_multiclass = targets_dict['pseudo_sim_scores'][uind].detach().clone()
+            metrics_input['rois'].append(rois)
+            metrics_input['roi_scores'].append(roi_scores_multiclass)
+            metrics_input['roi_sim_scores'].append(roi_sim_scores_multiclass)
+
+            # (Real labels) GT info
+            gt_labeled_boxes = targets_dict['ori_unlabeled_boxes'][i]
+            metrics_input['ground_truths'].append(gt_labeled_boxes)
+            metrics_input['roi_weights'] = None
+            metrics_input['roi_iou_wrt_pl'] = None
+            metrics_input['roi_target_scores'] = None
+
+            bs_id = targets_dict['points'][:, 0] == uind
+            points = targets_dict['points'][bs_id, 1:].detach().clone()
+            metrics_input['points'].append(points)
+        if len(metrics_input['rois']) == 0:
+            # print(f'Warning: No {mask_type} rois for any unlabeled index')
+            return
+        tag = f'pl_gt_metrics_before_filtering_{mask_type}'
+        metrics_registry.get(tag).update(**metrics_input)
+
+    def update_metrics_pl(self,targets_dict, mask_type='cls'):
+        metrics_input = defaultdict(list)
+        for i, uind in enumerate(targets_dict['unlabeled_inds']):
+            # mask = (targets_dict['reg_valid_mask'][uind] > 0) if mask_type == 'reg' else (
+            #             targets_dict['rcnn_cls_labels'][uind] >= 0)
+            # if mask.sum() == 0:
+            #     # print(f'Warning: No {mask_type} rois for unlabeled index {uind}')
+            #     continue
+
+            # (Proposals) ROI info
+            rois = targets_dict['gt_boxes'][uind].detach().clone()
+            roi_labels = targets_dict['gt_boxes'][...,-1][uind].unsqueeze(-1).detach().clone()
+            roi_scores_multiclass = targets_dict['pseudo_sem_scores_multiclass'][uind].detach().clone()
+            roi_sim_scores_multiclass = targets_dict['pseudo_sim_scores'][uind].detach().clone()
+            metrics_input['rois'].append(rois)
+            metrics_input['roi_scores'].append(roi_scores_multiclass)
+            metrics_input['roi_sim_scores'].append(roi_sim_scores_multiclass)
+
+            # (Real labels) GT info
+            gt_labeled_boxes = targets_dict['ori_unlabeled_boxes'][i]
+            metrics_input['ground_truths'].append(gt_labeled_boxes)
+            metrics_input['roi_weights'] = None
+            metrics_input['roi_iou_wrt_pl'] = None
+            metrics_input['roi_target_scores'] = None
+
+            bs_id = targets_dict['points'][:, 0] == uind
+            points = targets_dict['points'][bs_id, 1:].detach().clone()
+            metrics_input['points'].append(points)
+        if len(metrics_input['rois']) == 0:
+            # print(f'Warning: No {mask_type} rois for any unlabeled index')
+            return
+        tag = f'pl_gt_metrics_after_filtering_{mask_type}'
+        metrics_registry.get(tag).update(**metrics_input)

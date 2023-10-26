@@ -11,6 +11,8 @@ from pcdet.models import load_data_to_gpu
 
 def log_tb_dict(tb_log, tb_dict, accumulated_iter):
     for key, val in tb_dict.items():
+        if val is None or (isinstance(val, torch.Tensor) and torch.isnan(val)):
+            continue
         subkeys = key.split("/")
         cat, key = (subkeys[0] + "/", subkeys[1]) if len(subkeys) > 1 else ('train/', key)
         if key in ['bs']:
