@@ -206,6 +206,8 @@ class PredQualityMetrics(Metric):
         # classwise_metrics['multiclass_avg_precision_sem_score_micro'] = average_precision_score(y_labels, y_scores, average='micro')
         # classwise_metrics['multiclass_avg_precision_sim_score_micro'] = average_precision_score(y_labels, y_sim_scores, average='micro')
 
+
+              
         for cind, cls in enumerate(self.dataset.class_names):
             cls_pred_mask = pred_labels == cind
             cls_sim_mask = sim_labels == cind
@@ -224,7 +226,7 @@ class PredQualityMetrics(Metric):
 
             sem_clf_pr_curve_sem_score_data = {'labels': y_labels, 'predictions': y_scores}
             classwise_metrics['sem_clf_pr_curve_sem_score'][cls] = sem_clf_pr_curve_sem_score_data
-            
+
 
             # Using kitti test class-wise fg thresholds.
             fg_thresh = self.min_overlaps[cind]
@@ -242,7 +244,10 @@ class PredQualityMetrics(Metric):
             classwise_metrics['avg_num_pred_rois_using_sem_score_per_sample'][cls] = cls_pred_mask.sum() / self.num_samples
             classwise_metrics['avg_num_pred_rois_using_sim_score_per_sample'][cls] = cls_sim_mask.sum() / self.num_samples
             # classwise_metrics['avg_num_gts_per_sample'].append()
-
+            for cind_, cls_tag in enumerate(self.dataset.class_names):
+                true_mask_bool = true_mask.bool()
+                classwise_metrics[f'sim_scores_multi_tp_{cls}'][cls_tag] = (sim_scores[cls_pred_mask, cind_] * true_mask_bool[cls_pred_mask]).float().mean()
+                classwise_metrics[f'sim_scores_multi_fp_{cls}'][cls_tag] = (sim_scores[cls_pred_mask, cind_] * (~true_mask_bool[cls_pred_mask])).float().mean()
             classwise_metrics['rois_fg_ratio'][cls] = cls_fg_mask.sum() / cls_pred_mask.sum()
             classwise_metrics['rois_uc_ratio'][cls] = cls_uc_mask.sum() / cls_pred_mask.sum()
             classwise_metrics['rois_bg_ratio'][cls] = cls_bg_mask.sum() / cls_pred_mask.sum()

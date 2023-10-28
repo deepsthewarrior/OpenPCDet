@@ -84,8 +84,9 @@ class PVRCNN_SSL(Detector3DTemplate):
         selected_batch_dict = self._clone_gt_boxes_and_feats(batch_dict)
         with torch.no_grad():
             batch_gt_feats = self.pv_rcnn.roi_head.pool_features(selected_batch_dict, use_gtboxes=True)
-
-        batch_gt_feats = batch_gt_feats.view(*batch_dict['gt_boxes'].shape[:2], -1)
+            batch_size_rcnn = batch_gt_feats.shape[0]
+            shared_features = self.pv_rcnn.roi_head.shared_fc_layer(batch_gt_feats.view(batch_size_rcnn, -1, 1))
+        batch_gt_feats = shared_features.view(*batch_dict['gt_boxes'].shape[:2], -1)
         bank_inputs = defaultdict(list)
         for ix in inds:
             gt_boxes = selected_batch_dict['gt_boxes'][ix]
@@ -284,8 +285,11 @@ class PVRCNN_SSL(Detector3DTemplate):
         gt_boxes = batch_dict['gt_boxes']
         B, N = gt_boxes.shape[:2]
         sa_pl_feats = self.pv_rcnn.roi_head.pool_features(batch_dict, use_gtboxes=True).view(B * N, -1)
+        batch_size_rcnn = sa_pl_feats.shape[0]
+        shared_features = self.pv_rcnn.roi_head.shared_fc_layer(sa_pl_feats.view(batch_size_rcnn, -1, 1)) 
+        shared_features = shared_features.squeeze(-1)     
         pl_labels = batch_dict['gt_boxes'][..., -1].view(-1).long() - 1
-        proto_cont_loss = bank.get_proto_contrastive_loss(sa_pl_feats, pl_labels)
+        proto_cont_loss = bank.get_proto_contrastive_loss(shared_features, pl_labels)
         if proto_cont_loss is None:
             return
         nonzero_mask = torch.logical_not(torch.eq(gt_boxes, 0).all(dim=-1))
