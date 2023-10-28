@@ -83,9 +83,9 @@ class PVRCNN_SSL(Detector3DTemplate):
     def _prep_bank_inputs(self, batch_dict, inds, num_points_threshold=20):
         selected_batch_dict = self._clone_gt_boxes_and_feats(batch_dict)
         with torch.no_grad():
-            batch_gt_feats = self.pv_rcnn.roi_head.pool_features(selected_batch_dict, use_gtboxes=True)
+            batch_gt_feats = self.pv_rcnn_ema.roi_head.pool_features(selected_batch_dict, use_gtboxes=True)
             batch_size_rcnn = batch_gt_feats.shape[0]
-            shared_features = self.pv_rcnn.roi_head.shared_fc_layer(batch_gt_feats.view(batch_size_rcnn, -1, 1))
+            shared_features = self.pv_rcnn_ema.roi_head.shared_fc_layer(batch_gt_feats.view(batch_size_rcnn, -1, 1))
         batch_gt_feats = shared_features.view(*batch_dict['gt_boxes'].shape[:2], -1)
         bank_inputs = defaultdict(list)
         for ix in inds:
