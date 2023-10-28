@@ -218,7 +218,7 @@ class PVRCNN_SSL(Detector3DTemplate):
 
         # Update the bank with student's features from augmented labeled data
         bank = feature_bank_registry.get('gt_aug_lbl_prototypes')
-        sa_gt_lbl_inputs = self._prep_bank_inputs(batch_dict, lbl_inds, bank.num_points_thresh)
+        sa_gt_lbl_inputs = self._prep_bank_inputs(batch_dict_ema, lbl_inds, bank.num_points_thresh)
         bank.update(**sa_gt_lbl_inputs, iteration=batch_dict['cur_iteration'])
 
         # For metrics calculation
