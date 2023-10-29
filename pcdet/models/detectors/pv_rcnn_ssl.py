@@ -235,6 +235,7 @@ class PVRCNN_SSL(Detector3DTemplate):
         loss_rcnn_cls, loss_rcnn_box, ulb_loss_cls_dist, tb_dict = self.pv_rcnn.roi_head.get_loss(tb_dict, scalar=False)
 
         loss = 0
+        proto_cont_loss = None
         # Use the same reduction method as the baseline model (3diou) by the default
         reduce_loss_fn = getattr(torch, self.model_cfg.REDUCE_LOSS, 'sum')
         loss += reduce_loss_fn(loss_rpn_cls[lbl_inds, ...])
@@ -251,11 +252,24 @@ class PVRCNN_SSL(Detector3DTemplate):
             loss += reduce_loss_fn(loss_rcnn_box[ulb_inds, ...]) * self.unlabeled_weight
         if self.model_cfg['ROI_HEAD'].get('ENABLE_ULB_CLS_DIST_LOSS', False):
             loss += ulb_loss_cls_dist
-        if self.model_cfg['ROI_HEAD'].get('ENABLE_PROTO_CONTRASTIVE_LOSS', False):
-            proto_cont_loss = self._get_proto_contrastive_loss(batch_dict, bank, ulb_inds)
-            if proto_cont_loss is not None:
+        if self.model_cfg['ROI_HEAD'].get('ENABLE_PROTO_CONTRASTIVE_LOSS_ULB', False):
+            proto_cont_loss_ulb = self._get_proto_contrastive_loss(batch_dict, bank, ulb_inds)
+            if proto_cont_loss_ulb is not None:
+                proto_cont_loss = proto_cont_loss_ulb
+                tb_dict['proto_cont_loss_ulb'] = proto_cont_loss_ulb.item() 
+
+        if self.model_cfg['ROI_HEAD'].get('ENABLE_PROTO_CONTRASTIVE_LOSS_LB', False):
+            proto_cont_loss_lb = self._get_proto_contrastive_loss(batch_dict, bank, lbl_inds)
+            if proto_cont_loss_lb is not None:
+                if proto_cont_loss is not None:
+                    proto_cont_loss += proto_cont_loss_lb  
+                else: 
+                    proto_cont_loss = proto_cont_loss_lb
+                tb_dict['proto_cont_loss_lb'] = proto_cont_loss_lb.item()
+
+            if proto_cont_loss_lb is not None or proto_cont_loss_ulb is not None:
                 loss += proto_cont_loss * self.model_cfg['ROI_HEAD']['PROTO_CONTRASTIVE_LOSS_WEIGHT']
-                tb_dict['proto_cont_loss'] = proto_cont_loss.item()
+                tb_dict['proto_cont_loss_total'] = proto_cont_loss.item()
 
         tb_dict_ = self._prep_tb_dict(tb_dict, lbl_inds, ulb_inds, reduce_loss_fn)
 
@@ -281,7 +295,7 @@ class PVRCNN_SSL(Detector3DTemplate):
         }
         return ret_dict, tb_dict_, disp_dict
 
-    def _get_proto_contrastive_loss(self, batch_dict, bank, ulb_inds):
+    def _get_proto_contrastive_loss(self, batch_dict, bank, inds):
         gt_boxes = batch_dict['gt_boxes']
         B, N = gt_boxes.shape[:2]
         sa_pl_feats = self.pv_rcnn.roi_head.pool_features(batch_dict, use_gtboxes=True).view(B * N, -1)
@@ -293,17 +307,17 @@ class PVRCNN_SSL(Detector3DTemplate):
         if proto_cont_loss is None:
             return
         nonzero_mask = torch.logical_not(torch.eq(gt_boxes, 0).all(dim=-1))
-        ulb_nonzero_mask = nonzero_mask[ulb_inds]
-        if ulb_nonzero_mask.sum() == 0:
-            print(f"No pl instances predicted for strongly augmented frame(s) {batch_dict['frame_id'][ulb_inds.cpu().numpy()]}")
+        ind_nonzero_mask = nonzero_mask[inds]
+        if ind_nonzero_mask.sum() == 0:
+            print(f"No pl instances predicted for strongly augmented frame(s) {batch_dict['frame_id'][inds.cpu().numpy()]}")
             return
-        return proto_cont_loss.view(B, N)[ulb_inds][ulb_nonzero_mask].mean()
+        return proto_cont_loss.view(B, N)[inds][ind_nonzero_mask].mean()
 
     @staticmethod
     def _prep_tb_dict(tb_dict, lbl_inds, ulb_inds, reduce_loss_fn):
         tb_dict_ = {}
         for key in tb_dict.keys():
-            if key == 'proto_cont_loss':
+            if key in ['proto_cont_loss', 'proto_cont_loss_lb', 'proto_cont_loss_ulb','proto_cont_loss_total']:
                 tb_dict_[key] = tb_dict[key]
             elif 'loss' in key or 'acc' in key or 'point_pos_num' in key:
                 tb_dict_[f"{key}_labeled"] = reduce_loss_fn(tb_dict[key][lbl_inds, ...])
