@@ -83,8 +83,8 @@ class PVRCNN_SSL(Detector3DTemplate):
     def _prep_bank_inputs(self, batch_dict, inds, num_points_threshold=20):
         selected_batch_dict = self._clone_gt_boxes_and_feats(batch_dict)
         with torch.no_grad():
-            batch_gt_pool_feats = self.pv_rcnn.roi_head.pool_features(selected_batch_dict, use_gtboxes=True)
-            batch_gt_feats = self.pv_rcnn.roi_head.projected_layer(batch_gt_pool_feats.view(batch_gt_pool_feats.shape[0],-1,1))
+            batch_gt_pool_feats = self.pv_rcnn_ema.roi_head.pool_features(selected_batch_dict, use_gtboxes=True)
+            batch_gt_feats = self.pv_rcnn_ema.roi_head.projected_layer(batch_gt_pool_feats.view(batch_gt_pool_feats.shape[0],-1,1))
         batch_gt_feats = batch_gt_feats.view(*batch_dict['gt_boxes'].shape[:2], -1)
         bank_inputs = defaultdict(list)
         for ix in inds:
@@ -218,7 +218,7 @@ class PVRCNN_SSL(Detector3DTemplate):
         # Update the bank with student's features from augmented labeled data
         if self.model_cfg['ROI_HEAD'].get('ENABLE_PROTO_CONTRASTIVE_LOSS', False): # Initialize feature bank only if proto_con_loss used
             bank = feature_bank_registry.get('gt_aug_lbl_prototypes')
-            sa_gt_lbl_inputs = self._prep_bank_inputs(batch_dict, lbl_inds, bank.num_points_thresh)
+            sa_gt_lbl_inputs = self._prep_bank_inputs(batch_dict_ema, lbl_inds, bank.num_points_thresh)
             bank.update(**sa_gt_lbl_inputs, iteration=batch_dict['cur_iteration'])
 
         # For metrics calculation
