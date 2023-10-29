@@ -33,20 +33,20 @@ class PVRCNNHead(RoIHeadTemplate):
 
         self.shared_fc_layer = nn.Sequential(*shared_fc_list)
 
-        GRID_SIZE = self.model_cfg.ROI_GRID_POOL.GRID_SIZE
-        pre_channel = GRID_SIZE * GRID_SIZE * GRID_SIZE * num_c_out
-        projected_fc_list = []
-        for k in range(0, self.model_cfg.SHARED_FC.__len__()):
-            projected_fc_list.extend([
-                nn.Conv1d(pre_channel, self.model_cfg.SHARED_FC[k], kernel_size=1, bias=False),
-                nn.BatchNorm1d(self.model_cfg.SHARED_FC[k]),
-                nn.ReLU()
-            ])
-            pre_channel = self.model_cfg.SHARED_FC[k]
+        # GRID_SIZE = self.model_cfg.ROI_GRID_POOL.GRID_SIZE
+        # pre_channel = GRID_SIZE * GRID_SIZE * GRID_SIZE * num_c_out
+        # projected_fc_list = []
+        # for k in range(0, self.model_cfg.SHARED_FC.__len__()):
+        #     projected_fc_list.extend([
+        #         nn.Conv1d(pre_channel, self.model_cfg.SHARED_FC[k], kernel_size=1, bias=False),
+        #         nn.BatchNorm1d(self.model_cfg.SHARED_FC[k]),
+        #         nn.ReLU()
+        #     ])
+        #     pre_channel = self.model_cfg.SHARED_FC[k]
 
-            if k != self.model_cfg.SHARED_FC.__len__() - 1 and self.model_cfg.DP_RATIO > 0:
-                projected_fc_list.append(nn.Dropout(self.model_cfg.DP_RATIO))        
-        self.projected_layer = nn.Sequential(*projected_fc_list)
+        #     if k != self.model_cfg.SHARED_FC.__len__() - 1 and self.model_cfg.DP_RATIO > 0:
+        #         projected_fc_list.append(nn.Dropout(self.model_cfg.DP_RATIO))        
+        # self.projected_layer = nn.Sequential(*projected_fc_list)
         self.cls_layers = self.make_fc_layers(
             input_channels=pre_channel, output_channels=self.num_class, fc_list=self.model_cfg.CLS_FC
         )
@@ -180,7 +180,7 @@ class PVRCNNHead(RoIHeadTemplate):
         pooled_features = self.pool_features(batch_dict)
         batch_size_rcnn = pooled_features.shape[0]
         shared_features = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
-        projected_features = self.projected_layer(pooled_features.view(batch_size_rcnn, -1, 1)).detach()
+        # projected_features = self.projected_layer(pooled_features.view(batch_size_rcnn, -1, 1)).detach()
         rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
         rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)
 
@@ -188,10 +188,10 @@ class PVRCNNHead(RoIHeadTemplate):
             # RoI-level similarity.
             # calculate cosine similarity between unlabeled augmented RoI features and labeled augmented prototypes.
             # roi_features = pooled_features.clone().detach().view(batch_size_rcnn, -1)
-            projected_features = projected_features.view(batch_size_rcnn, -1)
+            shared_features = shared_features.view(batch_size_rcnn, -1)
             roi_scores_shape = batch_dict['roi_scores'].shape  # (B, N)
             bank = feature_bank_registry.get('gt_aug_lbl_prototypes')
-            sim_scores = bank.get_sim_scores(projected_features)
+            sim_scores = bank.get_sim_scores(shared_features)
             targets_dict['roi_sim_scores'] = sim_scores.view(*roi_scores_shape, -1)
 
         if not self.training or self.predict_boxes_when_training:

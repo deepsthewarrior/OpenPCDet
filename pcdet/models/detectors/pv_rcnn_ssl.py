@@ -207,7 +207,7 @@ class PVRCNN_SSL(Detector3DTemplate):
                 batch_dict = cur_module(batch_dict)
             
             # Update the bank with student's features from augmented labeled data
-            if self.model_cfg['ROI_HEAD'].get('ENABLE_PROTO_CONTRASTIVE_LOSS', False): # Initialize feature bank only if proto_con_loss used
+            if self.model_cfg['ROI_HEAD'].get('ENABLE_PROTO_CONTRASTIVE_LOSS', False) and batch_dict['cur_epoch'] >=20: # Initialize feature bank only if proto_con_loss used
                 bank = feature_bank_registry.get('gt_aug_lbl_prototypes')
                 sa_gt_lbl_inputs = self._prep_bank_inputs(batch_dict, lbl_inds, bank.num_points_thresh)
                 bank.update(**sa_gt_lbl_inputs, iteration=batch_dict['cur_iteration'])
