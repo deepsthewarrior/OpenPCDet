@@ -36,7 +36,7 @@ def log_tb_dict(tb_log, tb_dict, accumulated_iter):
 
 def train_one_epoch(model, optimizer, train_loader, model_func, lr_scheduler, accumulated_iter, optim_cfg,
                     rank, tbar, total_it_each_epoch, dataloader_iter, cur_epoch, ckpt_save_dir, tb_log=None, leave_pbar=False,
-                    test_loader=None, dataloader_test_iter=None):
+                    test_loader=None, dataloader_test_iter=None,total_epochs=0):
     if total_it_each_epoch == len(train_loader):
         dataloader_iter = iter(train_loader)
 
@@ -64,6 +64,8 @@ def train_one_epoch(model, optimizer, train_loader, model_func, lr_scheduler, ac
         # adding iteration, epoch number in batch dict
         batch['cur_iteration'], batch['cur_epoch'] = accumulated_iter, cur_epoch
         batch['ckpt_save_dir'] = ckpt_save_dir
+        batch['total_epochs'] = total_epochs
+        batch['total_it_each_epoch'] = total_it_each_epoch
 
         data_timer = time.time()
         cur_data_time = data_timer - end
@@ -162,7 +164,7 @@ def train_model(model, optimizer, train_loader, model_func, lr_scheduler, optim_
                 total_it_each_epoch=total_it_each_epoch,
                 dataloader_iter=dataloader_iter,
                 test_loader=test_loader,
-                dataloader_test_iter=dataloader_test_iter
+                dataloader_test_iter=dataloader_test_iter,total_epochs=total_epochs
             )
 
             # save trained model
