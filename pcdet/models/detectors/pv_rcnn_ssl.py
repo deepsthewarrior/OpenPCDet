@@ -251,6 +251,12 @@ class PVRCNN_SSL(Detector3DTemplate):
             loss += reduce_loss_fn(loss_rcnn_box[ulb_inds, ...]) * self.unlabeled_weight
         if self.model_cfg['ROI_HEAD'].get('ENABLE_ULB_CLS_DIST_LOSS', False):
             loss += ulb_loss_cls_dist
+        if self.model_cfg['ROI_HEAD'].get('ENABLE_INSTANCE_CONTRASTIVE_LOSS', False):
+            instance_cont_loss = self._get_instance_contrastive_loss(batch_dict,batch_dict_ema, bank, ulb_inds)
+            if instance_cont_loss is not None:
+                loss += instance_cont_loss * self.model_cfg['ROI_HEAD']['INSTANCE_CONTRASTIVE_LOSS_WEIGHT']
+                tb_dict['instance_cont_loss'] = instance_cont_loss.item()
+
         if self.model_cfg['ROI_HEAD'].get('ENABLE_PROTO_CONTRASTIVE_LOSS', False):
             proto_cont_loss = self._get_proto_contrastive_loss(batch_dict, bank, ulb_inds)
             if proto_cont_loss is not None:
@@ -298,6 +304,47 @@ class PVRCNN_SSL(Detector3DTemplate):
             print(f"No pl instances predicted for strongly augmented frame(s) {batch_dict['frame_id'][ulb_inds.cpu().numpy()]}")
             return
         return proto_cont_loss.view(B, N)[ulb_inds][ulb_nonzero_mask].mean()
+
+    def _get_instance_contrastive_loss(self,batch_dict,batch_dict_ema,bank,ulb_inds):
+        batch_dict_wa_gt = {'unlabeled_inds': batch_dict['unlabeled_inds'],
+                          'labeled_inds': batch_dict['labeled_inds'],
+                          'rois': batch_dict['rois'].data.clone(),
+                          'roi_scores': batch_dict['roi_scores'].data.clone(),
+                          'roi_labels': batch_dict['roi_labels'].data.clone(),
+                          'has_class_labels': batch_dict['has_class_labels'],
+                          'batch_size': batch_dict['batch_size'],
+                          'gt_boxes': batch_dict['gt_boxes'].data.clone(),
+                          # using teacher features
+                          'point_features': batch_dict_ema['point_features'].data.clone(),
+                          'point_coords': batch_dict_ema['point_coords'].data.clone(),
+                          'point_cls_scores': batch_dict_ema['point_cls_scores'].data.clone(),
+                          
+        }
+        batch_dict_wa_gt = self.reverse_augmentation(batch_dict_wa_gt, batch_dict, ulb_inds,key='gt_boxes')
+        gt_boxes = batch_dict['gt_boxes']
+        B, N = gt_boxes.shape[:2]
+        
+        with torch.no_grad():
+            batch_gt_feats_wa = self.pv_rcnn_ema.roi_head.pool_features(batch_dict_wa_gt, use_gtboxes=True)
+            batch_size_rcnn = batch_gt_feats_wa.shape[0]
+            shared_features_wa = self.pv_rcnn_ema.roi_head.shared_fc_layer(batch_gt_feats_wa.view(batch_size_rcnn, -1, 1)).squeeze(-1)
+
+        batch_gt_feats_sa = self.pv_rcnn.roi_head.pool_features(batch_dict, use_gtboxes=True)
+        batch_size_rcnn = batch_gt_feats_sa.shape[0]
+        shared_features_sa = self.pv_rcnn.roi_head.shared_fc_layer(batch_gt_feats_sa.view(batch_size_rcnn, -1, 1)).squeeze(-1)
+
+        assert batch_gt_feats_sa.shape[0] == batch_gt_feats_wa.shape[0], "batch_dict  mismatch"
+        instance_cont_loss = bank.get_simmatch_loss(shared_features_wa,shared_features_sa,ulb_inds)
+        if instance_cont_loss is None:
+            return None
+        nonzero_mask = torch.logical_not(torch.eq(gt_boxes, 0).all(dim=-1))
+        ulb_nonzero_mask = nonzero_mask[ulb_inds]
+        if ulb_nonzero_mask.sum() == 0:
+            print(f"No pl instances predicted for strongly augmented frame(s) {batch_dict['frame_id'][ulb_inds.cpu().numpy()]}")
+            return
+        return instance_cont_loss.view(B, N)[ulb_inds][ulb_nonzero_mask].mean()
+        
+        
 
     @staticmethod
     def _prep_tb_dict(tb_dict, lbl_inds, ulb_inds, reduce_loss_fn):

@@ -157,6 +157,30 @@ class FeatureBank(Metric):
         sim_scores = F.normalize(feats) @ F.normalize(self.classwise_prototypes).t()
         log_probs = F.log_softmax(sim_scores / self.temperature, dim=-1)
         return -log_probs[torch.arange(len(labels)), labels]
+    
+    def get_simmatch_loss(self, feats_wa, feats_sa, labels):
+        """
+        :param feats_w: pseudo-box features of the weakly augmented unlabeled samples (N, C)
+        :param feats: pseudo-labels of the strongly augmented unlabeled samples (N,)
+        :return:
+        """
+
+        if not self.initialized:
+            return None
+        cos_sim_wa = F.normalize(feats_wa) @ F.normalize(self.prototypes).t()
+        norm_cos_sim_wa = F.softmax(cos_sim_wa / self.temperature, dim=-1)
+
+        cos_sim_sa = F.normalize(feats_sa) @ F.normalize(self.prototypes).t()
+        log_norm_cos_sim_sa = -1 * F.log_softmax(cos_sim_sa / self.temperature, dim=-1)
+
+
+        return (norm_cos_sim_wa * log_norm_cos_sim_sa).sum(-1)
+
+
+
+
+
+
 
 
 class FeatureBankRegistry(object):

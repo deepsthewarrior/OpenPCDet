@@ -18,7 +18,7 @@ DATA_CONFIG:
               NUM_POINT_FEATURES: 4
               DATABASE_WITH_FAKELIDAR: False
               REMOVE_EXTRA_WIDTH: [0.0, 0.0, 0.0]
-              LIMIT_WHOLE_SCENE: True  # Temporarily enabled to fix KeyError bug in prototyping
+              LIMIT_WHOLE_SCENE: False  # Temporarily enabled to fix KeyError bug in prototyping
 
             - NAME: random_world_flip
               ALONG_AXIS_LIST: ['x']
@@ -161,7 +161,9 @@ MODEL:
         CLASS_AGNOSTIC: True
         ENABLE_VIS: False
         ENABLE_PROTO_CONTRASTIVE_LOSS: False
+        ENABLE_INSTANCE_CONTRASTIVE_LOSS: False
         PROTO_CONTRASTIVE_LOSS_WEIGHT: 1.0
+        INSTANCE_CONTRASTIVE_LOSS_WEIGHT: 1.0
         ENABLE_SOFT_TEACHER: False
         ENABLE_ULB_CLS_DIST_LOSS: False
         ENABLE_EVAL: True
