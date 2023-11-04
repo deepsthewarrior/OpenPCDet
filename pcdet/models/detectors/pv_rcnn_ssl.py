@@ -350,7 +350,7 @@ class PVRCNN_SSL(Detector3DTemplate):
     def _prep_tb_dict(tb_dict, lbl_inds, ulb_inds, reduce_loss_fn):
         tb_dict_ = {}
         for key in tb_dict.keys():
-            if key == 'proto_cont_loss':
+            if key in ['proto_cont_loss','instance_cont_loss']:
                 tb_dict_[key] = tb_dict[key]
             elif 'loss' in key or 'acc' in key or 'point_pos_num' in key:
                 tb_dict_[f"{key}_labeled"] = reduce_loss_fn(tb_dict[key][lbl_inds, ...])
