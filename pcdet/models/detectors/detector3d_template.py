@@ -279,6 +279,7 @@ class Detector3DTemplate(nn.Module):
                 final_labels = label_preds[selected]
                 final_boxes = box_preds[selected]
                 final_roi_sim_scores = batch_dict['roi_sim_scores'][index][selected]
+                final_roi_instance_sim_scores = batch_dict['roi_instance_sim_scores'][index][selected]
 
             if not no_recall_dict:
                 recall_dict = self.generate_recall_record(
@@ -294,6 +295,7 @@ class Detector3DTemplate(nn.Module):
                 'pred_labels': final_labels,
                 'pred_sem_scores_multiclass': final_multi_sem_scores,
                 'pred_sim_scores': final_roi_sim_scores,
+                'pred_instance_sim_scores': final_roi_instance_sim_scores,
             }
 
             pred_dicts.append(record_dict)
@@ -316,8 +318,10 @@ class Detector3DTemplate(nn.Module):
 
         cur_gt = gt_boxes
         k = cur_gt.__len__() - 1
+        assert cur_gt.__len__() > k, 'Batch size of gt_boxes is lesser than %d' % k
         while k >= 0 and cur_gt[k].sum() == 0:
             k -= 1
+            assert cur_gt.__len__() > k, 'Batch size of gt_boxes is lesser than %d' % k
         cur_gt = cur_gt[:k + 1]
 
         if cur_gt.shape[0] > 0:

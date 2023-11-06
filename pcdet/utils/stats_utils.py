@@ -84,7 +84,7 @@ class PredQualityMetrics(Metric):
         self.dataset = kwargs.get('dataset', None)
         # TODO(farzad): add "roi_matched_pl_score" to states_name
         self.states_name = ["roi_scores", "roi_labels", "roi_iou_wrt_gt", "roi_iou_wrt_pl", "roi_weights",
-                            "roi_target_scores", "roi_sim_scores"]
+                            "roi_target_scores", "roi_sim_scores","roi_instance_sim_scores"]
         self.fg_threshs = kwargs.get('fg_threshs', None)
         self.bg_thresh = kwargs.get('BG_THRESH', 0.25)
         self.min_overlaps = np.array([0.7, 0.5, 0.5])
@@ -96,7 +96,7 @@ class PredQualityMetrics(Metric):
 
     def update(self, rois: [torch.Tensor], roi_scores: [torch.Tensor], roi_weights:None,
                roi_iou_wrt_pl:None, roi_target_scores:None, ground_truths:None,
-               roi_sim_scores:None, points:None) -> None:
+               roi_sim_scores:None, points:None, roi_instance_sim_scores:None) -> None:
 
         _assert_inputs_are_valid(rois, roi_scores, ground_truths)
 
@@ -113,6 +113,7 @@ class PredQualityMetrics(Metric):
             sample_rois = sample_rois[valid_roi_mask]
             sample_roi_labels = sample_roi_labels[valid_roi_mask]
             sample_sim_scores = roi_sim_scores[i][valid_roi_mask]
+            sample_instance_sim_scores = roi_instance_sim_scores[i][valid_roi_mask]
             sample_roi_scores = torch.softmax(roi_scores[i][valid_roi_mask],dim=-1)
             if len(sample_gts) > 0 and len(sample_rois) > 0:
                 sample_roi_iou_wrt_gt, _ = get_max_iou_with_same_class(sample_rois[:, 0:7], sample_roi_labels,
@@ -123,6 +124,7 @@ class PredQualityMetrics(Metric):
 
             self.roi_scores.append(sample_roi_scores)
             self.roi_sim_scores.append(sample_sim_scores)
+            self.roi_instance_sim_scores.append(sample_instance_sim_scores)
             self.roi_iou_wrt_gt.append(sample_roi_iou_wrt_gt)
             self.roi_labels.append(sample_roi_labels)
             if roi_iou_wrt_pl is not None:
@@ -179,6 +181,7 @@ class PredQualityMetrics(Metric):
 
         scores = accumulated_metrics["roi_scores"]
         sim_scores = accumulated_metrics["roi_sim_scores"]
+        instance_sim_scores = accumulated_metrics["roi_instance_sim_scores"]
         sim_labels = torch.argmax(sim_scores, dim=-1)
         iou_wrt_gt = accumulated_metrics["roi_iou_wrt_gt"].view(-1)
         iou_wrt_pl = accumulated_metrics["roi_iou_wrt_pl"].view(-1)
@@ -215,6 +218,8 @@ class PredQualityMetrics(Metric):
             # By using cls_true_mask we assume that the performance of RPN classification is perfect.
             cls_roi_scores = scores[cls_pred_mask, cind]
             cls_roi_sim_scores = sim_scores[cls_pred_mask, cind]
+            cls_roi_instance_sim_scores = instance_sim_scores[cls_pred_mask, cind]
+            cls_roi_instance_sim_scores_entropy = instance_sim_scores[cls_pred_mask, cind]
             cls_roi_sim_scores_entropy = Categorical(sim_scores[cls_pred_mask] + torch.finfo(torch.float32).eps).entropy()
             cls_roi_iou_wrt_gt = iou_wrt_gt[cls_pred_mask]
             if not self.isnan(iou_wrt_pl):
@@ -257,6 +262,7 @@ class PredQualityMetrics(Metric):
             if not (torch.eq(cls_roi_sim_scores,-1)).any():
                 add_avg_metric('rois_avg_sim_score_entropy', cls_roi_sim_scores_entropy)
                 add_avg_metric('rois_avg_sim_score', cls_roi_sim_scores)
+                add_avg_metric('rois_avg_instance_sim_score', cls_roi_instance_sim_scores)
                 sem_clf_pr_curve_sim_score_data = {'labels': y_labels, 'predictions': y_sim_scores}
                 classwise_metrics['sem_clf_pr_curve_sim_score'][cls] = sem_clf_pr_curve_sim_score_data
             if not(self.isnan(iou_wrt_pl) and self.isnan(weights) and self.isnan(target_scores)):

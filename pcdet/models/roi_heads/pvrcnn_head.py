@@ -178,9 +178,10 @@ class PVRCNNHead(RoIHeadTemplate):
         roi_features = shared_features.clone().detach().view(batch_size_rcnn, -1)
         roi_scores_shape = batch_dict['roi_scores'].shape  # (B, N)
         bank = feature_bank_registry.get('gt_aug_lbl_prototypes')
-        sim_scores = bank.get_sim_scores(roi_features) if bank.initialized else torch.full((*roi_scores_shape,3), -1, device=rcnn_cls.device)
+        sim_scores = bank.get_sim_scores(roi_features,use_softmax=False) if bank.initialized else torch.full((*roi_scores_shape,3), -1, device=rcnn_cls.device)
         targets_dict['roi_sim_scores'] = sim_scores.view(*roi_scores_shape, -1)
-
+        targets_dict['roi_instance_sim_scores'] =  bank.get_sim_scores(roi_features,use_classwise_prototypes=False,use_softmax=False).view(*roi_scores_shape, -1) if bank.initialized else torch.full((*roi_scores_shape,3), -1, device=rcnn_cls.device)
+        assert targets_dict['roi_sim_scores'].shape == targets_dict['roi_instance_sim_scores'].shape
         if not self.training or self.predict_boxes_when_training:
             batch_cls_preds, batch_box_preds = self.generate_predicted_boxes(
                 batch_size=batch_dict['batch_size'], rois=batch_dict['rois'], cls_preds=rcnn_cls, box_preds=rcnn_reg

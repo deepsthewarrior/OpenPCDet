@@ -26,12 +26,14 @@ def update_metrics(targets_dict, mask_type='cls'):
         roi_labels = targets_dict['roi_labels'][uind][mask].unsqueeze(-1).detach().clone()
         roi_scores_multiclass = targets_dict['roi_scores_multiclass'][uind][mask].detach().clone()
         roi_sim_scores_multiclass = targets_dict['roi_sim_scores'][uind][mask].detach().clone()
+        roi_instance_sim_scores_multiclass = targets_dict['roi_instance_sim_scores'][uind][mask].detach().clone()
         roi_labeled_boxes = torch.cat([rois, roi_labels], dim=-1)
         gt_iou_of_rois = targets_dict['gt_iou_of_rois'][uind][mask].unsqueeze(-1).detach().clone()
         metrics_input['rois'].append(roi_labeled_boxes)
         metrics_input['roi_scores'].append(roi_scores_multiclass)
         metrics_input['roi_sim_scores'].append(roi_sim_scores_multiclass)
         metrics_input['roi_iou_wrt_pl'].append(gt_iou_of_rois)
+        metrics_input['roi_instance_sim_scores'].append(roi_instance_sim_scores_multiclass)
 
         # Target info
         target_labeled_boxes = targets_dict['gt_of_rois_src'][uind][mask].detach().clone()

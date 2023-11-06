@@ -117,26 +117,29 @@ class FeatureBank(Metric):
         self.classwise_prototypes = self.momentum * self.classwise_prototypes + (1 - self.momentum) * classwise_prototypes
 
     @torch.no_grad()
-    def get_sim_scores(self, input_features, use_classwise_prototypes=True):
+    def get_sim_scores(self, input_features, use_classwise_prototypes=True, use_softmax=True):
         assert input_features.shape[1] == self.feat_size, "input feature size is not equal to the bank feature size"
         if not self.initialized:
             return input_features.new_zeros(input_features.shape[0], 3)
         if use_classwise_prototypes:
             cos_sim = F.normalize(input_features) @ F.normalize(self.classwise_prototypes).t()
-            return F.softmax(cos_sim / self.temperature, dim=-1)
+            return F.softmax(cos_sim / self.temperature, dim=-1) if use_softmax else (cos_sim/self.temperature)
         else:
-            self._get_sim_scores_with_instance_prototypes(input_features)
+            return self._get_sim_scores_with_instance_prototypes(input_features)
 
-    def _get_sim_scores_with_instance_prototypes(self, input_features):
+    def _get_sim_scores_with_instance_prototypes(self, input_features, use_softmax=True):
         cos_sim = F.normalize(input_features) @ F.normalize(self.prototypes).t()
         norm_cos_sim = F.softmax(cos_sim / self.temperature, dim=-1)
         classwise_sim = cos_sim.new_zeros(input_features.shape[0], 3)
         lbs = self.proto_labels.expand_as(cos_sim).long()
-        classwise_sim.scatter_add_(1, lbs, norm_cos_sim)
+        if use_softmax:
+            classwise_sim.scatter_add_(1, lbs, norm_cos_sim)
+        else:
+            classwise_sim.scatter_add_(1, lbs, (cos_sim/self.temperature))
         # classwise_sim.scatter_add_(1, lbs, cos_sim)
         # protos_cls_counts = torch.bincount(self.proto_labels).view(1, -1)
         # classwise_sim /= protos_cls_counts  # Note: not probability
-        classwise_sim /= classwise_sim.mean(dim=0)
+        # classwise_sim /= classwise_sim.mean(dim=0)
         return classwise_sim
 
     def get_pairwise_protos_sim_matrix(self):
@@ -174,7 +177,7 @@ class FeatureBank(Metric):
         log_norm_cos_sim_sa = -1 * F.log_softmax(cos_sim_sa / self.temperature, dim=-1)
 
 
-        return (norm_cos_sim_wa * log_norm_cos_sim_sa).sum(-1)
+        return [(norm_cos_sim_wa * log_norm_cos_sim_sa), self.proto_labels,norm_cos_sim_wa]
 
 
 
