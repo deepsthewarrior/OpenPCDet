@@ -198,12 +198,15 @@ class PredQualityMetrics(Metric):
         
         y_labels = one_hot_labels.int().cpu().numpy()
         y_scores = scores.cpu().numpy()
-        y_sim_scores = sim_scores.cpu().numpy()
+        padded_sim_scores = torch.eq(sim_scores.sum(-1),-3).any()
+        if not padded_sim_scores:
+            y_sim_scores = sim_scores.cpu().numpy()
 
         
         if y_labels.shape[0]: 
             classwise_metrics['multiclass_avg_precision_sem_score_weighted'] = average_precision_score(y_labels, y_scores, average='weighted')
-            classwise_metrics['multiclass_avg_precision_sim_score_weighted'] = average_precision_score(y_labels, y_sim_scores, average='weighted')
+            if not padded_sim_scores:
+                classwise_metrics['multiclass_avg_precision_sim_score_weighted'] = average_precision_score(y_labels, y_sim_scores, average='weighted')
         # classwise_metrics['multiclass_avg_precision_sem_score_macro'] = average_precision_score(y_labels, y_scores, average='macro')
         # classwise_metrics['multiclass_avg_precision_sim_score_macro'] = average_precision_score(y_labels, y_sim_scores, average='macro')
         # classwise_metrics['multiclass_avg_precision_sem_score_micro'] = average_precision_score(y_labels, y_scores, average='micro')
@@ -214,7 +217,7 @@ class PredQualityMetrics(Metric):
         for cind, cls in enumerate(self.dataset.class_names):
             cls_pred_mask = pred_labels == cind
             cls_sim_mask = sim_labels == cind
-
+        
             # By using cls_true_mask we assume that the performance of RPN classification is perfect.
             cls_roi_scores = scores[cls_pred_mask, cind]
             cls_roi_sim_scores = sim_scores[cls_pred_mask, cind]
@@ -251,8 +254,9 @@ class PredQualityMetrics(Metric):
             # classwise_metrics['avg_num_gts_per_sample'].append()
             for cind_, cls_tag in enumerate(self.dataset.class_names):
                 true_mask_bool = true_mask.bool()
-                classwise_metrics[f'sim_scores_multi_tp_{cls}'][cls_tag] = (sim_scores[cls_pred_mask, cind_] * true_mask_bool[cls_pred_mask]).float().mean()
-                classwise_metrics[f'sim_scores_multi_fp_{cls}'][cls_tag] = (sim_scores[cls_pred_mask, cind_] * (~true_mask_bool[cls_pred_mask])).float().mean()
+                if not padded_sim_scores:
+                    classwise_metrics[f'sim_scores_multi_tp_{cls}'][cls_tag] = (sim_scores[cls_pred_mask, cind_] * true_mask_bool[cls_pred_mask]).float().mean()
+                    classwise_metrics[f'sim_scores_multi_fp_{cls}'][cls_tag] = (sim_scores[cls_pred_mask, cind_] * (~true_mask_bool[cls_pred_mask])).float().mean()
             classwise_metrics['rois_fg_ratio'][cls] = cls_fg_mask.sum() / cls_pred_mask.sum()
             classwise_metrics['rois_uc_ratio'][cls] = cls_uc_mask.sum() / cls_pred_mask.sum()
             classwise_metrics['rois_bg_ratio'][cls] = cls_bg_mask.sum() / cls_pred_mask.sum()
@@ -263,8 +267,9 @@ class PredQualityMetrics(Metric):
                 add_avg_metric('rois_avg_sim_score_entropy', cls_roi_sim_scores_entropy)
                 add_avg_metric('rois_avg_sim_score', cls_roi_sim_scores)
                 add_avg_metric('rois_avg_instance_sim_score', cls_roi_instance_sim_scores)
-                sem_clf_pr_curve_sim_score_data = {'labels': y_labels, 'predictions': y_sim_scores}
-                classwise_metrics['sem_clf_pr_curve_sim_score'][cls] = sem_clf_pr_curve_sim_score_data
+                if not padded_sim_scores:
+                    sem_clf_pr_curve_sim_score_data = {'labels': y_labels, 'predictions': y_sim_scores}
+                    classwise_metrics['sem_clf_pr_curve_sim_score'][cls] = sem_clf_pr_curve_sim_score_data
             if not(self.isnan(iou_wrt_pl) and self.isnan(weights) and self.isnan(target_scores)):
                 add_avg_metric('rois_avg_iou_wrt_pl', cls_roi_iou_wrt_pl) if cls_roi_iou_wrt_pl is not None else None
                 add_avg_metric('rois_avg_weight', cls_roi_weights)

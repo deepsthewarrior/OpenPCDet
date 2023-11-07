@@ -117,25 +117,24 @@ class FeatureBank(Metric):
         self.classwise_prototypes = self.momentum * self.classwise_prototypes + (1 - self.momentum) * classwise_prototypes
 
     @torch.no_grad()
-    def get_sim_scores(self, input_features, use_classwise_prototypes=True, use_softmax=True):
+    def get_sim_scores(self, input_features, use_classwise_prototypes=True,return_raw_scores=False):
         assert input_features.shape[1] == self.feat_size, "input feature size is not equal to the bank feature size"
         if not self.initialized:
             return input_features.new_zeros(input_features.shape[0], 3)
+        if return_raw_scores and use_classwise_prototypes:
+            return F.normalize(input_features) @ F.normalize(self.classwise_prototypes).t() #without temperature and softmax
         if use_classwise_prototypes:
             cos_sim = F.normalize(input_features) @ F.normalize(self.classwise_prototypes).t()
-            return F.softmax(cos_sim / self.temperature, dim=-1) if use_softmax else (cos_sim/self.temperature)
+            return F.softmax(cos_sim / self.temperature, dim=-1) 
         else:
             return self._get_sim_scores_with_instance_prototypes(input_features)
 
-    def _get_sim_scores_with_instance_prototypes(self, input_features, use_softmax=True):
+    def _get_sim_scores_with_instance_prototypes(self, input_features):
         cos_sim = F.normalize(input_features) @ F.normalize(self.prototypes).t()
         norm_cos_sim = F.softmax(cos_sim / self.temperature, dim=-1)
         classwise_sim = cos_sim.new_zeros(input_features.shape[0], 3)
         lbs = self.proto_labels.expand_as(cos_sim).long()
-        if use_softmax:
-            classwise_sim.scatter_add_(1, lbs, norm_cos_sim)
-        else:
-            classwise_sim.scatter_add_(1, lbs, (cos_sim/self.temperature))
+        classwise_sim.scatter_add_(1, lbs, (cos_sim/self.temperature))
         # classwise_sim.scatter_add_(1, lbs, cos_sim)
         # protos_cls_counts = torch.bincount(self.proto_labels).view(1, -1)
         # classwise_sim /= protos_cls_counts  # Note: not probability
