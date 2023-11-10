@@ -174,7 +174,6 @@ class PredQualityMetrics(Metric):
             return None
 
         classwise_metrics = defaultdict(dict)
-
         accumulated_metrics = self._accumulate_metrics()  # shape (N, 1)
         alpha = 0.7
         scores = accumulated_metrics["roi_scores"]
@@ -205,7 +204,6 @@ class PredQualityMetrics(Metric):
             classwise_metrics['multiclass_avg_precision_sem_score_weighted'] = average_precision_score(y_labels, y_scores, average='weighted')
             if not padded_sim_scores:
                 classwise_metrics['multiclass_avg_precision_sim_score_weighted'] = average_precision_score(y_labels, y_sim_scores, average='weighted')
-                cls_roi_hybrid_scores_entropy = Categorical(hybrid_scores[cls_pred_mask] + torch.finfo(torch.float32).eps).entropy()
                 classwise_metrics['multiclass_avg_precision_hybrid_score_weighted'] = average_precision_score(y_labels, y_hybrid_scores, average='weighted')
         # classwise_metrics['multiclass_avg_precision_sem_score_macro'] = average_precision_score(y_labels, y_scores, average='macro')
         # classwise_metrics['multiclass_avg_precision_sim_score_macro'] = average_precision_score(y_labels, y_sim_scores, average='macro')
@@ -224,6 +222,8 @@ class PredQualityMetrics(Metric):
             cls_roi_sim_scores = sim_scores[cls_pred_mask, cind]
             cls_roi_hybrid_scores = hybrid_scores[cls_pred_mask, cind]
             cls_roi_sim_scores_entropy = Categorical(sim_scores[cls_pred_mask] + torch.finfo(torch.float32).eps).entropy()
+            if not padded_sim_scores:
+                cls_roi_hybrid_scores_entropy = Categorical(hybrid_scores[cls_pred_mask] + torch.finfo(torch.float32).eps).entropy()
             cls_roi_iou_wrt_gt = iou_wrt_gt[cls_pred_mask]
             if not self.isnan(iou_wrt_pl):
                 cls_roi_iou_wrt_pl = iou_wrt_pl[cls_pred_mask]
@@ -251,7 +251,7 @@ class PredQualityMetrics(Metric):
 
             classwise_metrics['avg_num_pred_rois_using_sem_score_per_sample'][cls] = cls_pred_mask.sum() / self.num_samples
             classwise_metrics['avg_num_pred_rois_using_sim_score_per_sample'][cls] = cls_sim_mask.sum() / self.num_samples
-            classwise_metrics['avg_num_pred_rois_using_hybrid_score_per_sample'][cls] = cls_sim_mask.sum() / self.num_samples
+            classwise_metrics['avg_num_pred_rois_using_hybrid_score_per_sample'][cls] = cls_hybrid_mask.sum() / self.num_samples
             # classwise_metrics['avg_num_gts_per_sample'].append()
             for cind_, cls_tag in enumerate(self.dataset.class_names):
                 true_mask_bool = true_mask.bool()
@@ -267,6 +267,7 @@ class PredQualityMetrics(Metric):
             if not padded_sim_scores:
                 add_avg_metric('rois_avg_sim_score_entropy', cls_roi_sim_scores_entropy)
                 add_avg_metric('rois_avg_sim_score', cls_roi_sim_scores)
+                add_avg_metric('rois_avg_hybrid_score_entropy', cls_roi_hybrid_scores_entropy)
                 sem_clf_pr_curve_sim_score_data = {'labels': y_labels, 'predictions': y_sim_scores}
                 classwise_metrics['sem_clf_pr_curve_sim_score'][cls] = sem_clf_pr_curve_sim_score_data
                 sem_clf_pr_curve_hybrid_score_data = {'labels': y_labels, 'predictions': y_hybrid_scores}
