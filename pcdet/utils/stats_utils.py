@@ -176,10 +176,12 @@ class PredQualityMetrics(Metric):
         classwise_metrics = defaultdict(dict)
 
         accumulated_metrics = self._accumulate_metrics()  # shape (N, 1)
-
+        alpha = 0.7
         scores = accumulated_metrics["roi_scores"]
         sim_scores = accumulated_metrics["roi_sim_scores"]
         sim_labels = torch.argmax(sim_scores, dim=-1)
+        hybrid_scores = (alpha * scores) + ((1-alpha) * sim_scores)
+        hybrid_labels = torch.argmax(hybrid_scores, dim=-1)
         iou_wrt_gt = accumulated_metrics["roi_iou_wrt_gt"].view(-1)
         iou_wrt_pl = accumulated_metrics["roi_iou_wrt_pl"].view(-1)
         pred_labels = accumulated_metrics["roi_labels"].view(-1)
@@ -198,12 +200,13 @@ class PredQualityMetrics(Metric):
         padded_sim_scores = torch.eq(sim_scores.sum(-1),-3).any()
         if not padded_sim_scores:
             y_sim_scores = sim_scores.cpu().numpy()
-
-        
+            y_hybrid_scores = hybrid_scores.cpu().numpy()
         if y_labels.shape[0]: 
             classwise_metrics['multiclass_avg_precision_sem_score_weighted'] = average_precision_score(y_labels, y_scores, average='weighted')
             if not padded_sim_scores:
                 classwise_metrics['multiclass_avg_precision_sim_score_weighted'] = average_precision_score(y_labels, y_sim_scores, average='weighted')
+                cls_roi_hybrid_scores_entropy = Categorical(hybrid_scores[cls_pred_mask] + torch.finfo(torch.float32).eps).entropy()
+                classwise_metrics['multiclass_avg_precision_hybrid_score_weighted'] = average_precision_score(y_labels, y_hybrid_scores, average='weighted')
         # classwise_metrics['multiclass_avg_precision_sem_score_macro'] = average_precision_score(y_labels, y_scores, average='macro')
         # classwise_metrics['multiclass_avg_precision_sim_score_macro'] = average_precision_score(y_labels, y_sim_scores, average='macro')
         # classwise_metrics['multiclass_avg_precision_sem_score_micro'] = average_precision_score(y_labels, y_scores, average='micro')
@@ -214,10 +217,12 @@ class PredQualityMetrics(Metric):
         for cind, cls in enumerate(self.dataset.class_names):
             cls_pred_mask = pred_labels == cind
             cls_sim_mask = sim_labels == cind
+            cls_hybrid_mask = hybrid_labels == cind
 
             # By using cls_true_mask we assume that the performance of RPN classification is perfect.
             cls_roi_scores = scores[cls_pred_mask, cind]
             cls_roi_sim_scores = sim_scores[cls_pred_mask, cind]
+            cls_roi_hybrid_scores = hybrid_scores[cls_pred_mask, cind]
             cls_roi_sim_scores_entropy = Categorical(sim_scores[cls_pred_mask] + torch.finfo(torch.float32).eps).entropy()
             cls_roi_iou_wrt_gt = iou_wrt_gt[cls_pred_mask]
             if not self.isnan(iou_wrt_pl):
@@ -246,6 +251,7 @@ class PredQualityMetrics(Metric):
 
             classwise_metrics['avg_num_pred_rois_using_sem_score_per_sample'][cls] = cls_pred_mask.sum() / self.num_samples
             classwise_metrics['avg_num_pred_rois_using_sim_score_per_sample'][cls] = cls_sim_mask.sum() / self.num_samples
+            classwise_metrics['avg_num_pred_rois_using_hybrid_score_per_sample'][cls] = cls_sim_mask.sum() / self.num_samples
             # classwise_metrics['avg_num_gts_per_sample'].append()
             for cind_, cls_tag in enumerate(self.dataset.class_names):
                 true_mask_bool = true_mask.bool()
@@ -263,6 +269,8 @@ class PredQualityMetrics(Metric):
                 add_avg_metric('rois_avg_sim_score', cls_roi_sim_scores)
                 sem_clf_pr_curve_sim_score_data = {'labels': y_labels, 'predictions': y_sim_scores}
                 classwise_metrics['sem_clf_pr_curve_sim_score'][cls] = sem_clf_pr_curve_sim_score_data
+                sem_clf_pr_curve_hybrid_score_data = {'labels': y_labels, 'predictions': y_hybrid_scores}
+                classwise_metrics['sem_clf_pr_curve_hybrid_score'][cls] = sem_clf_pr_curve_hybrid_score_data
             if not(self.isnan(iou_wrt_pl) and self.isnan(weights) and self.isnan(target_scores)):
                 add_avg_metric('rois_avg_iou_wrt_pl', cls_roi_iou_wrt_pl) if cls_roi_iou_wrt_pl is not None else None
                 add_avg_metric('rois_avg_weight', cls_roi_weights)
