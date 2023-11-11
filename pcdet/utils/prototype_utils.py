@@ -159,7 +159,7 @@ class FeatureBank(Metric):
         sim_scores = F.normalize(feats) @ F.normalize(self.classwise_prototypes).t()
         log_probs = F.log_softmax(sim_scores / self.temperature, dim=-1)
         return -log_probs[torch.arange(len(labels)), labels]
-    
+
     def get_simmatch_loss(self, feats_wa, feats_sa, labels):
         """
         :param feats_w: pseudo-box features of the weakly augmented unlabeled samples (N, C)
@@ -178,7 +178,36 @@ class FeatureBank(Metric):
 
         return [(norm_cos_sim_wa * log_norm_cos_sim_sa), self.proto_labels,norm_cos_sim_wa]
 
+    def get_simmatch_mean_loss(self, feats_wa, feats_sa, labels):
+        """
+        :param feats_w: pseudo-box features of the weakly augmented unlabeled samples (N, C)
+        :param feats: pseudo-labels of the strongly augmented unlabeled samples (N,)
+        :return:
+        """
 
+        if not self.initialized:
+            return None, None
+        cos_sim_wa = F.normalize(feats_wa) @ F.normalize(self.prototypes).t()
+        norm_cos_sim_wa = F.softmax(cos_sim_wa / self.temperature, dim=-1)
+        
+        cos_sim_sa = F.normalize(feats_sa) @ F.normalize(self.prototypes).t()
+        norm_cos_sim_sa = F.softmax(cos_sim_sa / self.temperature, dim=-1)
+
+        masks = [self.proto_labels == cind for cind in range(0,3)]
+        masks = torch.stack(masks, dim=0)
+
+        classwise_sim_wa = [norm_cos_sim_wa[:,masks[0]].mean(-1),norm_cos_sim_wa[:,masks[1]].mean(-1),norm_cos_sim_wa[:,masks[2]].mean(-1)]
+        classwise_sim_wa = torch.stack(classwise_sim_wa,dim=1)
+
+        classwise_sim_sa = [norm_cos_sim_sa[:,masks[0]].mean(-1),norm_cos_sim_sa[:,masks[1]].mean(-1),norm_cos_sim_sa[:,masks[2]].mean(-1)]
+        classwise_sim_sa = torch.stack(classwise_sim_sa,dim=1)
+
+        log_classwise_cos_sim_sa = -1 * torch.log(classwise_sim_sa / self.temperature)
+
+        # log_norm_cos_sim_sa = -1 * F.log_softmax(cos_sim_sa / self.temperature, dim=-1)
+        
+
+        return [(classwise_sim_sa * log_classwise_cos_sim_sa), self.proto_labels,norm_cos_sim_wa]
 
 
 
