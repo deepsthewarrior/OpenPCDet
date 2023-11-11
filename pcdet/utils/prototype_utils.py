@@ -186,7 +186,7 @@ class FeatureBank(Metric):
         """
 
         if not self.initialized:
-            return None, None
+            return None
         cos_sim_wa = F.normalize(feats_wa) @ F.normalize(self.prototypes).t()
         norm_cos_sim_wa = F.softmax(cos_sim_wa / self.temperature, dim=-1)
         
