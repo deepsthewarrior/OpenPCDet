@@ -395,9 +395,9 @@ class PVRCNN_SSL(Detector3DTemplate):
             classwise_loss = {'Car_Pl':{},'Pedestrian_Pl':{},'Cyclist_Pl':{}}
             for cind,class_name in enumerate(['Car','Pedestrian','Cyclist']):
                 classwise_loss[f'{class_name}_Pl'] = {
-                        'Car_proto': Car_instance_proto_loss[gt_labels[ulb_inds][ulb_nonzero_mask]==cind].mean().item() * self.model_cfg['ROI_HEAD']['INSTANCE_CONTRASTIVE_LOSS_WEIGHT'],
-                        'Ped_proto': Ped_instance_proto_loss[gt_labels[ulb_inds][ulb_nonzero_mask]==cind].mean().item() * self.model_cfg['ROI_HEAD']['INSTANCE_CONTRASTIVE_LOSS_WEIGHT'],
-                        'Cyc_proto': Cyc_instance_proto_loss[gt_labels[ulb_inds][ulb_nonzero_mask]==cind].mean().item() * self.model_cfg['ROI_HEAD']['INSTANCE_CONTRASTIVE_LOSS_WEIGHT'],
+                        'Car_proto': Car_instance_proto_loss * self.model_cfg['ROI_HEAD']['INSTANCE_CONTRASTIVE_LOSS_WEIGHT'],
+                        'Ped_proto': Ped_instance_proto_loss * self.model_cfg['ROI_HEAD']['INSTANCE_CONTRASTIVE_LOSS_WEIGHT'],
+                        'Cyc_proto': Cyc_instance_proto_loss * self.model_cfg['ROI_HEAD']['INSTANCE_CONTRASTIVE_LOSS_WEIGHT'],
                 }
             return instance_cont_loss,classwise_loss
 
