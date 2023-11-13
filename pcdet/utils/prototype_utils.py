@@ -207,7 +207,7 @@ class FeatureBank(Metric):
         # log_norm_cos_sim_sa = -1 * F.log_softmax(cos_sim_sa / self.temperature, dim=-1)
         
 
-        return [(classwise_sim_sa * log_classwise_cos_sim_sa), self.proto_labels,norm_cos_sim_wa]
+        return [(classwise_sim_wa * log_classwise_cos_sim_sa), self.proto_labels,norm_cos_sim_wa]
 
 
 
