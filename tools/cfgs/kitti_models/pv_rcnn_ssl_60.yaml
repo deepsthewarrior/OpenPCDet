@@ -282,6 +282,7 @@ MODEL:
     EMA_UPDATE_INTERVAL: 1 
     REDUCE_LOSS: 'mean'
     STORE_SCORES_IN_PKL: False
+    STORE_RAW_SIM_IN_PKL: False
 
     FEATURE_BANK_LIST:
         - NAME: gt_aug_lbl_prototypes

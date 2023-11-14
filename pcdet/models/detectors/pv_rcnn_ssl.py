@@ -69,6 +69,8 @@ class PVRCNN_SSL(Detector3DTemplate):
         vals_to_store = ['iou_roi_pl', 'iou_roi_gt', 'pred_scores','roi_scores', 'class_labels', 'iteration','roi_sim_scores','iou_pl_gt',
                          'assigned_gt_pl_labels','pseudo_sem_scores_pl','pseudo_sim_scores_pl','rcnn_scores_pl','pl_iteration','roi_instance_sim_scores','pseudo_instance_sim_scores_pl']
         self.val_dict = {val: [] for val in vals_to_store}
+        loss_dict_keys = {'cos_sim_pl_wa','cos_sim_pl_sa'}
+        self.loss_dict = {key: [] for key in loss_dict_keys}
 
     @staticmethod
     def _clone_gt_boxes_and_feats(batch_dict):
@@ -372,6 +374,12 @@ class PVRCNN_SSL(Detector3DTemplate):
                         'Ped_proto': Ped_instance_proto_loss[gt_labels[ulb_inds][ulb_nonzero_mask]==cind].mean().item() * self.model_cfg['ROI_HEAD']['INSTANCE_CONTRASTIVE_LOSS_WEIGHT'],
                         'Cyc_proto': Cyc_instance_proto_loss[gt_labels[ulb_inds][ulb_nonzero_mask]==cind].mean().item() * self.model_cfg['ROI_HEAD']['INSTANCE_CONTRASTIVE_LOSS_WEIGHT'],
                 }
+            self.loss_dict['cos_sim_pl_wa'].append(instance_cont_tuple[2].tolist())
+            self.loss_dict['cos_sim_pl_sa'].append(instance_cont_tuple[3].tolist())
+            if self.model_cfg.get('STORE_RAW_SIM_IN_PKL', False):
+                output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]
+                file_path = os.path.join(output_dir, 'cos_sim.pkl')
+                pickle.dump(self.val_dict, open(file_path, 'wb'))
             return instance_cont_loss,classwise_loss
         else:
             instance_cont_tuple = bank.get_simmatch_mean_loss(shared_features_wa,shared_features_sa,ulb_inds)
@@ -389,7 +397,7 @@ class PVRCNN_SSL(Detector3DTemplate):
             instance_cont_loss = instance_cont_sum[ulb_inds][ulb_nonzero_mask].mean() # mean of all instances
             
             # metrics update
-            Car_instance_proto_loss = instance_cont_tuple[0][:,:,0][ulb_inds][ulb_nonzero_mask].mean(-1)
+            Car_instance_proto_loss = instance_cont_tuple[0][:,:,0][ulb_inds][ulb_nonzero_mask].mean(-1) 
             Ped_instance_proto_loss =  instance_cont_tuple[0][:,:,1][ulb_inds][ulb_nonzero_mask].mean(-1)
             Cyc_instance_proto_loss = instance_cont_tuple[0][:,:,2][ulb_inds][ulb_nonzero_mask].mean(-1)
             classwise_loss = {'Car_Pl':{},'Pedestrian_Pl':{},'Cyclist_Pl':{}}
@@ -399,6 +407,13 @@ class PVRCNN_SSL(Detector3DTemplate):
                         'Ped_proto': Ped_instance_proto_loss * self.model_cfg['ROI_HEAD']['INSTANCE_CONTRASTIVE_LOSS_WEIGHT'],
                         'Cyc_proto': Cyc_instance_proto_loss * self.model_cfg['ROI_HEAD']['INSTANCE_CONTRASTIVE_LOSS_WEIGHT'],
                 }
+            self.loss_dict['cos_sim_pl_wa'].append(instance_cont_tuple[2].tolist())
+            self.loss_dict['cos_sim_pl_sa'].append(instance_cont_tuple[3].tolist())
+            if self.model_cfg.get('STORE_RAW_SIM_IN_PKL', False):
+                output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]
+                file_path = os.path.join(output_dir, 'cos_sim.pkl')
+                pickle.dump(self.val_dict, open(file_path, 'wb'))
+            
             return instance_cont_loss,classwise_loss
 
 

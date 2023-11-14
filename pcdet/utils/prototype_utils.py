@@ -176,7 +176,7 @@ class FeatureBank(Metric):
         log_norm_cos_sim_sa = -1 * F.log_softmax(cos_sim_sa / self.temperature, dim=-1)
 
 
-        return [(norm_cos_sim_wa * log_norm_cos_sim_sa), self.proto_labels,norm_cos_sim_wa]
+        return [(norm_cos_sim_wa * log_norm_cos_sim_sa), self.proto_labels, cos_sim_wa, cos_sim_sa]
 
     def get_simmatch_mean_loss(self, feats_wa, feats_sa, labels):
         """
@@ -207,7 +207,7 @@ class FeatureBank(Metric):
         # log_norm_cos_sim_sa = -1 * F.log_softmax(cos_sim_sa / self.temperature, dim=-1)
         
 
-        return [(classwise_sim_wa * log_classwise_cos_sim_sa), self.proto_labels,norm_cos_sim_wa]
+        return [(classwise_sim_wa * log_classwise_cos_sim_sa), self.proto_labels, cos_sim_wa, cos_sim_sa]
 
 
 
