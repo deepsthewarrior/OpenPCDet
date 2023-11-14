@@ -69,7 +69,7 @@ class PVRCNN_SSL(Detector3DTemplate):
         vals_to_store = ['iou_roi_pl', 'iou_roi_gt', 'pred_scores','roi_scores', 'class_labels', 'iteration','roi_sim_scores','iou_pl_gt',
                          'assigned_gt_pl_labels','pseudo_sem_scores_pl','pseudo_sim_scores_pl','rcnn_scores_pl','pl_iteration','roi_instance_sim_scores','pseudo_instance_sim_scores_pl']
         self.val_dict = {val: [] for val in vals_to_store}
-        loss_dict_keys = {'cos_sim_pl_wa','cos_sim_pl_sa'}
+        loss_dict_keys = {'cos_sim_pl_wa','cos_sim_pl_sa','pl_labels','proto_labels'}
         self.loss_dict = {key: [] for key in loss_dict_keys}
 
     @staticmethod
@@ -361,8 +361,9 @@ class PVRCNN_SSL(Detector3DTemplate):
             loss_labels = instance_cont_tuple[1]
             instance_cont_tuple[0] = instance_cont_tuple[0].view(B, N, -1)
             instance_cont_sum = instance_cont_tuple[0].sum(-1)# calculates sum of all terms of CE for a particular instance
-            instance_cont_loss = instance_cont_sum[ulb_inds][ulb_nonzero_mask].mean()# mean of all instances
-            
+            instance_cont_loss = instance_cont_sum[ulb_inds][ulb_nonzero_mask].mean()# mean of all instances           
+            cos_sim_wa = instance_cont_tuple[2].view(B, N, -1)
+            cos_sim_sa = instance_cont_tuple[3].view(B, N, -1)
              # metrics update
             Car_instance_proto_loss = instance_cont_tuple[0][:,:,loss_labels==0][ulb_inds][ulb_nonzero_mask].sum(-1)
             Ped_instance_proto_loss =  instance_cont_tuple[0][:,:,loss_labels==1][ulb_inds][ulb_nonzero_mask].sum(-1)
@@ -374,9 +375,12 @@ class PVRCNN_SSL(Detector3DTemplate):
                         'Ped_proto': Ped_instance_proto_loss[gt_labels[ulb_inds][ulb_nonzero_mask]==cind].mean().item() * self.model_cfg['ROI_HEAD']['INSTANCE_CONTRASTIVE_LOSS_WEIGHT'],
                         'Cyc_proto': Cyc_instance_proto_loss[gt_labels[ulb_inds][ulb_nonzero_mask]==cind].mean().item() * self.model_cfg['ROI_HEAD']['INSTANCE_CONTRASTIVE_LOSS_WEIGHT'],
                 }
-            self.loss_dict['cos_sim_pl_wa'].append(instance_cont_tuple[2].tolist())
-            self.loss_dict['cos_sim_pl_sa'].append(instance_cont_tuple[3].tolist())
+
             if self.model_cfg.get('STORE_RAW_SIM_IN_PKL', False):
+                self.loss_dict['proto_labels'] = loss_labels.tolist()
+                self.loss_dict['pl_labels'].append(gt_labels[ulb_inds][ulb_nonzero_mask].tolist())
+                self.loss_dict['cos_sim_pl_wa'].append(cos_sim_wa[ulb_inds][ulb_nonzero_mask].tolist())
+                self.loss_dict['cos_sim_pl_sa'].append(cos_sim_sa[ulb_inds][ulb_nonzero_mask].tolist())
                 output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]
                 file_path = os.path.join(output_dir, 'cos_sim.pkl')
                 pickle.dump(self.val_dict, open(file_path, 'wb'))
