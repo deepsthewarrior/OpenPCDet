@@ -383,7 +383,7 @@ class PVRCNN_SSL(Detector3DTemplate):
                 self.loss_dict['cos_sim_pl_sa'].append(cos_sim_sa[ulb_inds][ulb_nonzero_mask].tolist())
                 output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]
                 file_path = os.path.join(output_dir, 'cos_sim.pkl')
-                pickle.dump(self.val_dict, open(file_path, 'wb'))
+                pickle.dump(self.loss_dict, open(file_path, 'wb'))
             return instance_cont_loss,classwise_loss
         else:
             instance_cont_tuple = bank.get_simmatch_mean_loss(shared_features_wa,shared_features_sa,ulb_inds)
@@ -416,7 +416,7 @@ class PVRCNN_SSL(Detector3DTemplate):
             if self.model_cfg.get('STORE_RAW_SIM_IN_PKL', False):
                 output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]
                 file_path = os.path.join(output_dir, 'cos_sim.pkl')
-                pickle.dump(self.val_dict, open(file_path, 'wb'))
+                pickle.dump(self.loss_dict, open(file_path, 'wb'))
             
             return instance_cont_loss,classwise_loss
 
