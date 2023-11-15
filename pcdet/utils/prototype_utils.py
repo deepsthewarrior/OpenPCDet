@@ -1,4 +1,6 @@
 import torch
+import pickle
+import os
 from torch.functional import F
 from torchmetrics import Metric
 import numpy as np
@@ -20,23 +22,24 @@ class FeatureBank(Metric):
         self.direct_update = kwargs.get('DIRECT_UPDATE')
         self.reset_state_interval = kwargs.get('RESET_STATE_INTERVAL')  # reset the state when N unique samples are seen
         self.num_points_thresh = kwargs.get('FILTER_MIN_POINTS_IN_GT', 0)
-
+        self.record_pkl = kwargs.get('RECORD_PKL', False)
         self.initialized = False
         self.insId_protoId_mapping = None  # mapping from instance index to prototype index
-
+        proto_dict_keys = ['instance_prototypes','proto_labels']
+        self.proto_dict = {key: [] for key in proto_dict_keys}
         # Globally synchronized prototypes used in each process
         self.prototypes = None
         self.classwise_prototypes = None
         self.proto_labels = None
         self.num_updates = None
-
+        self.output_dir = None
         # Local feature/label which are used to update the global ones
         self.add_state('feats', default=[], dist_reduce_fx='cat')
         self.add_state('labels', default=[], dist_reduce_fx='cat')
         self.add_state('ins_ids', default=[], dist_reduce_fx='cat')
         self.add_state('smpl_ids', default=[], dist_reduce_fx='cat')
         self.add_state('iterations', default=[], dist_reduce_fx='cat')
-
+        
     def _init(self, unique_ins_ids, labels):
         self.bank_size = len(unique_ins_ids)
         print(f"Initializing the feature bank with size {self.bank_size} and feature size {self.feat_size}")
@@ -45,6 +48,8 @@ class FeatureBank(Metric):
         self.proto_labels = labels
         self.num_updates = torch.zeros(self.bank_size).cuda()
         self.insId_protoId_mapping = {unique_ins_ids[i]: i for i in range(len(unique_ins_ids))}
+
+
 
     def update(self, feats: [torch.Tensor], labels: [torch.Tensor], ins_ids: [torch.Tensor], smpl_ids: torch.Tensor,
                iteration: int) -> None:
@@ -55,7 +60,6 @@ class FeatureBank(Metric):
             self.smpl_ids.append(smpl_ids[i].view(-1))  # (1,)
             rois_iter = torch.tensor(iteration, device=feats[0].device).expand_as(ins_ids[i].view(-1))
             self.iterations.append(rois_iter)           # (N,)
-
     def compute(self):
         try:
             unique_smpl_ids = torch.unique(torch.cat((self.smpl_ids,), dim=0))
@@ -99,6 +103,8 @@ class FeatureBank(Metric):
                 self.num_updates[proto_id] += len(grouped_inds)
                 new_prototype = torch.mean(features[grouped_inds], dim=0, keepdim=True)  # TODO: maybe it'd be better to replaced it by the EMA
                 self.prototypes[proto_id] = new_prototype
+                if self.record_pkl:
+                    self._record_pkl(iterations)
             else:
                 for ind in grouped_inds:
                     new_prototype = self.momentum * self.prototypes[proto_id] + (1 - self.momentum) * features[ind]
@@ -116,6 +122,13 @@ class FeatureBank(Metric):
             classwise_prototypes[i] = torch.mean(self.prototypes[inds], dim=0)
         self.classwise_prototypes = self.momentum * self.classwise_prototypes + (1 - self.momentum) * classwise_prototypes
 
+    def _record_pkl(self,iterations):
+        iteration = iterations.max().item()
+        self.proto_dict['instance_prototypes'] = self.prototypes
+        self.proto_dict['proto_labels'] = self.proto_labels
+        file_path = os.path.join(self.output_dir, f'prototypes_{iteration}_iter.pkl')
+        pickle.dump(self.proto_dict, open(file_path, 'wb'))        
+        
     @torch.no_grad()
     def get_sim_scores(self, input_features, use_classwise_prototypes=True,return_raw_scores=False):
         assert input_features.shape[1] == self.feat_size, "input feature size is not equal to the bank feature size"
