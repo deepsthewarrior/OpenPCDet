@@ -261,14 +261,14 @@ class PVRCNN_SSL(Detector3DTemplate):
             instance_cont_loss,classwise_instance_cont_loss = self._get_instance_contrastive_loss(batch_dict,batch_dict_ema, bank, ulb_inds)
             if instance_cont_loss is not None:
                 loss += instance_cont_loss * self.model_cfg['ROI_HEAD']['INSTANCE_CONTRASTIVE_LOSS_WEIGHT']
-                tb_dict['instance_cont_loss'] = instance_cont_loss.item()
+                tb_dict['instance_cont_loss'] = instance_cont_loss.item() * self.model_cfg['ROI_HEAD']['INSTANCE_CONTRASTIVE_LOSS_WEIGHT']
                 for cind,class_name in enumerate(['Car','Pedestrian','Cyclist']):
                     tb_dict[f'classwise_instance_cont_loss_{class_name}'] = classwise_instance_cont_loss[f'{class_name}_Pl']
         if self.model_cfg['ROI_HEAD'].get('ENABLE_MEAN_INSTANCE_CONTRASTIVE_LOSS', False): 
             instance_cont_loss,classwise_instance_cont_loss = self._get_instance_contrastive_loss(batch_dict,batch_dict_ema, bank, ulb_inds,mean_instance=True)
             if instance_cont_loss is not None:
                 loss += instance_cont_loss * self.model_cfg['ROI_HEAD']['INSTANCE_CONTRASTIVE_LOSS_WEIGHT']
-                tb_dict['instance_cont_loss'] = instance_cont_loss.item()
+                tb_dict['instance_cont_loss'] = instance_cont_loss.item() * self.model_cfg['ROI_HEAD']['INSTANCE_CONTRASTIVE_LOSS_WEIGHT']
                 for cind,class_name in enumerate(['Car','Pedestrian','Cyclist']):
                     tb_dict[f'classwise_instance_cont_loss_{class_name}'] = classwise_instance_cont_loss[f'{class_name}_Pl']   
 
