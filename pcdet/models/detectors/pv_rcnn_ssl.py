@@ -71,6 +71,8 @@ class PVRCNN_SSL(Detector3DTemplate):
         self.val_dict = {val: [] for val in vals_to_store}
         loss_dict_keys = {'cos_sim_pl_wa','cos_sim_pl_sa','pl_labels','proto_labels'}
         self.loss_dict = {key: [] for key in loss_dict_keys}
+        mcont_dict = {'logits','iteration'}
+        self.mcont_dict = {key: [] for key in mcont_dict}
 
     @staticmethod
     def _clone_gt_boxes_and_feats(batch_dict):
@@ -268,7 +270,23 @@ class PVRCNN_SSL(Detector3DTemplate):
                 loss += instance_cont_loss * self.model_cfg['ROI_HEAD']['INSTANCE_CONTRASTIVE_LOSS_WEIGHT']
                 tb_dict['instance_cont_loss'] = instance_cont_loss.item()
                 for cind,class_name in enumerate(['Car','Pedestrian','Cyclist']):
-                    tb_dict[f'classwise_instance_cont_loss_{class_name}'] = classwise_instance_cont_loss[f'{class_name}_Pl']            
+                    tb_dict[f'classwise_instance_cont_loss_{class_name}'] = classwise_instance_cont_loss[f'{class_name}_Pl']   
+
+        if self.model_cfg['ROI_HEAD'].get('ENABLE_MCONT_LOSS', False):
+            mCont_labeled = bank._get_multi_cont_loss()
+            if mCont_labeled is not None:
+                loss += mCont_labeled['total_loss'] * self.model_cfg['ROI_HEAD']['MCONT_LOSS_WEIGHT'] #TODO: config
+                tb_dict['mCont_loss'] = mCont_labeled['total_loss'].item()
+                for cind,class_name in enumerate(['Car','Pedestrian','Cyclist']):
+                    tb_dict[f'mCont_{class_name}_lb'] = mCont_labeled['classwise_loss'][cind].item()
+                if self.model_cfg.get('STORE_RAW_SIM_IN_PKL', False):
+                    self.mcont_dict['logits'].append(mCont_labeled['raw_logits'].tolist())
+                    self.mcont_dict['iteration'].append(batch_dict['cur_iteration'])
+                    output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]
+                    file_path = os.path.join(output_dir, 'mcont_raw_logits.pkl')
+                    pickle.dump(self.mcont_dict, open(file_path, 'wb'))
+                    
+
 
         if self.model_cfg['ROI_HEAD'].get('ENABLE_PROTO_CONTRASTIVE_LOSS', False):
             proto_cont_loss = self._get_proto_contrastive_loss(batch_dict, bank, ulb_inds)
@@ -320,7 +338,7 @@ class PVRCNN_SSL(Detector3DTemplate):
             return
         return proto_cont_loss.view(B, N)[ulb_inds][ulb_nonzero_mask].mean()
 
-    def _get_instance_contrastive_loss(self,batch_dict,batch_dict_ema,bank,ulb_inds,mean_instance=False):
+    def _get_instance_contrastive_loss(self,batch_dict,batch_dict_ema,bank,ulb_inds,mean_instance=False): #TODO: Deepika: Refactor this function
         batch_dict_wa_gt = {'unlabeled_inds': batch_dict['unlabeled_inds'],
                           'labeled_inds': batch_dict['labeled_inds'],
                           'rois': batch_dict['rois'].data.clone(),
@@ -350,7 +368,7 @@ class PVRCNN_SSL(Detector3DTemplate):
 
         assert batch_gt_feats_sa.shape[0] == batch_gt_feats_wa.shape[0], "batch_dict  mismatch"
         if mean_instance == False:
-            instance_cont_tuple = bank.get_simmatch_loss(shared_features_wa,shared_features_sa,ulb_inds)
+            instance_cont_tuple = bank.get_simmatch_loss(shared_features_wa,shared_features_sa,ulb_inds) # normal_simmatch_loss
             
             if instance_cont_tuple is None:
                 return None,None
@@ -387,7 +405,7 @@ class PVRCNN_SSL(Detector3DTemplate):
                 pickle.dump(self.loss_dict, open(file_path, 'wb'))
             return instance_cont_loss,classwise_loss
         else:
-            instance_cont_tuple = bank.get_simmatch_mean_loss(shared_features_wa,shared_features_sa,ulb_inds)
+            instance_cont_tuple = bank.get_simmatch_mean_loss(shared_features_wa,shared_features_sa,ulb_inds) # mean_simmatch_loss, instead of logits for each instance, classwise logits are used. 
             if instance_cont_tuple is None:
                 return None,None
             nonzero_mask = torch.logical_not(torch.eq(gt_boxes, 0).all(dim=-1))
@@ -429,7 +447,7 @@ class PVRCNN_SSL(Detector3DTemplate):
     def _prep_tb_dict(tb_dict, lbl_inds, ulb_inds, reduce_loss_fn):
         tb_dict_ = {}
         for key in tb_dict.keys():
-            if key in ['proto_cont_loss','instance_cont_loss','classwise_instance_cont_loss_Car','classwise_instance_cont_loss_Pedestrian','classwise_instance_cont_loss_Cyclist']:
+            if key in ['proto_cont_loss','instance_cont_loss','classwise_instance_cont_loss_Car','classwise_instance_cont_loss_Pedestrian','classwise_instance_cont_loss_Cyclist','mCont_loss','mCont_Car_lb','mCont_Pedestrian_lb','mCont_Cyclist_lb']:
                 tb_dict_[key] = tb_dict[key]
             elif 'loss' in key or 'acc' in key or 'point_pos_num' in key:
                 tb_dict_[f"{key}_labeled"] = reduce_loss_fn(tb_dict[key][lbl_inds, ...])
