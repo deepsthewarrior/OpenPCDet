@@ -88,6 +88,7 @@ class PredQualityMetrics(Metric):
         self.fg_threshs = kwargs.get('fg_threshs', None)
         self.bg_thresh = kwargs.get('BG_THRESH', 0.25)
         self.min_overlaps = np.array([0.7, 0.5, 0.5])
+        self.temperature = kwargs.get('temperature', 0.1)
 
         self.add_state('num_samples', default=torch.tensor(0).cuda(), dist_reduce_fx='sum')
         self.add_state('num_gts', default=torch.zeros((3,)).cuda(), dist_reduce_fx='sum')
@@ -180,8 +181,9 @@ class PredQualityMetrics(Metric):
         accumulated_metrics = self._accumulate_metrics()  # shape (N, 1)
 
         scores = accumulated_metrics["roi_scores"]
-        sim_scores = accumulated_metrics["roi_sim_scores"]
-        instance_sim_scores = accumulated_metrics["roi_instance_sim_scores"]
+        sim_scores_raw = accumulated_metrics["roi_sim_scores"] # raw sim scores
+        sim_scores = torch.softmax(sim_scores_raw/self.temperature, dim=-1) # softmax and temperature sim scores
+        instance_sim_scores = accumulated_metrics["roi_instance_sim_scores"] # temperature scaled sim scores
         sim_labels = torch.argmax(sim_scores, dim=-1)
         iou_wrt_gt = accumulated_metrics["roi_iou_wrt_gt"].view(-1)
         iou_wrt_pl = accumulated_metrics["roi_iou_wrt_pl"].view(-1)
@@ -198,7 +200,7 @@ class PredQualityMetrics(Metric):
         
         y_labels = one_hot_labels.int().cpu().numpy()
         y_scores = scores.cpu().numpy()
-        padded_sim_scores = torch.eq(sim_scores.sum(-1),-3).any()
+        padded_sim_scores = torch.eq(sim_scores_raw.sum(-1),-3).any()
         if not padded_sim_scores:
             y_sim_scores = sim_scores.cpu().numpy()
 
@@ -257,6 +259,8 @@ class PredQualityMetrics(Metric):
                 if not padded_sim_scores:
                     classwise_metrics[f'sim_scores_multi_tp_{cls}'][cls_tag] = (sim_scores[cls_pred_mask, cind_] * true_mask_bool[cls_pred_mask]).float().mean()
                     classwise_metrics[f'sim_scores_multi_fp_{cls}'][cls_tag] = (sim_scores[cls_pred_mask, cind_] * (~true_mask_bool[cls_pred_mask])).float().mean()
+                    classwise_metrics[f'sim_scores_raw_multi_tp_{cls}'][cls_tag] = (sim_scores[cls_pred_mask, cind_] * true_mask_bool[cls_pred_mask]).float().mean()
+                    classwise_metrics[f'sim_scores_raw_multi_fp_{cls}'][cls_tag] = (sim_scores[cls_pred_mask, cind_] * (~true_mask_bool[cls_pred_mask])).float().mean()
             classwise_metrics['rois_fg_ratio'][cls] = cls_fg_mask.sum() / cls_pred_mask.sum()
             classwise_metrics['rois_uc_ratio'][cls] = cls_uc_mask.sum() / cls_pred_mask.sum()
             classwise_metrics['rois_bg_ratio'][cls] = cls_bg_mask.sum() / cls_pred_mask.sum()
@@ -297,6 +301,7 @@ class MetricRegistry(object):
             tag = 'default'
         if tag in self.tags():
             raise ValueError(f'Metrics with tag {tag} already exists')
+        metrics_configs['tag'] = tag
         metrics = PredQualityMetrics(**metrics_configs)
         self._metrics_bank[tag] = metrics
         return self._metrics_bank[tag]

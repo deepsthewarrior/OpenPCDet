@@ -104,12 +104,12 @@ class FeatureBank(Metric):
                 self.num_updates[proto_id] += len(grouped_inds)
                 new_prototype = torch.mean(features[grouped_inds], dim=0, keepdim=True)  # TODO: maybe it'd be better to replaced it by the EMA
                 self.prototypes[proto_id] = new_prototype
-                if self.record_pkl:
-                    self._record_pkl(iterations)
             else:
                 for ind in grouped_inds:
                     new_prototype = self.momentum * self.prototypes[proto_id] + (1 - self.momentum) * features[ind]
                     self.prototypes[proto_id] = new_prototype
+            if self.record_pkl:
+                self._record_pkl(iterations)
         self._update_classwise_prototypes()
         self.initialized = True
         self.reset()
@@ -135,11 +135,11 @@ class FeatureBank(Metric):
         assert input_features.shape[1] == self.feat_size, "input feature size is not equal to the bank feature size"
         if not self.initialized:
             return input_features.new_zeros(input_features.shape[0], 3)
-        if return_raw_scores and use_classwise_prototypes:
+        if return_raw_scores and use_classwise_prototypes: 
             return F.normalize(input_features) @ F.normalize(self.classwise_prototypes).t() #without temperature and softmax
-        if use_classwise_prototypes:
+        if use_classwise_prototypes: 
             cos_sim = F.normalize(input_features) @ F.normalize(self.classwise_prototypes).t()
-            return F.softmax(cos_sim / self.temperature, dim=-1) 
+            return F.softmax(cos_sim / self.temperature, dim=-1) #with temperature and softmax
         else:
             return self._get_sim_scores_with_instance_prototypes(input_features)
 
@@ -152,7 +152,7 @@ class FeatureBank(Metric):
         # classwise_sim.scatter_add_(1, lbs, cos_sim)
         # protos_cls_counts = torch.bincount(self.proto_labels).view(1, -1)
         # classwise_sim /= protos_cls_counts  # Note: not probability
-        # classwise_sim /= classwise_sim.mean(dim=0)
+        classwise_sim /= classwise_sim.mean(dim=0)
         return classwise_sim
 
     def get_pairwise_protos_sim_matrix(self):
@@ -236,11 +236,21 @@ class FeatureBank(Metric):
             return None
         else:
             # sort the prototypes according to the labels and filter the prototypes according to the labels
-            sorted_protos,sorted_indices = torch.sort(self.proto_labels)
-            sorted_prototypes = self.prototypes[sorted_indices,:]
-            car_protos = F.normalize(sorted_prototypes[sorted_protos == 0],dim=-1,p=2) # use gather
-            ped_protos = F.normalize(sorted_prototypes[sorted_protos == 1],dim=-1,p=2)
-            cyc_protos = F.normalize(sorted_prototypes[sorted_protos == 2],dim=-1,p=2) #9,256
+            # sorted_protos,sorted_indices = torch.sort(self.proto_labels)
+            # sorted_prototypes = self.prototypes[sorted_indices,:]
+
+            # car_protos = torch.zeros_like(self.prototypes[self.proto_labels == 0])
+            # ped_protos = torch.zeros_like(self.prototypes[self.proto_labels == 1])
+            # cyc_protos = torch.zeros_like(self.prototypes[self.proto_labels == 2])
+            
+            car_mask = self.proto_labels == 0
+            ped_mask = self.proto_labels == 1
+            cyc_mask = self.proto_labels == 2
+
+            car_protos =  torch.gather(self.prototypes,0,car_mask.nonzero().expand(-1,256))
+            ped_protos =  torch.gather(self.prototypes,0,ped_mask.nonzero().expand(-1,256))
+            cyc_protos =  torch.gather(self.prototypes,0,cyc_mask.nonzero().expand(-1,256))
+
 
             # get the positive and negative samples for each class
             # positive samples are the [1 2 3 1 2 3 1 2 3] (repeated n times, n is the number of instances in each class)
@@ -292,7 +302,7 @@ class FeatureBank(Metric):
 
 
             logits = feat_pos @ feat_neg.t()
-            sharpened_logits = (logits / total_norm) / 0.005 #(0.005 is the temperature making the resonably sharp. need to be tuned)
+            sharpened_logits = (logits / total_norm) / 0.2 #(0.005 is the temperature making the resonably sharp. need to be tuned)
             # MultiCrossEntropyLoss
             labels = torch.diag(torch.ones_like(logits[0]))
             loss = -1 * labels * F.log_softmax(sharpened_logits,dim=-1)

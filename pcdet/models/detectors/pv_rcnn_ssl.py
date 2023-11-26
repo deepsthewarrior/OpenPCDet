@@ -64,7 +64,8 @@ class PVRCNN_SSL(Detector3DTemplate):
 
         for metrics_configs in model_cfg.get("METRICS_BANK_LIST", []):
             for name in metrics_configs['NAME']:
-                metrics_registry.register(tag=name, dataset=self.dataset, **metrics_configs)
+                metrics_configs['tag'] = name
+                metrics_registry.register(dataset=self.dataset, **metrics_configs)
 
         vals_to_store = ['iou_roi_pl', 'iou_roi_gt', 'pred_scores','roi_scores', 'class_labels', 'iteration','roi_sim_scores','iou_pl_gt',
                          'assigned_gt_pl_labels','pseudo_sem_scores_pl','pseudo_sim_scores_pl','rcnn_scores_pl','pl_iteration','roi_instance_sim_scores','pseudo_instance_sim_scores_pl']
@@ -812,7 +813,7 @@ class PVRCNN_SSL(Detector3DTemplate):
     def _fill_with_pseudo_labels_prefilter(self, batch_dict, pseudo_boxes, pseudo_sem_scores_multiclass, pseudo_sim_scores, pseudo_scores,pseudo_instance_sim_scores,unlabeled_inds, labeled_inds, key=None):
             key = 'gt_boxes' if key is None else key
             max_box_num = batch_dict['gt_boxes'].shape[1]
-            batch_dict['pseudo_sem_scores_multiclass'] = torch.zeros((batch_dict['gt_boxes'].shape[1], max_box_num, 3), device=batch_dict['gt_boxes'].device)
+            batch_dict['pseudo_sem_scores_multiclass'] = torch.zeros((batch_dict['gt_boxes'].shape[1], max_box_num, 3), device=batch_dict['gt_boxes'].device) #[N,3]
             batch_dict['pseudo_sim_scores'] = torch.zeros((batch_dict['gt_boxes'].shape[1], max_box_num, 3), device=batch_dict['gt_boxes'].device)
             batch_dict['pseudo_scores'] = torch.zeros((batch_dict['gt_boxes'].shape[1], max_box_num), device=batch_dict['gt_boxes'].device)
             batch_dict['pseudo_instance_sim_scores'] = torch.zeros((batch_dict['gt_boxes'].shape[1], max_box_num, 3), device=batch_dict['gt_boxes'].device)
@@ -859,16 +860,16 @@ class PVRCNN_SSL(Detector3DTemplate):
                     new_boxes[idx] = new_box
                     new_ins_idx[idx] = torch.cat([ori_ins_ids[idx], -torch.ones((diff,), device=ori_boxes[idx].device)], dim=0)
                     new_sem_boxes[idx] = torch.cat([batch_dict['pseudo_sem_scores_multiclass'][idx], torch.zeros((diff, 3), device=ori_boxes[idx].device)], dim=0)
-                    new_sim_boxes[idx] = torch.cat([batch_dict['pseudo_sim_scores'][idx], torch.zeros((diff, 3), device=ori_boxes[idx].device)], dim=0) if batch_dict['pseudo_sim_scores'][idx] is not None else None
-                    new_instance_sim_scores[idx] = torch.cat([batch_dict['pseudo_instance_sim_scores'][idx], torch.zeros((diff, 3), device=ori_boxes[idx].device)], dim=0) if batch_dict['pseudo_instance_sim_scores'][idx] is not None else None                
+                    new_sim_boxes[idx] = torch.cat([batch_dict['pseudo_sim_scores'][idx], torch.zeros((diff, 3), device=ori_boxes[idx].device)], dim=0) 
+                    new_instance_sim_scores[idx] = torch.cat([batch_dict['pseudo_instance_sim_scores'][idx], torch.zeros((diff, 3), device=ori_boxes[idx].device)], dim=0)               
                 for i, pseudo_box in enumerate(pseudo_boxes):
                     diff = max_pseudo_box_num - pseudo_box.shape[0]
                     if diff > 0:
                         pseudo_box = torch.cat([pseudo_box, torch.zeros((diff, 8), device=pseudo_box.device)], dim=0)
                         pseudo_sem_score_multiclass = torch.cat([pseudo_sem_scores_multiclass[i], torch.zeros((diff, 3), device=pseudo_box.device)], dim=0)
-                        pseudo_sim_score = torch.cat([pseudo_sim_scores[i], torch.zeros((diff, 3), device=pseudo_box.device)], dim=0) if batch_dict['pseudo_sim_scores'][idx] is not None else None
+                        pseudo_sim_score = torch.cat([pseudo_sim_scores[i], torch.zeros((diff, 3), device=pseudo_box.device)], dim=0) 
                         pseudo_score = torch.cat([pseudo_scores[i], torch.zeros((diff,), device=pseudo_box.device)], dim=0)
-                        pseudo_instance_sim_score = torch.cat([pseudo_instance_sim_scores[i], torch.zeros((diff, 3), device=pseudo_box.device)], dim=0) if batch_dict['pseudo_instance_sim_scores'][idx] is not None else None                    
+                        pseudo_instance_sim_score = torch.cat([pseudo_instance_sim_scores[i], torch.zeros((diff, 3), device=pseudo_box.device)], dim=0)
                     else:
                         pseudo_sem_score_multiclass = pseudo_sem_scores_multiclass[i]
                         pseudo_sim_score = pseudo_sim_scores[i]
@@ -982,10 +983,10 @@ class PVRCNN_SSL(Detector3DTemplate):
     def update_metrics_pred(self, targets_dict,pseudo_labels,mask_type='cls',bank=None):
         pseudo_boxes, pseudo_labels, pseudo_score, pseudo_sem_score, pseudo_box_var, pseudo_score_var,pseudo_sem_score_multiclass,pseudo_sim_score,pseudo_instance_sim_score = self._unpack_predictions(pseudo_labels, targets_dict['unlabeled_inds'])
         pseudo_boxes = [torch.cat([pseudo_box, pseudo_label.view(-1, 1).float()], dim=1) \
-                            for (pseudo_box, pseudo_label) in zip(pseudo_boxes, pseudo_labels)]
+                            for (pseudo_box, pseudo_label) in zip(pseudo_boxes, pseudo_labels)] # add label to boxes
         # pseudo_sem_scores_multiclass = [pseudo_sem_score_multiclass]
         # pseudo_sim_scores = torch.cat(pseudo_sim_score, dim=0).unsqueeze(0)
-        self._fill_with_pseudo_labels_prefilter(targets_dict, pseudo_boxes, pseudo_sem_score_multiclass, pseudo_sim_score, pseudo_score,pseudo_instance_sim_score,targets_dict['unlabeled_inds'], targets_dict['labeled_inds'])
+        self._fill_with_pseudo_labels_prefilter(targets_dict, pseudo_boxes, pseudo_sem_score_multiclass, pseudo_sim_score, pseudo_score,pseudo_instance_sim_score,targets_dict['unlabeled_inds'], targets_dict['labeled_inds']) #TODO: check if this is correct
         targets_dict['gt_boxes_emas_prefilter'] = targets_dict['gt_boxes'].clone()
         targets_dict['pseudo_sem_scores_multiclass_emas_prefilter'] = targets_dict['pseudo_sem_scores_multiclass'].clone()
         targets_dict['pseudo_sim_scores_emas_prefilter'] = targets_dict['pseudo_sim_scores'].clone()
