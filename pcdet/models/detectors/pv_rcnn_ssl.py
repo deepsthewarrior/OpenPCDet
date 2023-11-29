@@ -3,6 +3,7 @@ import os
 import pickle
 import numpy as np
 import torch
+import torch.distributed as dist
 from pcdet.datasets.augmentor import augmentor_utils
 from pcdet.ops.iou3d_nms import iou3d_nms_utils
 from pcdet.ops.roiaware_pool3d import roiaware_pool3d_utils
@@ -275,6 +276,20 @@ class PVRCNN_SSL(Detector3DTemplate):
 
         if self.model_cfg['ROI_HEAD'].get('ENABLE_MCONT_LOSS', False):
             mCont_labeled = bank._get_multi_cont_loss()
+            selected_batch_dict = self._clone_gt_boxes_and_feats(batch_dict)
+            with torch.no_grad():
+                batch_gt_feats = self.pv_rcnn_ema.roi_head.pool_features(selected_batch_dict, use_gtboxes=True)
+                batch_size_rcnn = batch_gt_feats.shape[0]
+                shared_features = self.pv_rcnn_ema.roi_head.shared_fc_layer(batch_gt_feats.view(batch_size_rcnn, -1, 1))
+            batch_gt_feats = shared_features.view(*batch_dict['gt_boxes'].shape[:2], -1)
+            batch_gt_feats_lb = batch_gt_feats[batch_dict['labeled_mask'].bool()]  
+            batch_gt_labels_lb = batch_dict['gt_boxes'][batch_dict['labeled_mask'].bool()][:,:,-1].long() - 1
+            batch_gt_feats_lb = torch.cat([batch_gt_feats_lb,batch_gt_labels_lb.unsqueeze(-1)],dim=-1)
+            print(f'before_gathering: {batch_gt_feats_lb.shape}')
+            gathered_tensor = self.gather_tensors(batch_gt_feats_lb)
+            print(f'Gathered_tensor: {gathered_tensor.shape}')
+            print(f'Gathered_tensor: {gathered_tensor}')
+
             if mCont_labeled is not None:
                 loss += mCont_labeled['total_loss'] * self.model_cfg['ROI_HEAD']['MCONT_LOSS_WEIGHT'] #TODO: config
                 tb_dict['mCont_loss'] = mCont_labeled['total_loss'].item()
@@ -287,8 +302,6 @@ class PVRCNN_SSL(Detector3DTemplate):
                     file_path = os.path.join(output_dir, 'mcont_raw_logits.pkl')
                     pickle.dump(self.mcont_dict, open(file_path, 'wb'))
                     
-
-
         if self.model_cfg['ROI_HEAD'].get('ENABLE_PROTO_CONTRASTIVE_LOSS', False):
             proto_cont_loss = self._get_proto_contrastive_loss(batch_dict, bank, ulb_inds)
             if proto_cont_loss is not None:
@@ -440,7 +453,55 @@ class PVRCNN_SSL(Detector3DTemplate):
             
             return instance_cont_loss,classwise_loss
 
+    def gather_tensors(self,tensor,labels=False):
+            """
+            Returns the gathered tensor to all GPUs in DDP else returns the tensor as such
+            dist.gather_all needs the gathered tensors to be of same size.
+            We get the sizes of the tensors first, zero pad them to match the size
+            Then gather and filter the padding
 
+            Args:
+                tensor: tensor to be gathered
+                labels: bool True if the tensor represents label information TODO:Deepika Remove this arg and make function tensor agnostic 
+            """
+            if labels:
+                assert tensor.ndim == 1,"labels should be of shape 1"
+            else:
+                assert tensor.ndim == 3,"features should be of shape N,1,256"
+
+            if dist.is_initialized(): # check if dist mode is initialized
+                # Determine sizes first
+                local_size = torch.tensor(tensor.size(), device=tensor.device)
+                WORLD_SIZE = dist.get_world_size()
+                all_sizes = [torch.zeros_like(local_size) for _ in range(WORLD_SIZE)]
+                dist.barrier() 
+                dist.all_gather(all_sizes,local_size)
+                dist.barrier()
+                
+                # make zero-padded version https://stackoverflow.com/questions/71433507/pytorch-python-distributed-multiprocessing-gather-concatenate-tensor-arrays-of
+                max_length = max([size[0] for size in all_sizes])
+                if max_length != local_size[0].item():
+                    diff = max_length - local_size[0].item()
+                    pad_size =[diff.item()] #pad with zeros 
+                    if local_size.ndim >= 1:
+                        pad_size.extend(dimension.item() for dimension in local_size[1:])
+                    padding = torch.zeros(pad_size, device=tensor.device, dtype=tensor.dtype)
+                    tensor = torch.cat((tensor,padding))
+                
+                all_tensors_padded = [torch.zeros_like(tensor) for _ in range(WORLD_SIZE)]
+                dist.barrier()
+                dist.all_gather(all_tensors_padded,tensor)
+                dist.barrier()
+                gathered_tensor = torch.cat(all_tensors_padded)
+                if gathered_tensor.ndim == 1: # diff filtering mechanism for labels TODO:Deepika make this tensor agnostic
+                    assert gathered_tensor.ndim == 1, "Label dimension should be N"
+                    non_zero_mask = gathered_tensor > 0
+                else:
+                    non_zero_mask = torch.any(gathered_tensor!=0,dim=-1).squeeze()
+                gathered_tensor = gathered_tensor[non_zero_mask]
+                return gathered_tensor
+            else:
+                return tensor
             
         
 
@@ -1072,3 +1133,4 @@ class PVRCNN_SSL(Detector3DTemplate):
             return
         tag = f'pl_gt_metrics_after_filtering_{mask_type}'
         metrics_registry.get(tag).update(**metrics_input)
+        

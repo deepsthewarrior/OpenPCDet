@@ -113,7 +113,7 @@ class FeatureBank(Metric):
         self._update_classwise_prototypes()
         self.initialized = True
         self.reset()
-        return self.prototypes, self.proto_labels, self.num_updates
+        return self.prototypes, self.proto_labels, self.num_updates, unique_smpl_ids
 
     def _update_classwise_prototypes(self):
         classwise_prototypes = torch.zeros((3, self.feat_size)).cuda()
@@ -312,6 +312,55 @@ class FeatureBank(Metric):
                     'raw_logits': logits
                     }
 
+    def gather_tensors(self,tensor,labels=False):
+        """
+        Returns the gathered tensor to all GPUs in DDP else returns the tensor as such
+        dist.gather_all needs the gathered tensors to be of same size.
+        We get the sizes of the tensors first, zero pad them to match the size
+        Then gather and filter the padding
+
+        Args:
+            tensor: tensor to be gathered
+            labels: bool True if the tensor represents label information TODO:Deepika Remove this arg and make function tensor agnostic 
+        """
+        if labels:
+            assert tensor.ndim == 1,"labels should be of shape 1"
+        else:
+            assert tensor.ndim == 3,"features should be of shape N,1,256"
+
+        if dist.is_initialized(): # check if dist mode is initialized
+            # Determine sizes first
+            local_size = torch.tensor(tensor.size(), device=tensor.device)
+            WORLD_SIZE = dist.get_world_size()
+            all_sizes = [torch.zeros_like(local_size) for _ in range(WORLD_SIZE)]
+            dist.barrier() 
+            dist.all_gather(all_sizes,local_size)
+            dist.barrier()
+            
+            # make zero-padded version https://stackoverflow.com/questions/71433507/pytorch-python-distributed-multiprocessing-gather-concatenate-tensor-arrays-of
+            max_length = max([size[0] for size in all_sizes])
+            if max_length != local_size[0].item():
+                diff = max_length - local_size[0].item()
+                pad_size =[diff.item()] #pad with zeros 
+                if local_size.ndim >= 1:
+                    pad_size.extend(dimension.item() for dimension in local_size[1:])
+                padding = torch.zeros(pad_size, device=tensor.device, dtype=tensor.dtype)
+                tensor = torch.cat((tensor,padding))
+            
+            all_tensors_padded = [torch.zeros_like(tensor) for _ in range(WORLD_SIZE)]
+            dist.barrier()
+            dist.all_gather(all_tensors_padded,tensor)
+            dist.barrier()
+            gathered_tensor = torch.cat(all_tensors_padded)
+            if gathered_tensor.ndim == 1: # diff filtering mechanism for labels TODO:Deepika make this tensor agnostic
+                assert gathered_tensor.ndim == 1, "Label dimension should be N"
+                non_zero_mask = gathered_tensor > 0
+            else:
+                non_zero_mask = torch.any(gathered_tensor!=0,dim=-1).squeeze()
+            gathered_tensor = gathered_tensor[non_zero_mask]
+            return gathered_tensor
+        else:
+            return tensor
 
 class FeatureBankRegistry(object):
     def __init__(self, **kwargs):
