@@ -275,8 +275,10 @@ class PVRCNN_SSL(Detector3DTemplate):
                     tb_dict[f'classwise_instance_cont_loss_{class_name}'] = classwise_instance_cont_loss[f'{class_name}_Pl']   
 
         if self.model_cfg['ROI_HEAD'].get('ENABLE_MCONT_LOSS', False):
+            print(f'in_mcont block')
             mCont_labeled = bank._get_multi_cont_loss()
             selected_batch_dict = self._clone_gt_boxes_and_feats(batch_dict)
+            print(f'before torch.no_grad()')
             with torch.no_grad():
                 batch_gt_feats = self.pv_rcnn_ema.roi_head.pool_features(selected_batch_dict, use_gtboxes=True)
                 batch_size_rcnn = batch_gt_feats.shape[0]
