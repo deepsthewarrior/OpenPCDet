@@ -285,13 +285,16 @@ class PVRCNN_SSL(Detector3DTemplate):
                 shared_features = self.pv_rcnn_ema.roi_head.shared_fc_layer(batch_gt_feats.view(batch_size_rcnn, -1, 1))
             batch_gt_feats = shared_features.view(*batch_dict['gt_boxes'].shape[:2], -1)
             batch_gt_feats_lb = batch_gt_feats[batch_dict['labeled_mask'].bool()]  
-            batch_gt_labels_lb = batch_dict['gt_boxes'][batch_dict['labeled_mask'].bool()][:,:,-1].long() - 1
+            batch_gt_labels_lb = batch_dict['gt_boxes'][batch_dict['labeled_mask'].bool()][:,:,-1].long()
             batch_gt_feats_lb = torch.cat([batch_gt_feats_lb,batch_gt_labels_lb.unsqueeze(-1)],dim=-1)
             print(f'before_gathering: {batch_gt_feats_lb.shape} in {batch_gt_feats.shape}')
             gathered_tensor = self.gather_tensors(batch_gt_feats_lb)
-            # gathered_tensor = self.evenly_divisible_all_gather(batch_gt_feats_lb)
-            # print(f'Final Gathered_tensor: {gathered_tensor.shape} in {gathered_tensor.device}')
-            # print(f'Gathered_tensor: {gathered_tensor}')
+            gathered_labels = gathered_tensor[:,-1].long()
+            non_zero_mask = gathered_labels != 0
+            gathered_feats = gathered_tensor[:,:-1][non_zero_mask]
+            gathered_labels = gathered_labels[non_zero_mask]
+            mCont_labeled_features = bank._get_multi_cont_loss_lb_instances(gathered_feats,gathered_labels)
+            
 
             if mCont_labeled is not None:
                 loss += mCont_labeled['total_loss'] * self.model_cfg['ROI_HEAD']['MCONT_LOSS_WEIGHT'] #TODO: config
@@ -470,10 +473,11 @@ class PVRCNN_SSL(Detector3DTemplate):
 
             assert tensor.ndim == 3,"features should be of shape N,1,256"
             tensor = tensor.view(-1,257)
-            WORLD_SIZE = dist.get_world_size()
-            if WORLD_SIZE <= 1:
-                return data
+            
+            if not dist.is_initialized():
+                return tensor
                 # Determine sizes first
+            WORLD_SIZE = dist.get_world_size()
             local_size = torch.tensor(tensor.size(), device=tensor.device)
             all_sizes = [torch.zeros_like(local_size) for _ in range(WORLD_SIZE)]
             

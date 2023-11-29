@@ -312,56 +312,87 @@ class FeatureBank(Metric):
                     'raw_logits': logits
                     }
 
-    def gather_tensors(self,tensor,labels=False):
-        """
-        Returns the gathered tensor to all GPUs in DDP else returns the tensor as such
-        dist.gather_all needs the gathered tensors to be of same size.
-        We get the sizes of the tensors first, zero pad them to match the size
-        Then gather and filter the padding
+    def _get_multi_cont_loss_lb_instances(self,features, labels):
 
-        Args:
-            tensor: tensor to be gathered
-            labels: bool True if the tensor represents label information TODO:Deepika Remove this arg and make function tensor agnostic 
-        """
-        if labels:
-            assert tensor.ndim == 1,"labels should be of shape 1"
-        else:
-            assert tensor.ndim == 3,"features should be of shape N,1,256"
+        # sort the prototypes according to the labels and filter the prototypes according to the labels
+        # sorted_protos,sorted_indices = torch.sort(self.proto_labels)
+        # sorted_prototypes = self.prototypes[sorted_indices,:]
 
-        if dist.is_initialized(): # check if dist mode is initialized
-            # Determine sizes first
-            local_size = torch.tensor(tensor.size(), device=tensor.device)
-            WORLD_SIZE = dist.get_world_size()
-            all_sizes = [torch.zeros_like(local_size) for _ in range(WORLD_SIZE)]
-            dist.barrier() 
-            dist.all_gather(all_sizes,local_size)
-            dist.barrier()
-            
-            # make zero-padded version https://stackoverflow.com/questions/71433507/pytorch-python-distributed-multiprocessing-gather-concatenate-tensor-arrays-of
-            max_length = max([size[0] for size in all_sizes])
-            if max_length != local_size[0].item():
-                diff = max_length - local_size[0].item()
-                pad_size =[diff.item()] #pad with zeros 
-                if local_size.ndim >= 1:
-                    pad_size.extend(dimension.item() for dimension in local_size[1:])
-                padding = torch.zeros(pad_size, device=tensor.device, dtype=tensor.dtype)
-                tensor = torch.cat((tensor,padding))
-            
-            all_tensors_padded = [torch.zeros_like(tensor) for _ in range(WORLD_SIZE)]
-            dist.barrier()
-            dist.all_gather(all_tensors_padded,tensor)
-            dist.barrier()
-            gathered_tensor = torch.cat(all_tensors_padded)
-            if gathered_tensor.ndim == 1: # diff filtering mechanism for labels TODO:Deepika make this tensor agnostic
-                assert gathered_tensor.ndim == 1, "Label dimension should be N"
-                non_zero_mask = gathered_tensor > 0
-            else:
-                non_zero_mask = torch.any(gathered_tensor!=0,dim=-1).squeeze()
-            gathered_tensor = gathered_tensor[non_zero_mask]
-            return gathered_tensor
-        else:
-            return tensor
+        # car_protos = torch.zeros_like(self.prototypes[self.proto_labels == 0])
+        # ped_protos = torch.zeros_like(self.prototypes[self.proto_labels == 1])
+        # cyc_protos = torch.zeros_like(self.prototypes[self.proto_labels == 2])
+        labels = labels - 1
 
+        assert labels.min() >= 0 and labels.max() <= 2, "labels should be in the range [0, 2]"
+
+        car_mask = labels == 0
+        ped_mask = labels == 1
+        cyc_mask = labels == 2
+
+        car_protos =  torch.gather(features,0,car_mask.nonzero().expand(-1,256))
+        ped_protos =  torch.gather(features,0,ped_mask.nonzero().expand(-1,256))
+        cyc_protos =  torch.gather(features,0,cyc_mask.nonzero().expand(-1,256))
+
+
+        # get the positive and negative samples for each class
+        # positive samples are the [1 2 3 1 2 3 1 2 3] (repeated n times, n is the number of instances in each class)
+        # negative samples are the [3 2 1 1 3 2 2 1 3] (flipped and rolled n times)
+        car_protos_pos = car_protos.repeat(car_protos.shape[0],1)
+        car_protos_neg = torch.flip(car_protos.clone(),dims=[0])
+        car_protos_neg_sub = car_protos_neg.clone()
+        for i in range(car_protos.shape[0]-1):
+            car_protos_neg_sub = torch.roll(car_protos_neg_sub,1,dims=0)
+            car_protos_neg = torch.cat((car_protos_neg,car_protos_neg_sub),dim=0) # (134*134), 256 => (17956,256)
+        
+        ped_protos_pos = ped_protos.repeat(ped_protos.shape[0],1)
+        ped_protos_neg =  torch.flip(ped_protos.clone(),dims=[0])
+        ped_protos_neg_sub = ped_protos_neg.clone()
+        for i in range(ped_protos.shape[0]-1):
+            ped_protos_neg_sub = torch.roll(ped_protos_neg_sub,1,dims=0)
+            ped_protos_neg = torch.cat((ped_protos_neg,ped_protos_neg_sub),dim=0) # (18*18), 256 => (324,256)
+
+        cyc_protos_pos = cyc_protos.repeat(cyc_protos.shape[0],1)
+        cyc_protos_neg = torch.flip(cyc_protos.clone(),dims=[0])
+        cyc_protos_neg_sub = cyc_protos.clone()
+        for i in range(cyc_protos.shape[0]-1):
+            cyc_protos_neg_sub = torch.roll(cyc_protos_neg_sub,1,dims=0)
+            cyc_protos_neg = torch.cat((cyc_protos_neg,cyc_protos_neg_sub),dim=0) # (9*9), 256 => (81,256)
+        
+        dims_max = car_protos_pos.shape[0] if car_protos_pos.shape[0] > ped_protos_pos.shape[0] else ped_protos_pos.shape[0]
+        dims_max = cyc_protos_pos.shape[0] if cyc_protos_pos.shape[0] > dims_max else dims_max
+
+        feat_car_flatten = torch.flatten(torch.nn.ZeroPad2d(padding=(0,0,0,dims_max - car_protos_pos.shape[0]))(car_protos_pos),1).reshape(1,-1) #(17956,256) => (17956,256) = (1,4596736)
+        feat_ped_flatten = torch.flatten(torch.nn.ZeroPad2d(padding=(0,0,0,dims_max - ped_protos_pos.shape[0]))(ped_protos_pos),1).reshape(1,-1) #(324,256) => (17956,256) = (1,4596736)
+        feat_cyc_flatten = torch.flatten(torch.nn.ZeroPad2d(padding=(0,0,0,dims_max - cyc_protos_pos.shape[0]))(cyc_protos_pos),1).reshape(1,-1) #(81,256) => (17956,256) = (1,4596736)
+        
+        feat_car_rev_flatten = torch.flatten(torch.nn.ZeroPad2d(padding=(0,0,0,dims_max - car_protos_neg.shape[0]))(car_protos_neg),1).reshape(1,-1) 
+        feat_ped_rev_flatten = torch.flatten(torch.nn.ZeroPad2d(padding=(0,0,0,dims_max - ped_protos_neg.shape[0]))(ped_protos_neg),1).reshape(1,-1)
+        feat_cyc_rev_flatten = torch.flatten(torch.nn.ZeroPad2d(padding=(0,0,0,dims_max - cyc_protos_neg.shape[0]))(cyc_protos_neg),1).reshape(1,-1)
+
+        feat_pos = torch.cat((feat_car_flatten,feat_ped_flatten,feat_cyc_flatten),dim=0) # (3,17956,256)
+        feat_neg = torch.cat((feat_car_rev_flatten,feat_ped_rev_flatten,feat_cyc_rev_flatten),dim=0) # (3,17956,256) 17k [1] [0.4] 81/17K
+
+        car_protos_expanded = car_protos_pos.shape[0]
+        ped_protos_expanded = ped_protos_pos.shape[0]
+        cyc_protos_expanded = cyc_protos_pos.shape[0]
+        # sum in loss as such does not make sense, in imbalanced case
+        car_norm = [min(car_protos_expanded,car_protos_expanded),min(car_protos_expanded,ped_protos_expanded),min(car_protos_expanded,cyc_protos_expanded)]
+        ped_norm = [min(ped_protos_expanded,car_protos_expanded),min(ped_protos_expanded,ped_protos_expanded),min(ped_protos_expanded,cyc_protos_expanded)]
+        cyc_norm = [min(cyc_protos_expanded,car_protos_expanded),min(cyc_protos_expanded,ped_protos_expanded),min(cyc_protos_expanded,cyc_protos_expanded)]
+
+        total_norm = torch.tensor([car_norm,ped_norm,cyc_norm],dtype=torch.float32).cuda() # divide it by norm to scale the values between 0 and 1, also reducing the effect of extra zeroes added
+
+
+        logits = feat_pos @ feat_neg.t()
+        sharpened_logits = (logits / total_norm) / 0.2 #(0.005 is the temperature making the resonably sharp. need to be tuned)
+        # MultiCrossEntropyLoss
+        labels = torch.diag(torch.ones_like(logits[0]))
+        loss = -1 * labels * F.log_softmax(sharpened_logits,dim=-1)
+        return {
+                'total_loss': loss.sum(),
+                'classwise_loss': loss.sum(dim=-1),
+                'raw_logits': logits
+                }            
 class FeatureBankRegistry(object):
     def __init__(self, **kwargs):
         self._banks = {}
