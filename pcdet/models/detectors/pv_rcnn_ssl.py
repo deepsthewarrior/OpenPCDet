@@ -275,10 +275,21 @@ class PVRCNN_SSL(Detector3DTemplate):
                     tb_dict[f'classwise_instance_cont_loss_{class_name}'] = classwise_instance_cont_loss[f'{class_name}_Pl']   
 
         if self.model_cfg['ROI_HEAD'].get('ENABLE_MCONT_LOSS', False):
-            print(f'in_mcont block')
             mCont_labeled = bank._get_multi_cont_loss()
+            if mCont_labeled is not None:
+                loss += mCont_labeled['total_loss'] * self.model_cfg['ROI_HEAD']['MCONT_LOSS_WEIGHT'] 
+                tb_dict['mCont_loss'] = mCont_labeled['total_loss'].item()
+                for cind,class_name in enumerate(['Car','Pedestrian','Cyclist']):
+                    tb_dict[f'mCont_{class_name}_proto'] = mCont_labeled['classwise_loss'][cind].item()
+                if self.model_cfg.get('STORE_RAW_SIM_IN_PKL', False):
+                    self.mcont_dict['logits'].append(mCont_labeled['raw_logits'].tolist())
+                    self.mcont_dict['iteration'].append(batch_dict['cur_iteration'])
+                    output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]
+                    file_path = os.path.join(output_dir, 'mcont_raw_logits.pkl')
+                    pickle.dump(self.mcont_dict, open(file_path, 'wb'))
+
+        if self.model_cfg['ROI_HEAD'].get('ENABLE_BATCH_MCONT', False):
             selected_batch_dict = self._clone_gt_boxes_and_feats(batch_dict)
-            print(f'before torch.no_grad()')
             with torch.no_grad():
                 batch_gt_feats = self.pv_rcnn_ema.roi_head.pool_features(selected_batch_dict, use_gtboxes=True)
                 batch_size_rcnn = batch_gt_feats.shape[0]
@@ -287,27 +298,30 @@ class PVRCNN_SSL(Detector3DTemplate):
             batch_gt_feats_lb = batch_gt_feats[batch_dict['labeled_mask'].bool()]  
             batch_gt_labels_lb = batch_dict['gt_boxes'][batch_dict['labeled_mask'].bool()][:,:,-1].long()
             batch_gt_feats_lb = torch.cat([batch_gt_feats_lb,batch_gt_labels_lb.unsqueeze(-1)],dim=-1)
-            print(f'before_gathering: {batch_gt_feats_lb.shape} in {batch_gt_feats.shape}')
             gathered_tensor = self.gather_tensors(batch_gt_feats_lb)
             gathered_labels = gathered_tensor[:,-1].long()
             non_zero_mask = gathered_labels != 0
             gathered_feats = gathered_tensor[:,:-1][non_zero_mask]
             gathered_labels = gathered_labels[non_zero_mask]
             mCont_labeled_features = bank._get_multi_cont_loss_lb_instances(gathered_feats,gathered_labels)
-            
+            mCont_labeled_loss =  (mCont_labeled_features['total_loss'] * self.model_cfg['ROI_HEAD']['MCONT_LOSS_WEIGHT'])
 
-            if mCont_labeled is not None:
-                loss += mCont_labeled['total_loss'] * self.model_cfg['ROI_HEAD']['MCONT_LOSS_WEIGHT'] #TODO: config
-                tb_dict['mCont_loss'] = mCont_labeled['total_loss'].item()
-                for cind,class_name in enumerate(['Car','Pedestrian','Cyclist']):
-                    tb_dict[f'mCont_{class_name}_lb'] = mCont_labeled['classwise_loss'][cind].item()
+            if dist.is_initialized():
+                loss+= (mCont_labeled_loss/2)
+                tb_dict['mCont_loss_instance'] = (mCont_labeled_features['total_loss'].item())  
+            else:
+                loss+= mCont_labeled_loss
+                tb_dict['mCont_loss_instance'] = (mCont_labeled_features['total_loss'].item()/2)  
+
+            for cind,class_name in enumerate(['Car','Pedestrian','Cyclist']):
+                tb_dict[f'mCont_{class_name}_lb_inst'] = mCont_labeled_features['classwise_loss'][cind].item()
                 if self.model_cfg.get('STORE_RAW_SIM_IN_PKL', False):
-                    self.mcont_dict['logits'].append(mCont_labeled['raw_logits'].tolist())
+                    self.mcont_dict['logits'].append(mCont_labeled_features['raw_logits'].tolist())
                     self.mcont_dict['iteration'].append(batch_dict['cur_iteration'])
                     output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]
-                    file_path = os.path.join(output_dir, 'mcont_raw_logits.pkl')
+                    file_path = os.path.join(output_dir, 'mcont_lb_instances_logits.pkl')
                     pickle.dump(self.mcont_dict, open(file_path, 'wb'))
-                    
+
         if self.model_cfg['ROI_HEAD'].get('ENABLE_PROTO_CONTRASTIVE_LOSS', False):
             proto_cont_loss = self._get_proto_contrastive_loss(batch_dict, bank, ulb_inds)
             if proto_cont_loss is not None:
@@ -536,8 +550,10 @@ class PVRCNN_SSL(Detector3DTemplate):
     @staticmethod
     def _prep_tb_dict(tb_dict, lbl_inds, ulb_inds, reduce_loss_fn):
         tb_dict_ = {}
+        ignore_keys = ['proto_cont_loss','instance_cont_loss','classwise_instance_cont_loss_Car','classwise_instance_cont_loss_Pedestrian','classwise_instance_cont_loss_Cyclist',
+                        'mCont_loss','mCont_Car_lb','mCont_Pedestrian_lb','mCont_Cyclist_lb','mCont_loss_instance','mCont_Car_lb_inst','mCont_Pedestrian_lb_inst','mCont_Cyclist_lb_inst']
         for key in tb_dict.keys():
-            if key in ['proto_cont_loss','instance_cont_loss','classwise_instance_cont_loss_Car','classwise_instance_cont_loss_Pedestrian','classwise_instance_cont_loss_Cyclist','mCont_loss','mCont_Car_lb','mCont_Pedestrian_lb','mCont_Cyclist_lb']:
+            if key in ignore_keys:
                 tb_dict_[key] = tb_dict[key]
             elif 'loss' in key or 'acc' in key or 'point_pos_num' in key:
                 tb_dict_[f"{key}_labeled"] = reduce_loss_fn(tb_dict[key][lbl_inds, ...])
