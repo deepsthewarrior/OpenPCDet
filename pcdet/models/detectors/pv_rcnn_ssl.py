@@ -287,10 +287,11 @@ class PVRCNN_SSL(Detector3DTemplate):
             batch_gt_feats_lb = batch_gt_feats[batch_dict['labeled_mask'].bool()]  
             batch_gt_labels_lb = batch_dict['gt_boxes'][batch_dict['labeled_mask'].bool()][:,:,-1].long() - 1
             batch_gt_feats_lb = torch.cat([batch_gt_feats_lb,batch_gt_labels_lb.unsqueeze(-1)],dim=-1)
-            print(f'before_gathering: {batch_gt_feats_lb.shape}')
+            print(f'before_gathering: {batch_gt_feats_lb.shape} in {batch_gt_feats.shape}')
             gathered_tensor = self.gather_tensors(batch_gt_feats_lb)
-            print(f'Gathered_tensor: {gathered_tensor.shape}')
-            print(f'Gathered_tensor: {gathered_tensor}')
+            # gathered_tensor = self.evenly_divisible_all_gather(batch_gt_feats_lb)
+            # print(f'Final Gathered_tensor: {gathered_tensor.shape} in {gathered_tensor.device}')
+            # print(f'Gathered_tensor: {gathered_tensor}')
 
             if mCont_labeled is not None:
                 loss += mCont_labeled['total_loss'] * self.model_cfg['ROI_HEAD']['MCONT_LOSS_WEIGHT'] #TODO: config
@@ -466,46 +467,67 @@ class PVRCNN_SSL(Detector3DTemplate):
                 tensor: tensor to be gathered
                 labels: bool True if the tensor represents label information TODO:Deepika Remove this arg and make function tensor agnostic 
             """
-            if labels:
-                assert tensor.ndim == 1,"labels should be of shape 1"
-            else:
-                assert tensor.ndim == 3,"features should be of shape N,1,256"
 
-            if dist.is_initialized(): # check if dist mode is initialized
+            assert tensor.ndim == 3,"features should be of shape N,1,256"
+            tensor = tensor.view(-1,257)
+            WORLD_SIZE = dist.get_world_size()
+            if WORLD_SIZE <= 1:
+                return data
                 # Determine sizes first
-                local_size = torch.tensor(tensor.size(), device=tensor.device)
-                WORLD_SIZE = dist.get_world_size()
-                all_sizes = [torch.zeros_like(local_size) for _ in range(WORLD_SIZE)]
-                dist.barrier() 
-                dist.all_gather(all_sizes,local_size)
-                dist.barrier()
-                
-                # make zero-padded version https://stackoverflow.com/questions/71433507/pytorch-python-distributed-multiprocessing-gather-concatenate-tensor-arrays-of
-                max_length = max([size[0] for size in all_sizes])
-                if max_length != local_size[0].item():
-                    diff = max_length - local_size[0].item()
-                    pad_size =[diff.item()] #pad with zeros 
-                    if local_size.ndim >= 1:
-                        pad_size.extend(dimension.item() for dimension in local_size[1:])
-                    padding = torch.zeros(pad_size, device=tensor.device, dtype=tensor.dtype)
-                    tensor = torch.cat((tensor,padding))
-                
-                all_tensors_padded = [torch.zeros_like(tensor) for _ in range(WORLD_SIZE)]
-                dist.barrier()
-                dist.all_gather(all_tensors_padded,tensor)
-                dist.barrier()
-                gathered_tensor = torch.cat(all_tensors_padded)
-                if gathered_tensor.ndim == 1: # diff filtering mechanism for labels TODO:Deepika make this tensor agnostic
-                    assert gathered_tensor.ndim == 1, "Label dimension should be N"
-                    non_zero_mask = gathered_tensor > 0
-                else:
-                    non_zero_mask = torch.any(gathered_tensor!=0,dim=-1).squeeze()
-                gathered_tensor = gathered_tensor[non_zero_mask]
-                return gathered_tensor
-            else:
-                return tensor
+            local_size = torch.tensor(tensor.size(), device=tensor.device)
+            all_sizes = [torch.zeros_like(local_size) for _ in range(WORLD_SIZE)]
             
-        
+            dist.barrier() 
+            dist.all_gather(all_sizes,local_size)
+            dist.barrier()
+
+            print(f'all_sizes {all_sizes}')
+            # make zero-padded version https://stackoverflow.com/questions/71433507/pytorch-python-distributed-multiprocessing-gather-concatenate-tensor-arrays-of
+            max_length = max([size[0] for size in all_sizes])
+            # print(f'max_length {max_length}')
+            
+            diff = max_length - local_size[0].item()
+            if diff:
+                pad_size =[diff.item()] #pad with zeros 
+                if local_size.ndim >= 1:
+                    pad_size.extend(dimension.item() for dimension in local_size[1:])
+                padding = torch.zeros(pad_size, device=tensor.device, dtype=tensor.dtype)
+                # print(f'size of padding {padding.shape} in device {padding.device}')
+                tensor = torch.cat((tensor,padding),)
+            # print(f'all tensors after padding {tensor.shape} in devce {tensor.device}')
+            all_tensors_padded = [torch.zeros_like(tensor) for _ in range(WORLD_SIZE)]
+
+            dist.barrier()
+            dist.all_gather(all_tensors_padded,tensor)
+            dist.barrier()
+
+            gathered_tensor = torch.cat(all_tensors_padded)
+            print(f'gathered tensor {gathered_tensor.shape} in devce {gathered_tensor.device}')
+            non_zero_mask = torch.any(gathered_tensor!=0,dim=-1).squeeze()
+            gathered_tensor = gathered_tensor[non_zero_mask]
+            return gathered_tensor
+
+            
+    # def evenly_divisible_all_gather(self,data: torch.Tensor):
+    #     """
+    #     Utility function for distributed data parallel to pad tensor to make it evenly divisible for all_gather.
+    #     Args:
+    #         data: source tensor to pad and execute all_gather in distributed data parallel.
+
+    #     """
+    #     if idist.get_world_size() <= 1:
+    #         return data
+    #     # make sure the data is evenly-divisible on multi-GPUs
+    #     length = data.shape[0]
+    #     all_lens = idist.all_gather(length)
+    #     max_len = max(all_lens).item()
+    #     if length < max_len:
+    #         size = [max_len - length] + list(data.shape[1:])
+    #         data = torch.cat([data, data.new_full(size, float("NaN"))], dim=0)
+    #     # all gather across all processes
+    #     data = idist.all_gather(data)
+    #     # delete the padding NaN items
+    #     return torch.cat([data[i * max_len : i * max_len + l, ...] for i, l in enumerate(all_lens)], dim=0)
 
     @staticmethod
     def _prep_tb_dict(tb_dict, lbl_inds, ulb_inds, reduce_loss_fn):
