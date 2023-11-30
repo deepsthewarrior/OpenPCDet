@@ -247,6 +247,8 @@ class PredQualityMetrics(Metric):
             def add_avg_metric(key, metric):
                 if cls_fg_mask.sum() > 0:
                     classwise_metrics[f'fg_{key}'][cls] = (metric * cls_fg_mask.float()).sum() / cls_fg_mask.sum()
+                else:
+                    classwise_metrics[f'fg_{key}'][cls] = torch.tensor([0.0]).to(cls_fg_mask.device).sum()
                 if cls_uc_mask.sum() > 0:
                     classwise_metrics[f'uc_{key}'][cls] = (metric * cls_uc_mask.float()).sum() / cls_uc_mask.sum()
                 classwise_metrics[f'bg_{key}'][cls] = (metric * cls_bg_mask.float()).sum() / cls_bg_mask.sum()
@@ -257,23 +259,23 @@ class PredQualityMetrics(Metric):
             for cind_, cls_tag in enumerate(self.dataset.class_names):
                 true_mask_bool = true_mask.bool()
                 if not padded_sim_scores:
-                    classwise_metrics[f'sim_scores_multi_tp_{cls}'][cls_tag] = (sim_scores[cls_pred_mask, cind_] * true_mask_bool[cls_pred_mask]).float().mean()
-                    classwise_metrics[f'sim_scores_multi_fp_{cls}'][cls_tag] = (sim_scores[cls_pred_mask, cind_] * (~true_mask_bool[cls_pred_mask])).float().mean()
-                    classwise_metrics[f'sim_scores_raw_multi_tp_{cls}'][cls_tag] = (sim_scores[cls_pred_mask, cind_] * true_mask_bool[cls_pred_mask]).float().mean()
-                    classwise_metrics[f'sim_scores_raw_multi_fp_{cls}'][cls_tag] = (sim_scores[cls_pred_mask, cind_] * (~true_mask_bool[cls_pred_mask])).float().mean()
+                    classwise_metrics[f'sim_scores_multi_tp_{cls}'][cls_tag] = (sim_scores[cls_pred_mask, cind_][true_mask_bool[cls_pred_mask]]).float().mean()
+                    classwise_metrics[f'sim_scores_multi_fp_{cls}'][cls_tag] = (sim_scores[cls_pred_mask, cind_][(~true_mask_bool[cls_pred_mask])]).float().mean()
+                    classwise_metrics[f'sim_scores_raw_multi_tp_{cls}'][cls_tag] = (sim_scores[cls_pred_mask, cind_][true_mask_bool[cls_pred_mask]]).float().mean()
+                    classwise_metrics[f'sim_scores_raw_multi_fp_{cls}'][cls_tag] = (sim_scores[cls_pred_mask, cind_][(~true_mask_bool[cls_pred_mask])]).float().mean()
             classwise_metrics['rois_fg_ratio'][cls] = cls_fg_mask.sum() / cls_pred_mask.sum()
             classwise_metrics['rois_uc_ratio'][cls] = cls_uc_mask.sum() / cls_pred_mask.sum()
             classwise_metrics['rois_bg_ratio'][cls] = cls_bg_mask.sum() / cls_pred_mask.sum()
 
             add_avg_metric('rois_avg_score', cls_roi_scores)
             add_avg_metric('rois_avg_iou_wrt_gt', cls_roi_iou_wrt_gt) 
-            if not (torch.eq(cls_roi_sim_scores,-1)).any():
+            if not padded_sim_scores:
                 add_avg_metric('rois_avg_sim_score_entropy', cls_roi_sim_scores_entropy)
                 add_avg_metric('rois_avg_sim_score', cls_roi_sim_scores)
                 add_avg_metric('rois_avg_instance_sim_score', cls_roi_instance_sim_scores)
-                if not padded_sim_scores:
-                    sem_clf_pr_curve_sim_score_data = {'labels': y_labels, 'predictions': y_sim_scores}
-                    classwise_metrics['sem_clf_pr_curve_sim_score'][cls] = sem_clf_pr_curve_sim_score_data
+                # if not padded_sim_scores:
+                sem_clf_pr_curve_sim_score_data = {'labels': y_labels, 'predictions': y_sim_scores}
+                classwise_metrics['sem_clf_pr_curve_sim_score'][cls] = sem_clf_pr_curve_sim_score_data
             if not(self.isnan(iou_wrt_pl) and self.isnan(weights) and self.isnan(target_scores)):
                 add_avg_metric('rois_avg_iou_wrt_pl', cls_roi_iou_wrt_pl) if cls_roi_iou_wrt_pl is not None else None
                 add_avg_metric('rois_avg_weight', cls_roi_weights)

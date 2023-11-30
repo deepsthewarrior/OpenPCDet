@@ -308,10 +308,10 @@ class PVRCNN_SSL(Detector3DTemplate):
 
             if dist.is_initialized():
                 loss+= (mCont_labeled_loss/2)
-                tb_dict['mCont_loss_instance'] = (mCont_labeled_features['total_loss'].item())  
+                tb_dict['mCont_loss_instance'] = (mCont_labeled_features['total_loss'].item())     
             else:
                 loss+= mCont_labeled_loss
-                tb_dict['mCont_loss_instance'] = (mCont_labeled_features['total_loss'].item()/2)  
+                tb_dict['mCont_loss_instance'] = (mCont_labeled_features['total_loss'].item()/2) 
 
             for cind,class_name in enumerate(['Car','Pedestrian','Cyclist']):
                 tb_dict[f'mCont_{class_name}_lb_inst'] = mCont_labeled_features['classwise_loss'][cind].item()
