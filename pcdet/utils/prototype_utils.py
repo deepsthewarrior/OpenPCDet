@@ -26,6 +26,8 @@ class FeatureBank(Metric):
         self.record_pkl = kwargs.get('RECORD_PKL', False)
         self.initialized = False
         self.insId_protoId_mapping = None  # mapping from instance index to prototype index
+        self.tt = kwargs.get('TT', 0.4)
+        self.st = kwargs.get('ST', 0.5)
         proto_dict_keys = ['instance_prototypes','proto_labels']
         self.proto_dict = {key: [] for key in proto_dict_keys}
         # Globally synchronized prototypes used in each process
@@ -392,7 +394,26 @@ class FeatureBank(Metric):
                 'total_loss': loss.sum(),
                 'classwise_loss': loss.sum(dim=-1),
                 'raw_logits': logits
-                }            
+                } 
+
+    def get_proto_sim_loss(self,feats_wa,feats_sa):        
+        if not self.initialized:
+            return None
+        feats_sa = feats_sa.view(-1,self.feat_size)
+        feats_wa = feats_wa.view(-1,self.feat_size)
+        cos_sim_wa = F.normalize(feats_wa) @ F.normalize(self.classwise_prototypes).t()
+        norm_cos_sim_wa = F.softmax(cos_sim_wa / self.tt, dim=-1)
+        cos_sim_sa = F.normalize(feats_sa) @ F.normalize(self.classwise_prototypes).t()
+        log_norm_cos_sim_sa = F.log_softmax(cos_sim_sa / self.st, dim=-1)
+
+        loss = -1 * (norm_cos_sim_wa * log_norm_cos_sim_sa)
+        
+        return {
+                'total_loss': loss,
+                'cos_sim_wa': cos_sim_wa,
+                'cos_sim_sa': cos_sim_sa,
+                } 
+
 class FeatureBankRegistry(object):
     def __init__(self, **kwargs):
         self._banks = {}

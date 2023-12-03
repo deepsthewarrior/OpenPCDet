@@ -274,6 +274,14 @@ class PVRCNN_SSL(Detector3DTemplate):
                 for cind,class_name in enumerate(['Car','Pedestrian','Cyclist']):
                     tb_dict[f'classwise_instance_cont_loss_{class_name}'] = classwise_instance_cont_loss[f'{class_name}_Pl']   
 
+        if self.model_cfg['ROI_HEAD'].get('ENABLE_PROTO_SIM_LOSS', False):
+            proto_sim_loss,classwise_proto_sim = self._get_instance_contrastive_loss(batch_dict,batch_dict_ema, bank, ulb_inds,proto_sim=True)
+            if proto_sim_loss is not None:
+                loss += proto_sim_loss * self.model_cfg['ROI_HEAD']['PROTO_SIM_LOSS_WEIGHT']
+                tb_dict['proto_sim_loss'] = proto_sim_loss.item()
+                for cind,class_name in enumerate(['Car','Pedestrian','Cyclist']):
+                    tb_dict[f'classwise_proto_sim_loss_{class_name}'] = classwise_proto_sim[f'{class_name}_Pl']  
+
         if self.model_cfg['ROI_HEAD'].get('ENABLE_MCONT_LOSS', False):
             mCont_labeled = bank._get_multi_cont_loss()
             if mCont_labeled is not None:
@@ -372,7 +380,7 @@ class PVRCNN_SSL(Detector3DTemplate):
             return
         return proto_cont_loss.view(B, N)[ulb_inds][ulb_nonzero_mask].mean()
 
-    def _get_instance_contrastive_loss(self,batch_dict,batch_dict_ema,bank,ulb_inds,mean_instance=False): #TODO: Deepika: Refactor this function
+    def _get_instance_contrastive_loss(self,batch_dict,batch_dict_ema,bank,ulb_inds,mean_instance=False,proto_sim=False): #TODO: Deepika: Refactor this function
         batch_dict_wa_gt = {'unlabeled_inds': batch_dict['unlabeled_inds'],
                           'labeled_inds': batch_dict['labeled_inds'],
                           'rois': batch_dict['rois'].data.clone(),
@@ -395,12 +403,48 @@ class PVRCNN_SSL(Detector3DTemplate):
             batch_gt_feats_wa = self.pv_rcnn_ema.roi_head.pool_features(batch_dict_wa_gt, use_gtboxes=True)
             batch_size_rcnn = batch_gt_feats_wa.shape[0]
             shared_features_wa = self.pv_rcnn_ema.roi_head.shared_fc_layer(batch_gt_feats_wa.view(batch_size_rcnn, -1, 1)).squeeze(-1)
+            shared_features_wa = shared_features_wa.view(*batch_dict['gt_boxes'].shape[:2], -1)
 
         batch_gt_feats_sa = self.pv_rcnn.roi_head.pool_features(batch_dict, use_gtboxes=True)
         batch_size_rcnn = batch_gt_feats_sa.shape[0]
         shared_features_sa = self.pv_rcnn.roi_head.shared_fc_layer(batch_gt_feats_sa.view(batch_size_rcnn, -1, 1)).squeeze(-1)
+        shared_features_sa = shared_features_sa.view(*batch_dict['gt_boxes'].shape[:2], -1)
 
         assert batch_gt_feats_sa.shape[0] == batch_gt_feats_wa.shape[0], "batch_dict  mismatch"
+        if proto_sim == True:
+            shared_features_wa_ulb = shared_features_wa[ulb_inds]
+            shared_features_sa_ulb = shared_features_sa[ulb_inds]
+            proto_sim_loss = bank.get_proto_sim_loss(shared_features_wa_ulb,shared_features_sa_ulb)
+            if proto_sim_loss is None:
+                return None,None
+            ulb_nonzero_mask = torch.logical_not(torch.eq(gt_boxes[ulb_inds], 0).all(dim=-1))
+        
+            if ulb_nonzero_mask.sum() == 0:
+                print(f"No pl instances predicted for strongly augmented frame(s) {batch_dict['frame_id'][ulb_inds.cpu().numpy()]}")
+                return None,None
+            proto_sim_loss_total = proto_sim_loss['total_loss'].view(shared_features_sa_ulb.shape[0], N,3)
+            proto_loss = proto_sim_loss_total[ulb_nonzero_mask].mean()
+            
+            Car_instance_proto_loss =  (proto_sim_loss_total[:,:,0])[ulb_nonzero_mask] 
+            Ped_instance_proto_loss =  (proto_sim_loss_total[:,:,1])[ulb_nonzero_mask]
+            Cyc_instance_proto_loss =  (proto_sim_loss_total[:,:,2])[ulb_nonzero_mask]
+            classwise_loss = {'Car_Pl':{},'Pedestrian_Pl':{},'Cyclist_Pl':{}}
+            for cind,class_name in enumerate(['Car','Pedestrian','Cyclist']):
+                classwise_loss[f'{class_name}_Pl'] = {
+                        'Car_proto': Car_instance_proto_loss[gt_labels[ulb_inds][ulb_nonzero_mask]==cind].mean().item() * self.model_cfg['ROI_HEAD']['ENABLE_PROTO_SIM_LOSS'],
+                        'Ped_proto': Ped_instance_proto_loss[gt_labels[ulb_inds][ulb_nonzero_mask]==cind].mean().item() * self.model_cfg['ROI_HEAD']['ENABLE_PROTO_SIM_LOSS'],
+                        'Cyc_proto': Cyc_instance_proto_loss[gt_labels[ulb_inds][ulb_nonzero_mask]==cind].mean().item() * self.model_cfg['ROI_HEAD']['ENABLE_PROTO_SIM_LOSS'],
+                }
+            self.loss_dict['cos_sim_pl_wa'].append(proto_sim_loss['cos_sim_wa'].tolist())
+            self.loss_dict['cos_sim_pl_sa'].append(proto_sim_loss['cos_sim_sa'].tolist())
+            if self.model_cfg.get('STORE_RAW_SIM_IN_PKL', False):
+                output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]
+                file_path = os.path.join(output_dir, 'cos_sim.pkl')
+                pickle.dump(self.loss_dict, open(file_path, 'wb'))
+
+            return proto_loss,classwise_loss
+
+
         if mean_instance == False:
             instance_cont_tuple = bank.get_simmatch_loss(shared_features_wa,shared_features_sa,ulb_inds) # normal_simmatch_loss
             
@@ -551,7 +595,8 @@ class PVRCNN_SSL(Detector3DTemplate):
     def _prep_tb_dict(tb_dict, lbl_inds, ulb_inds, reduce_loss_fn):
         tb_dict_ = {}
         ignore_keys = ['proto_cont_loss','instance_cont_loss','classwise_instance_cont_loss_Car','classwise_instance_cont_loss_Pedestrian','classwise_instance_cont_loss_Cyclist',
-                        'mCont_loss','mCont_Car_lb','mCont_Pedestrian_lb','mCont_Cyclist_lb','mCont_loss_instance','mCont_Car_lb_inst','mCont_Pedestrian_lb_inst','mCont_Cyclist_lb_inst']
+                        'mCont_loss','mCont_Car_lb','mCont_Pedestrian_lb','mCont_Cyclist_lb','mCont_loss_instance','mCont_Car_lb_inst','mCont_Pedestrian_lb_inst','mCont_Cyclist_lb_inst',
+                        'classwise_proto_sim_loss_Car','classwise_proto_sim_loss_Pedestrian','classwise_proto_sim_loss_Cyclist','proto_sim_loss']
         for key in tb_dict.keys():
             if key in ignore_keys:
                 tb_dict_[key] = tb_dict[key]
