@@ -54,6 +54,7 @@ class PVRCNN_SSL(Detector3DTemplate):
 
         self.thresh = model_cfg.THRESH
         self.sem_thresh = model_cfg.SEM_THRESH
+        self.hybrid_thresh = model_cfg.HYBRID_THRESH
         self.unlabeled_supervise_cls = model_cfg.UNLABELED_SUPERVISE_CLS
         self.unlabeled_supervise_refine = model_cfg.UNLABELED_SUPERVISE_REFINE
         self.unlabeled_weight = model_cfg.UNLABELED_WEIGHT
@@ -873,8 +874,21 @@ class PVRCNN_SSL(Detector3DTemplate):
             sem_conf_thresh = torch.tensor(self.sem_thresh, device=pseudo_label.device).unsqueeze(
                 0).repeat(len(pseudo_label), 1).gather(dim=1, index=(pseudo_label - 1).unsqueeze(-1))
 
-            valid_inds = pseudo_score > conf_thresh.squeeze()
+            if self.model_cfg.ROI_HEAD.HYBRID_THRESHOLDING:
+                if (pseudo_sim_score.sum(-1) <= 0).any(): # until the time we have sim scores for all classes
+                    valid_inds = pseudo_score > conf_thresh.squeeze()
+                   
+                else:
+                    alpha = self.model_cfg.ROI_HEAD.HYBRID_ALPHA
+                    sim_scores = torch.gather(pseudo_sim_score, dim=-1, index=(pseudo_label - 1).unsqueeze(-1)).squeeze(-1)
+                    hybrid_scores = (alpha * sim_scores) + ((1 - alpha) * pseudo_score)  
+                    hybrid_conf_thresh = torch.tensor(self.hybrid_thresh, device=pseudo_label.device).unsqueeze(
+                        0).repeat(len(pseudo_label), 1).gather(dim=1, index=(pseudo_label - 1).unsqueeze(-1))
 
+                    valid_inds = hybrid_scores > hybrid_conf_thresh.squeeze()
+            else:
+                valid_inds = pseudo_score > conf_thresh.squeeze()
+            
             valid_inds = valid_inds & (pseudo_sem_score > sem_conf_thresh.squeeze())
 
             pseudo_sem_score = pseudo_sem_score[valid_inds]

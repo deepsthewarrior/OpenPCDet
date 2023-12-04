@@ -173,6 +173,8 @@ MODEL:
         ENABLE_ULB_CLS_DIST_LOSS: False
         ENABLE_PROTO_SIM_LOSS: False
         ENABLE_EVAL: True
+        HYBRID_THRESHOLDING: True
+        HYBRID_ALPHA: 0.8 
         METRICS_PRED_TYPES: [roi_pl_gt, pl_gt_metrics_before_filtering,pl_gt_metrics_after_filtering ]
         ADAPTIVE_THRESH_CONFIG:
             NAME: AdaMatchThreshold
