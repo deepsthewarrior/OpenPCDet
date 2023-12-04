@@ -437,6 +437,7 @@ class PVRCNN_SSL(Detector3DTemplate):
                 }
             self.loss_dict['cos_sim_pl_wa'].append(proto_sim_loss['cos_sim_wa'].tolist())
             self.loss_dict['cos_sim_pl_sa'].append(proto_sim_loss['cos_sim_sa'].tolist())
+            self.loss_dict['pl_labels'].append(gt_labels[ulb_inds][ulb_nonzero_mask].tolist())
             if self.model_cfg.get('STORE_RAW_SIM_IN_PKL', False):
                 output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]
                 file_path = os.path.join(output_dir, 'cos_sim.pkl')
