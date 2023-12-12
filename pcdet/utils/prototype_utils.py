@@ -26,8 +26,8 @@ class FeatureBank(Metric):
         self.record_pkl = kwargs.get('RECORD_PKL', False)
         self.initialized = False
         self.insId_protoId_mapping = None  # mapping from instance index to prototype index
-        self.tt = kwargs.get('TT', 0.4)
-        self.st = kwargs.get('ST', 0.5)
+        self.tt = kwargs.get('TT', 0.1)
+        self.st = kwargs.get('ST', 0.1)
         proto_dict_keys = ['instance_prototypes','proto_labels']
         self.proto_dict = {key: [] for key in proto_dict_keys}
         # Globally synchronized prototypes used in each process
