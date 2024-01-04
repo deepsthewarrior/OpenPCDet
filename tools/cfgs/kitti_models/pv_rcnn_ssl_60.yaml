@@ -162,12 +162,21 @@ MODEL:
         ENABLE_VIS: False
         ENABLE_PROTO_CONTRASTIVE_LOSS: False
         ENABLE_INSTANCE_CONTRASTIVE_LOSS: False
+        ENABLE_MEAN_INSTANCE_CONTRASTIVE_LOSS: False
+        ENABLE_MCONT_LOSS: False
+        ENABLE_BATCH_MCONT: False
         PROTO_CONTRASTIVE_LOSS_WEIGHT: 1.0
         INSTANCE_CONTRASTIVE_LOSS_WEIGHT: 1.0
+        MCONT_LOSS_WEIGHT: 0.2
+        PROTO_SIM_LOSS_WEIGHT: 0.2
         ENABLE_SOFT_TEACHER: False
         ENABLE_ULB_CLS_DIST_LOSS: False
+        ENABLE_PROTO_SIM_LOSS: False
         ENABLE_EVAL: True
-        METRICS_PRED_TYPES: [roi_pl_gt, pl_gt_metrics_before_filtering]
+        HYBRID_THRESHOLDING: False
+        HYBRID_ALPHA: 0.8
+        PL_PROTO_SIM_THRESH: [0.8,0.7,0.7] 
+        METRICS_PRED_TYPES: [roi_pl_gt, pl_gt_metrics_before_filtering,pl_gt_metrics_after_filtering ]
         ADAPTIVE_THRESH_CONFIG:
             NAME: AdaMatchThreshold
             ENABLE: True
@@ -281,6 +290,7 @@ MODEL:
     EMA_UPDATE_INTERVAL: 1 
     REDUCE_LOSS: 'mean'
     STORE_SCORES_IN_PKL: False
+    STORE_RAW_SIM_IN_PKL: False
 
     FEATURE_BANK_LIST:
         - NAME: gt_aug_lbl_prototypes
@@ -291,6 +301,7 @@ MODEL:
           RESET_STATE_INTERVAL: 37  # 1% setting for ~3700 KITTI samples
           MOMENTUM: 0.9
           FILTER_MIN_POINTS_IN_GT: 20
+          RECORD_PKL: False
     METRICS_BANK_LIST:
         - NAME: [rcnn_roi_pl_gt_metrics_cls, pl_gt_metrics_before_filtering_cls, pl_gt_metrics_after_filtering_cls]
           RESET_STATE_INTERVAL: 32
