@@ -376,10 +376,15 @@ class PVRCNN_SSL(Detector3DTemplate):
             return
         nonzero_mask = torch.logical_not(torch.eq(gt_boxes, 0).all(dim=-1))
         ulb_nonzero_mask = nonzero_mask[ulb_inds]
-        if ulb_nonzero_mask.sum() == 0:
+        filter_thresh = self.model_cfg['ROI_HEAD']['PL_PROTO_CONTRASTIVE_THRESH']
+        valid_pl = gt_boxes[...,-1][ulb_inds][ulb_nonzero_mask].long().unsqueeze(-1) - 1
+        clswise_filter_thresh = torch.tensor(filter_thresh,device=valid_pl.device).unsqueeze(0).repeat(valid_pl.shape[0],1).gather(index=(valid_pl),dim=1).squeeze(-1)
+        valid_filtered_pls = (batch_dict['pseudo_scores'][ulb_inds][ulb_nonzero_mask] >= clswise_filter_thresh)
+                
+        if ulb_nonzero_mask.sum() == 0 or valid_filtered_pls.sum() == 0:
             print(f"No pl instances predicted for strongly augmented frame(s) {batch_dict['frame_id'][ulb_inds.cpu().numpy()]}")
             return
-        return proto_cont_loss.view(B, N)[ulb_inds][ulb_nonzero_mask].mean()
+        return proto_cont_loss.view(B, N)[ulb_inds][ulb_nonzero_mask][valid_filtered_pls].mean()
 
     def _get_instance_contrastive_loss(self,batch_dict,batch_dict_ema,bank,ulb_inds,mean_instance=False,proto_sim=False): #TODO: Deepika: Refactor this function
         batch_dict_wa_gt = {'unlabeled_inds': batch_dict['unlabeled_inds'],
