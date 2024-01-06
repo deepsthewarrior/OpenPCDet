@@ -232,11 +232,11 @@ class PVRCNN_SSL(Detector3DTemplate):
 
         # For metrics calculation
         self.pv_rcnn.roi_head.forward_ret_dict['unlabeled_inds'] = ulb_inds
-
-        if self.model_cfg['ROI_HEAD'].get('ENABLE_SOFT_TEACHER', False):
-            # using teacher to evaluate student's bg/fg proposals through its rcnn head
-            with torch.no_grad():
-                self._add_teacher_scores(batch_dict, batch_dict_ema, ulb_inds)
+        
+        # if self.model_cfg['ROI_HEAD'].get('ENABLE_SOFT_TEACHER', False):
+        #     # using teacher to evaluate student's bg/fg proposals through its rcnn head
+        #     with torch.no_grad():
+        #         self._add_teacher_scores(batch_dict, batch_dict_ema, ulb_inds)
 
         disp_dict = {}
         loss_rpn_cls, loss_rpn_box, tb_dict = self.pv_rcnn.dense_head.get_loss(scalar=False)

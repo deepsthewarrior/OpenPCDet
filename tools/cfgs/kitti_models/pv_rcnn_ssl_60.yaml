@@ -171,6 +171,7 @@ MODEL:
         MCONT_LOSS_WEIGHT: 0.2
         PROTO_SIM_LOSS_WEIGHT: 0.2
         ENABLE_SOFT_TEACHER: False
+        ENABLE_SIM_WEIGHTS: True
         ENABLE_ULB_CLS_DIST_LOSS: False
         ENABLE_PROTO_SIM_LOSS: False
         ENABLE_EVAL: True
@@ -241,7 +242,7 @@ MODEL:
             DISABLE_ST_WEIGHTS: False
 
         LOSS_CONFIG:
-            UL_RCNN_CLS_WEIGHT_TYPE: 'rev_uc-bg'
+            UL_RCNN_CLS_WEIGHT_TYPE: 'cos-uc-bg'
             CLS_LOSS: BinaryCrossEntropy
             REG_LOSS: smooth-l1
             CORNER_LOSS_REGULARIZATION: True
