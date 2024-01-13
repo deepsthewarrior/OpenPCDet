@@ -176,7 +176,7 @@ class FeatureBank(Metric):
         log_probs = F.log_softmax(sim_scores / self.temperature, dim=-1)
         return -log_probs[torch.arange(len(labels)), labels]
 
-    def get_simmatch_loss(self, feats_wa, feats_sa, labels):
+    def get_simmatch_loss(self, feats_wa, feats_sa, labels=None):
         """
         :param feats_w: pseudo-box features of the weakly augmented unlabeled samples (N, C)
         :param feats: pseudo-labels of the strongly augmented unlabeled samples (N,)
@@ -193,6 +193,26 @@ class FeatureBank(Metric):
 
 
         return [(norm_cos_sim_wa * log_norm_cos_sim_sa), self.proto_labels, cos_sim_wa, cos_sim_sa]
+
+    def get_kl_divergence_loss(self, feats_wa, feats_sa,labels=None):
+        """
+        :param feats_w: pseudo-box features of the weakly augmented unlabeled samples (N, C)
+        :param feats: pseudo-labels of the strongly augmented unlabeled samples (N,)
+        :return:
+        """
+
+        if not self.initialized:
+            return None
+        cos_sim_wa = F.normalize(feats_wa) @ F.normalize(self.prototypes).t()
+        norm_cos_sim_wa = F.softmax(cos_sim_wa / self.temperature, dim=-1)
+
+        cos_sim_sa = F.normalize(feats_sa) @ F.normalize(self.prototypes).t() #160 instance protos => 134 11 8  1,1,1
+        # log_norm_cos_sim_sa = F.log_softmax(cos_sim_sa / self.temperature, dim=-1)
+        # kl_div = F.kl_div(log_norm_cos_sim_sa,norm_cos_sim_wa,reduction='mean')
+        kl_div = norm_cos_sim_wa * torch.log(norm_cos_sim_wa / F.softmax(cos_sim_sa / self.temperature, dim=-1))
+
+        return [kl_div, self.proto_labels, cos_sim_wa, cos_sim_sa]
+
 
     def get_simmatch_mean_loss(self, feats_wa, feats_sa, labels):
         """

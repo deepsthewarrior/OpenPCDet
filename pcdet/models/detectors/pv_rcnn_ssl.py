@@ -267,6 +267,13 @@ class PVRCNN_SSL(Detector3DTemplate):
                 tb_dict['instance_cont_loss'] = instance_cont_loss.item() * self.model_cfg['ROI_HEAD']['INSTANCE_CONTRASTIVE_LOSS_WEIGHT']
                 for cind,class_name in enumerate(['Car','Pedestrian','Cyclist']):
                     tb_dict[f'classwise_instance_cont_loss_{class_name}'] = classwise_instance_cont_loss[f'{class_name}_Pl']
+        if self.model_cfg['ROI_HEAD'].get('ENABLE_KL_DIV_LOSS', False): 
+            instance_cont_loss,classwise_instance_cont_loss = self._get_instance_contrastive_loss(batch_dict,batch_dict_ema, bank, ulb_inds,kl_div_loss=True)
+            if instance_cont_loss is not None:
+                loss += instance_cont_loss * self.model_cfg['ROI_HEAD']['INSTANCE_CONTRASTIVE_LOSS_WEIGHT']
+                tb_dict['instance_cont_loss'] = instance_cont_loss.item() * self.model_cfg['ROI_HEAD']['INSTANCE_CONTRASTIVE_LOSS_WEIGHT']
+                for cind,class_name in enumerate(['Car','Pedestrian','Cyclist']):
+                    tb_dict[f'classwise_instance_cont_loss_{class_name}'] = classwise_instance_cont_loss[f'{class_name}_Pl']
         if self.model_cfg['ROI_HEAD'].get('ENABLE_MEAN_INSTANCE_CONTRASTIVE_LOSS', False): 
             instance_cont_loss,classwise_instance_cont_loss = self._get_instance_contrastive_loss(batch_dict,batch_dict_ema, bank, ulb_inds,mean_instance=True)
             if instance_cont_loss is not None:
@@ -386,7 +393,7 @@ class PVRCNN_SSL(Detector3DTemplate):
             return
         return proto_cont_loss.view(B, N)[ulb_inds][ulb_nonzero_mask][valid_filtered_pls].mean()
 
-    def _get_instance_contrastive_loss(self,batch_dict,batch_dict_ema,bank,ulb_inds,mean_instance=False,proto_sim=False): #TODO: Deepika: Refactor this function
+    def _get_instance_contrastive_loss(self,batch_dict,batch_dict_ema,bank,ulb_inds,mean_instance=False,proto_sim=False,kl_div_loss=False): #TODO: Deepika: Refactor this function
         batch_dict_wa_gt = {'unlabeled_inds': batch_dict['unlabeled_inds'],
                           'labeled_inds': batch_dict['labeled_inds'],
                           'rois': batch_dict['rois'].data.clone(),
@@ -417,6 +424,7 @@ class PVRCNN_SSL(Detector3DTemplate):
         shared_features_sa = shared_features_sa.view(*batch_dict['gt_boxes'].shape[:2], -1)
 
         assert batch_gt_feats_sa.shape[0] == batch_gt_feats_wa.shape[0], "batch_dict  mismatch"
+
         if proto_sim == True:
             shared_features_wa_ulb = shared_features_wa[ulb_inds]
             shared_features_sa_ulb = shared_features_sa[ulb_inds]
@@ -457,20 +465,26 @@ class PVRCNN_SSL(Detector3DTemplate):
             return proto_loss,classwise_loss
 
 
-        if mean_instance == False:
-            instance_cont_tuple = bank.get_simmatch_loss(shared_features_wa,shared_features_sa,ulb_inds) # normal_simmatch_loss
-            
+        if mean_instance == False or kl_div_loss == True:
+            if kl_div_loss == True:
+                instance_cont_tuple = bank.get_kl_divergence_loss(shared_features_wa,shared_features_sa)
+            else:
+                instance_cont_tuple = bank.get_simmatch_loss(shared_features_wa,shared_features_sa) # normal_simmatch_loss
             if instance_cont_tuple is None:
                 return None,None
             nonzero_mask = torch.logical_not(torch.eq(gt_boxes, 0).all(dim=-1))
             ulb_nonzero_mask = nonzero_mask[ulb_inds]
-            if ulb_nonzero_mask.sum() == 0:
+            filter_thresh = self.model_cfg['ROI_HEAD']['PL_PROTO_CONTRASTIVE_THRESH']
+            valid_pl = gt_boxes[...,-1][ulb_inds][ulb_nonzero_mask].long().unsqueeze(-1) - 1
+            clswise_filter_thresh = torch.tensor(filter_thresh,device=valid_pl.device).unsqueeze(0).repeat(valid_pl.shape[0],1).gather(index=(valid_pl),dim=1).squeeze(-1)
+            valid_filtered_pls = (batch_dict['pseudo_scores'][ulb_inds][ulb_nonzero_mask] >= clswise_filter_thresh)
+            if ulb_nonzero_mask.sum() == 0 or valid_filtered_pls.sum() == 0:
                 print(f"No pl instances predicted for strongly augmented frame(s) {batch_dict['frame_id'][ulb_inds.cpu().numpy()]}")
                 return None,None
             loss_labels = instance_cont_tuple[1]
             instance_cont_tuple[0] = instance_cont_tuple[0].view(B, N, -1)
             instance_cont_sum = instance_cont_tuple[0].sum(-1)# calculates sum of all terms of CE for a particular instance
-            instance_cont_loss = instance_cont_sum[ulb_inds][ulb_nonzero_mask].mean()# mean of all instances           
+            instance_cont_loss = instance_cont_sum[ulb_inds][ulb_nonzero_mask][valid_filtered_pls].mean()# mean of all instances           
             cos_sim_wa = instance_cont_tuple[2].view(B, N, -1)
             cos_sim_sa = instance_cont_tuple[3].view(B, N, -1)
              # metrics update
