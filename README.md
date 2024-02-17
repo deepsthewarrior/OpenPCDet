@@ -1,8 +1,17 @@
-<img src="docs/open_mmlab.png" align="right" width="30%">
+![Screenshot from 2024-02-17 21-48-12](https://github.com/deepsthewarrior/OpenPCDet/assets/62742769/86a3c4ec-fd3b-478e-b4f5-4c3d0b47cbad)<img src="docs/open_mmlab.png" align="right" width="30%">
+
+This repo deals with the Limited Data learning challenges in Point Clouds for 3D Object Detection in the Semi-Supervised Learning setting. We implement a novel feature bank with instancewise and classwise prototypes at the feature level. 
+Novel Feature-level Contrastive losses are applied to produce a clear decision boundary in the feature space. Our baseline is 3DIoUMatch with PV-RCNN backbone. 
+Performance of our methods are elucidated in the image below.
+
+![image](https://github.com/deepsthewarrior/OpenPCDet/assets/62742769/dec739f1-a974-4379-8189-ab1b5c3b694d)
+
+
+ This repo is built on top of OpenOCDet.
 
 # OpenPCDet
 
-`OpenPCDet` is a clear, simple, self-contained open source project for LiDAR-based 3D object detection. 
+`OpenPCDet` is a clear, simple, self-contained open-source project for LiDAR-based 3D object detection. 
 
 It is also the official code release of [`[PointRCNN]`](https://arxiv.org/abs/1812.04244), [`[Part-A2-Net]`](https://arxiv.org/abs/1907.03670), [`[PV-RCNN]`](https://arxiv.org/abs/1912.13192), [`[Voxel R-CNN]`](https://arxiv.org/abs/2012.15712) and [`[PV-RCNN++]`](https://arxiv.org/abs/2102.00463). 
 
