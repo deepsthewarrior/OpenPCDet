@@ -316,13 +316,26 @@ class FeatureBank(Metric):
 
     def _get_multi_cont_loss_lb_instances(self,features, labels):
 
+        """
+        Calculates the multi contrastive loss for the labeled instances
+
+        Args:
+        features: (N,256)
+        labels: (N,)
+
+        Returns:
+        {
+                'total_loss': actual loss
+                'classwise_loss': claswise loss for metrics
+                'raw_logits': raw logits for pkl visualization
+                } 
+
+        """
+
         # sort the prototypes according to the labels and filter the prototypes according to the labels
         # sorted_protos,sorted_indices = torch.sort(self.proto_labels)
         # sorted_prototypes = self.prototypes[sorted_indices,:]
 
-        # car_protos = torch.zeros_like(self.prototypes[self.proto_labels == 0])
-        # ped_protos = torch.zeros_like(self.prototypes[self.proto_labels == 1])
-        # cyc_protos = torch.zeros_like(self.prototypes[self.proto_labels == 2])
         labels = labels - 1
 
         assert labels.min() >= 0 and labels.max() <= 2, "labels should be in the range [0, 2]"
@@ -402,7 +415,7 @@ class FeatureBank(Metric):
         feats_sa = feats_sa.view(-1,self.feat_size)
         feats_wa = feats_wa.view(-1,self.feat_size)
         cos_sim_wa = F.normalize(feats_wa) @ F.normalize(self.classwise_prototypes).t()
-        norm_cos_sim_wa = F.softmax(cos_sim_wa / self.tt, dim=-1)
+        norm_cos_sim_wa = F.softmax(cos_sim_wa / self. logitstt, dim=-1)
         cos_sim_sa = F.normalize(feats_sa) @ F.normalize(self.classwise_prototypes).t()
         log_norm_cos_sim_sa = F.log_softmax(cos_sim_sa / self.st, dim=-1)
 

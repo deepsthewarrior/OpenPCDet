@@ -233,10 +233,6 @@ class PVRCNN_SSL(Detector3DTemplate):
         # For metrics calculation
         self.pv_rcnn.roi_head.forward_ret_dict['unlabeled_inds'] = ulb_inds
         
-        # if self.model_cfg['ROI_HEAD'].get('ENABLE_SOFT_TEACHER', False):
-        #     # using teacher to evaluate student's bg/fg proposals through its rcnn head
-        #     with torch.no_grad():
-        #         self._add_teacher_scores(batch_dict, batch_dict_ema, ulb_inds)
 
         disp_dict = {}
         loss_rpn_cls, loss_rpn_box, tb_dict = self.pv_rcnn.dense_head.get_loss(scalar=False)
@@ -387,6 +383,27 @@ class PVRCNN_SSL(Detector3DTemplate):
         return proto_cont_loss.view(B, N)[ulb_inds][ulb_nonzero_mask][valid_filtered_pls].mean()
 
     def _get_instance_contrastive_loss(self,batch_dict,batch_dict_ema,bank,ulb_inds,mean_instance=False,proto_sim=False): #TODO: Deepika: Refactor this function
+        """
+           Contains the implementation of instance level contrastive losses like proto_sim, simmatch, mean_simmatch, mcont, proto_cont
+
+           Credits: 
+
+           Simmatch: https://arxiv.org/abs/2308.06692
+           Protocon: https://arxiv.org/pdf/2303.13556.pdf
+           Mcont: https://arxiv.org/pdf/2303.13556.pdf
+
+           Args: 
+                batch_dict: dict containing  WA GTs
+                batch_dict_ema: dict containing SA GTs
+                bank: feature bank object
+                ulb_inds: unlabeled indices
+                mean_instance: bool, if True, mean instance simmatch loss is calculated
+                proto_sim: bool, if True, proto_sim loss is calculated
+            Returns:
+                instance_cont_loss: instance contrastive loss
+                classwise_loss: dict containing classwise instance contrastive loss for metrics
+            """
+        # prepare batch_dict with gt boxes and teacher features
         batch_dict_wa_gt = {'unlabeled_inds': batch_dict['unlabeled_inds'],
                           'labeled_inds': batch_dict['labeled_inds'],
                           'rois': batch_dict['rois'].data.clone(),
@@ -401,22 +418,25 @@ class PVRCNN_SSL(Detector3DTemplate):
                           'point_cls_scores': batch_dict_ema['point_cls_scores'].data.clone(),
                           
         }
+        # reverse the augmentation --> Strong Augmentation to Weak Augmentation
         batch_dict_wa_gt = self.reverse_augmentation(batch_dict_wa_gt, batch_dict, ulb_inds,key='gt_boxes')
         gt_boxes = batch_dict['gt_boxes']
         B, N = gt_boxes.shape[:2]
         gt_labels = gt_boxes[..., -1].view(B,N).long() - 1
+        # obtain teacher features on the student generated PLs
         with torch.no_grad():
             batch_gt_feats_wa = self.pv_rcnn_ema.roi_head.pool_features(batch_dict_wa_gt, use_gtboxes=True)
             batch_size_rcnn = batch_gt_feats_wa.shape[0]
             shared_features_wa = self.pv_rcnn_ema.roi_head.shared_fc_layer(batch_gt_feats_wa.view(batch_size_rcnn, -1, 1)).squeeze(-1)
             shared_features_wa = shared_features_wa.view(*batch_dict['gt_boxes'].shape[:2], -1)
-
+        # obtain student features on the student generated PLs
         batch_gt_feats_sa = self.pv_rcnn.roi_head.pool_features(batch_dict, use_gtboxes=True)
         batch_size_rcnn = batch_gt_feats_sa.shape[0]
         shared_features_sa = self.pv_rcnn.roi_head.shared_fc_layer(batch_gt_feats_sa.view(batch_size_rcnn, -1, 1)).squeeze(-1)
         shared_features_sa = shared_features_sa.view(*batch_dict['gt_boxes'].shape[:2], -1)
 
-        assert batch_gt_feats_sa.shape[0] == batch_gt_feats_wa.shape[0], "batch_dict  mismatch"
+        assert batch_gt_feats_sa.shape[0] == batch_gt_feats_wa.shape[0], "batch_dict gt features shape mismatch"
+        # proto_sim loss
         if proto_sim == True:
             shared_features_wa_ulb = shared_features_wa[ulb_inds]
             shared_features_sa_ulb = shared_features_sa[ulb_inds]
@@ -441,7 +461,7 @@ class PVRCNN_SSL(Detector3DTemplate):
             Cyc_instance_proto_loss =  (proto_sim_loss_total[:,:,2])[ulb_nonzero_mask]
             classwise_loss = {'Car_Pl':{},'Pedestrian_Pl':{},'Cyclist_Pl':{}}
             for cind,class_name in enumerate(['Car','Pedestrian','Cyclist']):
-                classwise_loss[f'{class_name}_Pl'] = { #TODO: Deepika: Bugfix the weights
+                classwise_loss[f'{class_name}_Pl'] = { 
                         'Car_proto': Car_instance_proto_loss[gt_labels[ulb_inds][ulb_nonzero_mask]==cind].mean().item() * self.model_cfg['ROI_HEAD']['PROTO_SIM_LOSS_WEIGHT'],
                         'Ped_proto': Ped_instance_proto_loss[gt_labels[ulb_inds][ulb_nonzero_mask]==cind].mean().item() * self.model_cfg['ROI_HEAD']['PROTO_SIM_LOSS_WEIGHT'],
                         'Cyc_proto': Cyc_instance_proto_loss[gt_labels[ulb_inds][ulb_nonzero_mask]==cind].mean().item() * self.model_cfg['ROI_HEAD']['PROTO_SIM_LOSS_WEIGHT'],
@@ -456,7 +476,7 @@ class PVRCNN_SSL(Detector3DTemplate):
 
             return proto_loss,classwise_loss
 
-
+        # simmatch loss: https://arxiv.org/abs/2308.06692
         if mean_instance == False:
             instance_cont_tuple = bank.get_simmatch_loss(shared_features_wa,shared_features_sa,ulb_inds) # normal_simmatch_loss
             
@@ -494,6 +514,7 @@ class PVRCNN_SSL(Detector3DTemplate):
                 file_path = os.path.join(output_dir, 'cos_sim.pkl')
                 pickle.dump(self.loss_dict, open(file_path, 'wb'))
             return instance_cont_loss,classwise_loss
+        # mean instance simmatch loss: consistency across classwise prototypes
         else:
             instance_cont_tuple = bank.get_simmatch_mean_loss(shared_features_wa,shared_features_sa,ulb_inds) # mean_simmatch_loss, instead of logits for each instance, classwise logits are used. 
             if instance_cont_tuple is None:
@@ -529,7 +550,7 @@ class PVRCNN_SSL(Detector3DTemplate):
             
             return instance_cont_loss,classwise_loss
 
-    def gather_tensors(self,tensor,labels=False):
+    def gather_tensors(self,tensor):
             """
             Returns the gathered tensor to all GPUs in DDP else returns the tensor as such
             dist.gather_all needs the gathered tensors to be of same size.
@@ -538,7 +559,7 @@ class PVRCNN_SSL(Detector3DTemplate):
 
             Args:
                 tensor: tensor to be gathered
-                labels: bool True if the tensor represents label information TODO:Deepika Remove this arg and make function tensor agnostic 
+                
             """
 
             assert tensor.ndim == 3,"features should be of shape N,1,256"
@@ -558,7 +579,6 @@ class PVRCNN_SSL(Detector3DTemplate):
             print(f'all_sizes {all_sizes}')
             # make zero-padded version https://stackoverflow.com/questions/71433507/pytorch-python-distributed-multiprocessing-gather-concatenate-tensor-arrays-of
             max_length = max([size[0] for size in all_sizes])
-            # print(f'max_length {max_length}')
             
             diff = max_length - local_size[0].item()
             if diff:
@@ -566,9 +586,8 @@ class PVRCNN_SSL(Detector3DTemplate):
                 if local_size.ndim >= 1:
                     pad_size.extend(dimension.item() for dimension in local_size[1:])
                 padding = torch.zeros(pad_size, device=tensor.device, dtype=tensor.dtype)
-                # print(f'size of padding {padding.shape} in device {padding.device}')
                 tensor = torch.cat((tensor,padding),)
-            # print(f'all tensors after padding {tensor.shape} in devce {tensor.device}')
+
             all_tensors_padded = [torch.zeros_like(tensor) for _ in range(WORLD_SIZE)]
 
             dist.barrier()
@@ -576,32 +595,9 @@ class PVRCNN_SSL(Detector3DTemplate):
             dist.barrier()
 
             gathered_tensor = torch.cat(all_tensors_padded)
-            print(f'gathered tensor {gathered_tensor.shape} in devce {gathered_tensor.device}')
             non_zero_mask = torch.any(gathered_tensor!=0,dim=-1).squeeze()
             gathered_tensor = gathered_tensor[non_zero_mask]
             return gathered_tensor
-
-            
-    # def evenly_divisible_all_gather(self,data: torch.Tensor):
-    #     """
-    #     Utility function for distributed data parallel to pad tensor to make it evenly divisible for all_gather.
-    #     Args:
-    #         data: source tensor to pad and execute all_gather in distributed data parallel.
-
-    #     """
-    #     if idist.get_world_size() <= 1:
-    #         return data
-    #     # make sure the data is evenly-divisible on multi-GPUs
-    #     length = data.shape[0]
-    #     all_lens = idist.all_gather(length)
-    #     max_len = max(all_lens).item()
-    #     if length < max_len:
-    #         size = [max_len - length] + list(data.shape[1:])
-    #         data = torch.cat([data, data.new_full(size, float("NaN"))], dim=0)
-    #     # all gather across all processes
-    #     data = idist.all_gather(data)
-    #     # delete the padding NaN items
-    #     return torch.cat([data[i * max_len : i * max_len + l, ...] for i, l in enumerate(all_lens)], dim=0)
 
     @staticmethod
     def _prep_tb_dict(tb_dict, lbl_inds, ulb_inds, reduce_loss_fn):
