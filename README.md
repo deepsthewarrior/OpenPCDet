@@ -1,12 +1,13 @@
 
-This repo deals with the the challenges in Point Clouds for 3D Object Detection in the Semi-Supervised Learning setting. Like  few-shot learning methods, we utilize embedding-level information to construct the decision boundary.  We implement a novel feature bank with instancewise and classwise prototypes at the feature level. 
+This repo deals with the the challenges in Point Clouds for 3D Object Detection in the Semi-Supervised Learning setting. Like  few-shot learning methods, we utilize embedding-level information to construct the decision boundary.  We implement a feature bank with instancewise and classwise prototypes at the feature level. 
 Novel Feature-level Contrastive losses are applied to produce a clear decision boundary in the feature space. Our baseline is 3DIoUMatch with PV-RCNN backbone. 
-Performance of our methods are elucidated in the image below.
+Performance of our methods are elucidated in the image below. Some of our methods tend to improve the performance of the imbalanced classes like Cyclist and Pedestrian. 
 
 ![image](https://github.com/deepsthewarrior/OpenPCDet/assets/62742769/dec739f1-a974-4379-8189-ab1b5c3b694d)
 
 
- This repo is built on top of OpenPCDet.
+
+ This repo is built on top of the OpenPCDet.
 
 # OpenPCDet
 

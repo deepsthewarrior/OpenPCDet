@@ -415,7 +415,7 @@ class FeatureBank(Metric):
         feats_sa = feats_sa.view(-1,self.feat_size)
         feats_wa = feats_wa.view(-1,self.feat_size)
         cos_sim_wa = F.normalize(feats_wa) @ F.normalize(self.classwise_prototypes).t()
-        norm_cos_sim_wa = F.softmax(cos_sim_wa / self. logitstt, dim=-1)
+        norm_cos_sim_wa = F.softmax(cos_sim_wa / self.tt, dim=-1)
         cos_sim_sa = F.normalize(feats_sa) @ F.normalize(self.classwise_prototypes).t()
         log_norm_cos_sim_sa = F.log_softmax(cos_sim_sa / self.st, dim=-1)
 
