@@ -193,7 +193,7 @@ class PVRCNNHead(RoIHeadTemplate):
             bank = feature_bank_registry.get('gt_aug_lbl_prototypes')
             sim_scores = bank.get_sim_scores(projected_features)
             targets_dict['roi_sim_scores'] = sim_scores.view(*roi_scores_shape, -1)
-
+            targets_dict['projected_features'] = projected_features.view(*roi_scores_shape, -1)
         if not self.training or self.predict_boxes_when_training:
             batch_cls_preds, batch_box_preds = self.generate_predicted_boxes(
                 batch_size=batch_dict['batch_size'], rois=batch_dict['rois'], cls_preds=rcnn_cls, box_preds=rcnn_reg
