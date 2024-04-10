@@ -210,7 +210,7 @@ MODEL:
                 'rcnn_reg_weight': 1.0,
                 'rcnn_corner_weight': 1.0,
                 'code_weights': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
-                'protocon_weight': 0.25
+                'mcont_weight': 0.25
             }
             MOMENTUM: 0.9
             FEAT_SIZE: 256

@@ -91,7 +91,7 @@ class PVRCNN(Detector3DTemplate):
         loss_rcnn, tb_dict = self.roi_head.get_loss(tb_dict)
         # protocon_loss = self._get_proto_contrastive_loss(batch_dict, feature_bank_registry.get('gt_aug_lbl_prototypes'))
         mcont_loss_dict = self._get_multi_cont_loss_lb_instances(batch_dict)
-        mcont_loss = mcont_loss_dict['total_loss'] * self.model_cfg.ROI_HEAD.LOSS_CONFIG.LOSS_WEIGHTS.protocon_weight
+        mcont_loss = mcont_loss_dict['total_loss'] * self.model_cfg.ROI_HEAD.LOSS_CONFIG.LOSS_WEIGHTS.mcont_weight
         loss = loss_rpn + loss_point + loss_rcnn + mcont_loss
         tb_dict['mcont_loss'] = mcont_loss
         # if protocon_loss is not None:
