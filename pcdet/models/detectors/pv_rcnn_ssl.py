@@ -7,6 +7,8 @@ from pcdet.datasets.augmentor.augmentor_utils import *
 from pcdet.ops.iou3d_nms import iou3d_nms_utils
 from .detector3d_template import Detector3DTemplate
 from.pv_rcnn import PVRCNN
+from pcdet.utils.prototype_utils import feature_bank_registry
+
 
 def _mean(tensor_list):
     tensor = torch.cat(tensor_list)
@@ -203,6 +205,12 @@ class PVRCNN_SSL(Detector3DTemplate):
 
             for cur_module in self.pv_rcnn.module_list:
                 batch_dict = cur_module(batch_dict)
+            
+            # Update the bank with student's features from augmented labeled data
+            if self.model_cfg['ROI_HEAD'].get('ENABLE_PROTO_CONTRASTIVE_LOSS', False): # Initialize feature bank only if proto_con_loss used
+                bank = feature_bank_registry.get('gt_aug_lbl_prototypes')
+                sa_gt_lbl_inputs = self._prep_bank_inputs(batch_dict, lbl_inds, bank.num_points_thresh)
+                bank.update(**sa_gt_lbl_inputs, iteration=batch_dict['cur_iteration'])
 
             disp_dict = {}
             loss_rpn_cls, loss_rpn_box, tb_dict = self.pv_rcnn.dense_head.get_loss(scalar=False)
