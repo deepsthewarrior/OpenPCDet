@@ -18,7 +18,7 @@ DATA_CONFIG:
               NUM_POINT_FEATURES: 4
               DATABASE_WITH_FAKELIDAR: False
               REMOVE_EXTRA_WIDTH: [0.0, 0.0, 0.0]
-              LIMIT_WHOLE_SCENE: False  # Temporarily enabled to fix KeyError bug in prototyping
+              LIMIT_WHOLE_SCENE: False
 
             - NAME: random_world_flip
               ALONG_AXIS_LIST: ['x']
@@ -160,24 +160,11 @@ MODEL:
         NAME: PVRCNNHead
         CLASS_AGNOSTIC: True
         ENABLE_VIS: False
+        ENABLE_PROTOTYPING: False
         ENABLE_PROTO_CONTRASTIVE_LOSS: False
         PROTO_CONTRASTIVE_LOSS_WEIGHT: 1.0
         ENABLE_SOFT_TEACHER: False
         ENABLE_ULB_CLS_DIST_LOSS: False
-        ENABLE_EVAL: True
-        METRICS_PRED_TYPES: [roi_pl_gt, pl_gt_metrics_before_filtering]
-        ADAPTIVE_THRESH_CONFIG:
-            NAME: AdaMatchThreshold
-            ENABLE: True
-            PERCENT: 0.1
-            MOMENTUM: 0.9
-            PRE_FILTERING_THRESH: 0.1
-            RESET_STATE_INTERVAL: 32
-            ENABLE_PLOTS: True
-            ENABLE_CLIPPING: False
-            GMM_POLICY: high
-            MU1: 0.1
-            MU2: 0.9
         SHARED_FC: [256, 256]
         CLS_FC: [256, 256]
         REG_FC: [256, 256]
@@ -211,7 +198,6 @@ MODEL:
 
             SAMPLE_ROI_BY_EACH_CLASS: True
             CLS_SCORE_TYPE: roi_iou
-            CLS_WEIGHT: 0.35
             CLS_FG_THRESH: 0.75
             CLS_BG_THRESH: 0.25
             UNLABELED_CLS_FG_THRESH: [0.65, 0.45, 0.4]
@@ -238,7 +224,9 @@ MODEL:
                 'rcnn_reg_weight': 1.0,
                 'rcnn_corner_weight': 1.0,
                 'code_weights': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
-                ulb_cls_dist_weight: 0.2
+                'ulb_cls_dist_weight': 10.0,
+                'ulb_fg_mse_loss_weight': 0.01,
+                'unbiased_ce_tau': 2.0,
             }
         
         ROI_AUG:
@@ -267,12 +255,12 @@ MODEL:
             NMS_PRE_MAXSIZE: 4096
             NMS_POST_MAXSIZE: 500
 
-    THRESH: [0.95, 0.85, 0.85]
+    THRESH: [0.5, 0.25, 0.25]  # reliable-student: [0.95, 0.85, 0.85]
     UNLABELED_SUPERVISE_CLS: True
-    UNLABELED_SUPERVISE_OBJ: False
+    UNLABELED_SUPERVISE_OBJ: True
     UNLABELED_SUPERVISE_REFINE: True
     UNLABELED_WEIGHT: 1.0
-    SEM_THRESH: [0.0, 0.0, 0.0]
+    SEM_THRESH: [0.4, 0.4, 0.4]  # reliable-student: [0.0, 0.0, 0.0]
     SUPERVISE_MODE: 0
     NO_NMS: False
     EMA_ALPHA: 0.999
@@ -290,16 +278,35 @@ MODEL:
           MOMENTUM: 0.9
           FILTER_MIN_POINTS_IN_GT: 20
     METRICS_BANK_LIST:
-        - NAME: rcnn_roi_pl_gt_metrics_cls
+        - NAME: rcnn_roi_metrics
+          ENABLE: False
           RESET_STATE_INTERVAL: 32
           BG_THRESH: 0.25
+        - NAME: pl_metrics
+          ENABLE: True
+          RESET_STATE_INTERVAL: 32
+          BG_THRESH: 0.25
+    ADAPTIVE_THRESHOLDING:
+        ENABLE: True
+        THRESH_METHOD: AdaMatch # AdaMatch, FreeMatch, DebiasedPL, LabelMatch
+        JOINT_DIST_ALIGN: True  # LabelMatch: True (Tested)
+        TEMPERATURE: 2.0
+        TEMPERATURE_SA: 2.0
+        # TODO: Experiment: This adjusts the precision/recall trade-off.
+        # TODO: Improve by making it dynamic.
+        FIXED_THRESH: 0.3
+        MOMENTUM: 0.99
+        RESET_STATE_INTERVAL: 16  # LabelMatch: 16, AdaMatch: 4
+        ENABLE_PLOTS: False
 
 OPTIMIZATION:
     BATCH_SIZE_PER_GPU: 1 #2
     EVAL_BATCH_SIZE_PER_GPU: 8
-    NUM_EPOCHS: 60
+    NUM_EPOCHS: 80
 
     OPTIMIZER: adam_onecycle
+    # Compared to baseline LR=0.01, LR=0.001 makes the p_max_model to increase monotonically throughout the training.
+    # Note: 0.1 is for fast debugging purpose.
     LR: 0.01
     WEIGHT_DECAY: 0.01
     MOMENTUM: 0.9

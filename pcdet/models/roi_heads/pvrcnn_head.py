@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 from ...ops.pointnet2.pointnet2_stack import pointnet2_modules as pointnet2_stack_modules
 from ...utils import common_utils
@@ -144,12 +145,14 @@ class PVRCNNHead(RoIHeadTemplate):
             contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxN, C, 6, 6, 6)
 
         return pooled_features
+    
 
     def forward(self, batch_dict, test_only=False):
         """
         :param input_data: input dict
         :return:
         """
+
         nms_config = self.model_cfg.NMS_CONFIG['TRAIN' if self.training and not test_only else 'TEST']
         # proposal_layer doesn't continue if the rois are already in the batch_dict.
         # However, for labeled data proposal layer should continue!
@@ -160,6 +163,10 @@ class PVRCNNHead(RoIHeadTemplate):
             batch_dict['rois'] = targets_dict['rois']
             batch_dict['roi_scores'] = targets_dict['roi_scores']
             batch_dict['roi_labels'] = targets_dict['roi_labels']
+            batch_dict['roi_scores_logits'] = targets_dict['roi_scores_logits']
+            batch_dict['rcnn_cls_labels'] = targets_dict['rcnn_cls_labels']
+            (batch_dict['rcnn_cls_labels'] == -1).any().item() and print('rcnn_cls_labels has -1')
+            batch_dict['gt_iou_of_rois'] = targets_dict['gt_iou_of_rois']
             # Temporarily add infos to targets_dict for metrics
             targets_dict['unlabeled_inds'] = batch_dict['unlabeled_inds']
             targets_dict['ori_unlabeled_boxes'] = batch_dict['ori_unlabeled_boxes']

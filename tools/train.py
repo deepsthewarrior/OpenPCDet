@@ -52,9 +52,9 @@ def parse_config():
     parser.add_argument('--num_epochs_to_eval', type=int, default=0, help='number of checkpoints to be evaluated')
     parser.add_argument('--save_to_file', action='store_true', default=False, help='')
     parser.add_argument('--split', type=str, default='train_0.01_1')
-    parser.add_argument('--repeat', type=int, default=1)
-    parser.add_argument('--thresh', type=str, default='0.95, 0.85, 0.85')
-    parser.add_argument('--sem_thresh', type=str, default='0.0, 0.0, 0.0')
+    parser.add_argument('--repeat', type=int, default=5)
+    parser.add_argument('--thresh', type=str, default='0.5, 0.25, 0.25')
+    parser.add_argument('--sem_thresh', type=str, default='0.4, 0.4, 0.4')
     parser.add_argument('--unlabeled_weight', type=float, default=1.0)
     parser.add_argument('--unlabeled_supervise_cls', action='store_true', default=True)
     parser.add_argument('--unlabeled_supervise_refine', action='store_true', default=True)
@@ -243,16 +243,9 @@ def main():
 
     logger.info('**********************Start evaluation %s/%s(%s)**********************' %
                 (cfg.EXP_GROUP_PATH, cfg.TAG, args.extra_tag))
-
-    test_set, test_loader, sampler = build_dataloader(
-        dataset_cfg=cfg.DATA_CONFIG,
-        class_names=cfg.CLASS_NAMES,
-        batch_size=args.eval_batch_size,
-        dist=dist_train, workers=args.workers, logger=logger, training=False
-    )
     eval_output_dir = output_dir / 'eval' / 'eval_with_train'
     eval_output_dir.mkdir(parents=True, exist_ok=True)
-    args.start_epoch = max(args.epochs - 10, 0)  # Only evaluate the last 10 epochs
+    args.start_epoch = max(args.epochs - args.num_epochs_to_eval, 0)  # Only evaluate the last 10 epochs
 
     repeat_eval_ckpt(
         model.module if dist_train else model,

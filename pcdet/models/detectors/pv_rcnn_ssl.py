@@ -12,28 +12,9 @@ from .pv_rcnn import PVRCNN
 from pcdet.utils import common_utils
 from pcdet.utils.stats_utils import metrics_registry
 from pcdet.utils.prototype_utils import feature_bank_registry
-# from tools.visual_utils import open3d_vis_utils as V
 from collections import defaultdict
-from pcdet.utils.weighting_methods import build_thresholding_method
-
-class DynamicThreshRegistry(object):
-    def __init__(self, **kwargs):
-        self._tag_metrics = {}
-        self.dataset = kwargs.get('dataset', None)
-        self.model_cfg = kwargs.get('model_cfg', None)
-
-    def get(self, tag=None):
-        if tag is None:
-            tag = 'default'
-        if tag in self._tag_metrics.keys():
-            metric = self._tag_metrics[tag]
-        else:
-            metric = build_thresholding_method(tag=tag, dataset=self.dataset, config=self.model_cfg)
-            self._tag_metrics[tag] = metric
-        return metric
-
-    def tags(self):
-        return self._tag_metrics.keys()
+from ssod import AdaptiveThresholding
+#from visual_utils import open3d_vis_utils as V
 
 
 class PVRCNN_SSL(Detector3DTemplate):
@@ -58,12 +39,20 @@ class PVRCNN_SSL(Detector3DTemplate):
         self.unlabeled_weight = model_cfg.UNLABELED_WEIGHT
         self.no_nms = model_cfg.NO_NMS
         self.supervise_mode = model_cfg.SUPERVISE_MODE
-        self.thresh_registry = DynamicThreshRegistry(dataset=self.dataset, model_cfg=model_cfg)
+        try:
+            self.fixed_batch_dict = torch.load("batch_dict.pth")
+        except:
+            self.fixed_batch_dict = None
+        self.thresh_alg = None
+        if self.model_cfg.ADAPTIVE_THRESHOLDING.ENABLE:
+            self.thresh_alg = AdaptiveThresholding(**self.model_cfg.ADAPTIVE_THRESHOLDING)
+
         for bank_configs in model_cfg.get("FEATURE_BANK_LIST", []):
             feature_bank_registry.register(tag=bank_configs["NAME"], **bank_configs)
 
         for metrics_configs in model_cfg.get("METRICS_BANK_LIST", []):
-            metrics_registry.register(tag=metrics_configs["NAME"], dataset=self.dataset, **metrics_configs)
+            if metrics_configs.ENABLE:
+                metrics_registry.register(tag=metrics_configs["NAME"], dataset=self.dataset, **metrics_configs)
 
         vals_to_store = ['iou_roi_pl', 'iou_roi_gt', 'pred_scores', 'teacher_pred_scores',
                          'weights', 'roi_scores', 'pcv_scores', 'num_points_in_roi', 'class_labels', 'iteration']
@@ -96,7 +85,7 @@ class PVRCNN_SSL(Detector3DTemplate):
             sample_mask = batch_dict['points'][:, 0].int() == ix
             points = batch_dict['points'][sample_mask, 1:4]
             gt_feat = batch_gt_feats[ix][nonzero_mask]
-            gt_labels = gt_boxes[:, -1].int() - 1
+            gt_labels = gt_boxes[:, 7].int() - 1
             gt_boxes = gt_boxes[:, :7]
             ins_idxs = batch_dict['instance_idx'][ix][nonzero_mask].int()
             smpl_id = torch.from_numpy(batch_dict['frame_id'].astype(np.int32))[ix].to(gt_boxes.device)
@@ -129,50 +118,30 @@ class PVRCNN_SSL(Detector3DTemplate):
         pred_dicts, recall_dicts = self.pv_rcnn.post_processing(batch_dict)
 
         return pred_dicts, recall_dicts, {}
+    @torch.no_grad()
+    def _gen_pseudo_labels(self, batch_dict_ema):
+        # self.pv_rcnn_ema.eval()  # https://github.com/yezhen17/3DIoUMatch-PVRCNN/issues/6
+        for cur_module in self.pv_rcnn_ema.module_list:
+            try:
+                batch_dict_ema = cur_module(batch_dict_ema, test_only=True)
+            except TypeError as e:
+                batch_dict_ema = cur_module(batch_dict_ema)
 
-    def _rectify_pl_scores(self, batch_dict_ema, unlabeled_inds):
-        thresh_reg = self.thresh_registry.get(tag='pl_adaptive_thresh')
-        pred_wa = torch.sigmoid(batch_dict_ema['batch_cls_preds']).detach().clone()
-        # to be used later for updating the EMA (p_model/p_target)
-        pred_weak_aug_before_nms_org = pred_wa.clone()
-        if thresh_reg.iteration_count > 0:
-            pred_wa_ulb = pred_wa[unlabeled_inds, ...]
-            pred_wa_ulb_aligned = pred_wa_ulb * thresh_reg.ema_pred_wa_lab / (thresh_reg.ema_pred_wa_ulb + 1e-6)
-            pred_wa_ulb_aligned = thresh_reg.normalize_(pred_wa_ulb_aligned)
-            pred_wa[unlabeled_inds, ...] = pred_wa_ulb_aligned
-
-        batch_dict_ema['batch_cls_preds_org'] = pred_weak_aug_before_nms_org
-        batch_dict_ema['batch_cls_preds'] = pred_wa
-        batch_dict_ema['cls_preds_normalized'] = True
-
-    def _gen_pseudo_labels(self, batch_dict_ema, ulb_inds):
-        with torch.no_grad():
-            # self.pv_rcnn_ema.eval()  # https://github.com/yezhen17/3DIoUMatch-PVRCNN/issues/6
-            for cur_module in self.pv_rcnn_ema.module_list:
-                try:
-                    batch_dict_ema = cur_module(batch_dict_ema, test_only=True)
-                except TypeError as e:
-                    batch_dict_ema = cur_module(batch_dict_ema)
-
-        if self.model_cfg.ROI_HEAD.ADAPTIVE_THRESH_CONFIG.get('ENABLE', False):
-            self._rectify_pl_scores(batch_dict_ema, ulb_inds)
-
-        pseudo_labels, _ = self.pv_rcnn_ema.post_processing(batch_dict_ema, no_recall_dict=True)
-
-        return pseudo_labels
 
     @staticmethod
-    def _split_ema_batch(batch_dict):
-        batch_dict_ema = {}
+    def _split_batch(batch_dict, tag='ema'):
+        assert tag in ['ema', 'pre_gt_sample'], f'{tag} not in list [ema, pre_gt_sample]'
+        batch_dict_out = {}
         keys = list(batch_dict.keys())
         for k in keys:
-            if f'{k}_ema' in keys:
+            if f'{k}_{tag}' in keys:
                 continue
-            if k.endswith('_ema'):
-                batch_dict_ema[k[:-4]] = batch_dict[k]
-            else:
-                batch_dict_ema[k] = batch_dict[k]
-        return batch_dict_ema
+            if k.endswith(f'_{tag}'):
+                batch_dict_out[k[:-(len(tag)+1)]] = batch_dict[k]
+                batch_dict.pop(k)
+            if k in ['batch_size']:
+                batch_dict_out[k] = batch_dict[k]
+        return batch_dict_out
 
     @staticmethod
     def _prep_batch_dict(batch_dict):
@@ -184,15 +153,69 @@ class PVRCNN_SSL(Detector3DTemplate):
         batch_dict['ori_unlabeled_boxes'] = batch_dict['gt_boxes'][unlabeled_inds, ...].clone().detach()
         return labeled_inds, unlabeled_inds
 
+    @staticmethod
+    def pad_tensor(tensor_in, max_len=50):
+        assert tensor_in.dim() == 3, "Input tensor should be of shape (N, M, C), input shape is {}".format(tensor_in.shape)
+        diff_ = max_len - tensor_in.shape[1]
+        if diff_>0:
+            tensor_in = torch.cat([tensor_in, torch.zeros((tensor_in.shape[0], diff_, tensor_in.shape[-1]), device=tensor_in.device)], dim=1)
+        return tensor_in
+
+    def _get_thresh_alg_inputs(self, scores, logits):
+        scores_pad = [self.pad_tensor(s.unsqueeze(0).unsqueeze(2), max_len=100) for s in scores]
+        logits_pad = [self.pad_tensor(s.unsqueeze(0), max_len=100) for s in logits]
+        scores_pad = torch.cat(scores_pad).clone().detach()
+        logits_pad = torch.cat(logits_pad).clone().detach()
+
+        return scores_pad, logits_pad
+
+    # This is being used for debugging the loss functions, specially the new ones,
+    # to see if they can be minimized to zero or converged to their lowest expected value or not.
+    def _get_fixed_batch_dict(self):
+        batch_dict_out = {}
+        if self.fixed_batch_dict is None:
+            return
+        for k, v in self.fixed_batch_dict.items():
+            if isinstance(v, torch.Tensor):
+                batch_dict_out[k] = v.clone().detach()
+            else:
+                batch_dict_out[k] = copy.deepcopy(v)
+        return batch_dict_out
+
     def _forward_training(self, batch_dict):
+        # batch_dict = self._get_fixed_batch_dict()
         lbl_inds, ulb_inds = self._prep_batch_dict(batch_dict)
-        batch_dict_ema = self._split_ema_batch(batch_dict)
+        batch_dict_ema = self._split_batch(batch_dict, tag='ema')
 
-        pseudo_labels = self._gen_pseudo_labels(batch_dict_ema, ulb_inds)
+        if self.supervise_mode == 1:
+            pl_boxes, pl_conf_scores, pl_sem_scores, pl_sem_logits, pl_rect_scores, masks = self._get_gt_pls(batch_dict_ema, ulb_inds)
+            pl_cls_count_pre_filter = torch.bincount(batch_dict_ema['gt_boxes'][ulb_inds, :, -1].view(-1).int(), minlength=4)[1:]
+            pl_weights = [scores.new_ones(scores.shape[0], 1) for scores in pl_conf_scores]  # No weights for now
+        else:
+            self._gen_pseudo_labels(batch_dict_ema)
+            pls_teacher_wa, _ = self.pv_rcnn_ema.post_processing(batch_dict_ema, no_recall_dict=True)
+            ulb_pred_labels = torch.cat([pl['pred_labels'] for pl in pls_teacher_wa]).int().detach()
+            pl_cls_count_pre_filter = torch.bincount(ulb_pred_labels, minlength=4)[1:]
+            (pl_boxes, pl_conf_scores, pl_sem_scores, pl_sem_logits,
+             pl_rect_scores, masks, pl_weights) = self._filter_pls(pls_teacher_wa, batch_dict_ema, ulb_inds)
+            pl_weights = [scores.new_ones(scores.shape[0], 1) for scores in pl_conf_scores]  # No weights for now
 
-        pseudo_boxes, pseudo_scores, pseudo_sem_scores = self._filter_pseudo_labels(pseudo_labels, ulb_inds)
+            if self.thresh_alg is not None:
+                self._update_thresh_alg(pl_conf_scores, pl_sem_logits, pl_rect_scores, batch_dict_ema, pls_teacher_wa, lbl_inds)
 
-        self._fill_with_pseudo_labels(batch_dict, pseudo_boxes, ulb_inds, lbl_inds)
+        if 'pl_metrics' in metrics_registry.tags():
+            self._update_pl_metrics(pl_boxes, pl_rect_scores, pl_weights, masks, batch_dict_ema['gt_boxes'][ulb_inds])
+
+        # TODO(farzad): Check if commenting the following line and apply_augmentation is equal to a fully supervised setting
+        self._fill_with_pls(batch_dict, pl_boxes, masks, ulb_inds, lbl_inds)
+
+        pl_cls_count_post_filter = torch.bincount(batch_dict['gt_boxes'][ulb_inds][...,7].view(-1).int().detach(), minlength=4)[1:]
+        gt_cls_count = torch.bincount(batch_dict['ori_unlabeled_boxes'][...,-1].view(-1).int().detach(), minlength=4)[1:]
+
+        pl_count_dict = {'avg_num_gts_per_sample': self._arr2dict(gt_cls_count / len(ulb_inds)),  # backward compatibility. Added to stats_utils. Will be removed later.
+                         'avg_num_pls_pre_filter_per_sample': self._arr2dict(pl_cls_count_pre_filter / len(ulb_inds)),
+                         # backward compatibility. Added to stats_utils. Will be removed later.
+                         'avg_num_pls_post_filter_per_sample': self._arr2dict(pl_cls_count_post_filter / len(ulb_inds))}
 
         # apply student's augs on teacher's pseudo-labels (filtered) only (not points)
         batch_dict = self.apply_augmentation(batch_dict, batch_dict, ulb_inds, key='gt_boxes')
@@ -200,21 +223,8 @@ class PVRCNN_SSL(Detector3DTemplate):
         for cur_module in self.pv_rcnn.module_list:
             batch_dict = cur_module(batch_dict)
 
-        if self.model_cfg.ROI_HEAD.ADAPTIVE_THRESH_CONFIG.get('ENABLE', False):
-            pred_strong_aug_before_nms_org = torch.sigmoid(batch_dict['batch_cls_preds']).detach().clone()
-            pred_dicts_std, recall_dicts_std = self.pv_rcnn_ema.post_processing(batch_dict, no_recall_dict=True)
-
-            metrics_input = defaultdict(list)
-            for ind in range(len(pred_dicts_std)):
-                batch_type = 'unlab' if ind in ulb_inds else 'lab'
-                metrics_input[f'pred_weak_aug_{batch_type}_before_nms'].append(batch_dict_ema['batch_cls_preds_org'][ind])
-                metrics_input[f'pred_weak_aug_{batch_type}_after_nms'].append(pseudo_labels[ind]['pred_scores'].clone().detach())
-                metrics_input[f'pred_strong_aug_{batch_type}_before_nms'].append(pred_strong_aug_before_nms_org[ind])
-                metrics_input[f'pred_strong_aug_{batch_type}_after_nms'].append(pred_dicts_std[ind]['pred_scores'].clone().detach())
-            self.thresh_registry.get(tag='pl_adaptive_thresh').update(**metrics_input)
-
-        # Update the bank with student's features from augmented labeled data
-        if self.model_cfg['ROI_HEAD'].get('ENABLE_PROTO_CONTRASTIVE_LOSS', False): # Initialize feature bank only if proto_con_loss used
+        if self.model_cfg['ROI_HEAD'].get('ENABLE_PROTOTYPING', False):
+            # Update the bank with student's features from augmented labeled data
             bank = feature_bank_registry.get('gt_aug_lbl_prototypes')
             sa_gt_lbl_inputs = self._prep_bank_inputs(batch_dict, lbl_inds, bank.num_points_thresh)
             bank.update(**sa_gt_lbl_inputs, iteration=batch_dict['cur_iteration'])
@@ -228,9 +238,9 @@ class PVRCNN_SSL(Detector3DTemplate):
                 self._add_teacher_scores(batch_dict, batch_dict_ema, ulb_inds)
 
         disp_dict = {}
-        loss_rpn_cls, loss_rpn_box, tb_dict = self.pv_rcnn.dense_head.get_loss(scalar=False)
-        loss_point, tb_dict = self.pv_rcnn.point_head.get_loss(tb_dict, scalar=False)
-        loss_rcnn_cls, loss_rcnn_box, ulb_loss_cls_dist, tb_dict = self.pv_rcnn.roi_head.get_loss(tb_dict, scalar=False)
+        loss_rpn_cls, loss_rpn_box, tb_dict = self.pv_rcnn.dense_head.get_loss()
+        loss_point, tb_dict = self.pv_rcnn.point_head.get_loss(tb_dict)
+        loss_rcnn_cls, loss_rcnn_box, tb_dict = self.pv_rcnn.roi_head.get_loss(tb_dict)
 
         loss = 0
         # Use the same reduction method as the baseline model (3diou) by the default
@@ -247,8 +257,6 @@ class PVRCNN_SSL(Detector3DTemplate):
             loss += reduce_loss_fn(loss_rcnn_cls[ulb_inds, ...]) * self.unlabeled_weight
         if self.unlabeled_supervise_refine:
             loss += reduce_loss_fn(loss_rcnn_box[ulb_inds, ...]) * self.unlabeled_weight
-        if self.model_cfg['ROI_HEAD'].get('ENABLE_ULB_CLS_DIST_LOSS', False):
-            loss += ulb_loss_cls_dist
         if self.model_cfg['ROI_HEAD'].get('ENABLE_PROTO_CONTRASTIVE_LOSS', False):
             proto_cont_loss = self._get_proto_contrastive_loss(batch_dict, bank, ulb_inds)
             if proto_cont_loss is not None:
@@ -256,20 +264,24 @@ class PVRCNN_SSL(Detector3DTemplate):
                 tb_dict['proto_cont_loss'] = proto_cont_loss.item()
 
         tb_dict_ = self._prep_tb_dict(tb_dict, lbl_inds, ulb_inds, reduce_loss_fn)
+        tb_dict_.update(**pl_count_dict)
+
+        if self.model_cfg['ROI_HEAD'].get('ENABLE_ULB_CLS_DIST_LOSS', False):
+            roi_head_forward_dict = self.pv_rcnn.roi_head.forward_ret_dict
+            ulb_loss_cls_dist, cls_dist_dict = self.pv_rcnn.roi_head.get_ulb_cls_dist_loss(roi_head_forward_dict)
+            loss += ulb_loss_cls_dist
+            tb_dict_.update(cls_dist_dict)
 
         if self.model_cfg.get('STORE_SCORES_IN_PKL', False):
             self.dump_statistics(batch_dict, ulb_inds)
 
-
-        if self.model_cfg['ROI_HEAD'].get('ENABLE_PROTO_CONTRASTIVE_LOSS', False):
+        if self.model_cfg['ROI_HEAD'].get('ENABLE_PROTOTYPING', False):
             for tag in feature_bank_registry.tags():
                 feature_bank_registry.get(tag).compute()
 
-        # update dynamic thresh results
-        for tag in self.thresh_registry.tags():
-            if results := self.thresh_registry.get(tag).compute():
-                tag = f"{tag}/" if tag else ''
-                tb_dict_.update({tag + key: val for key, val in results.items()})
+        # update dynamic thresh alg
+        if self.thresh_alg is not None and (results := self.thresh_alg.compute()):
+            tb_dict_.update(results)
 
         for tag in metrics_registry.tags():
             results = metrics_registry.get(tag).compute()
@@ -281,11 +293,82 @@ class PVRCNN_SSL(Detector3DTemplate):
         }
         return ret_dict, tb_dict_, disp_dict
 
+    def get_max_iou(self, anchors, gt_boxes, gt_classes, matched_threshold=0.6):
+        num_anchors = anchors.shape[0]
+        num_gts = gt_boxes.shape[0]
+
+        ious = torch.zeros((num_anchors,), dtype=torch.float, device=anchors.device)
+        labels = torch.ones((num_anchors,), dtype=torch.int64, device=anchors.device) * -1
+        gt_to_anchor_max = torch.zeros((num_gts,), dtype=torch.float, device=anchors.device)
+
+        if len(gt_boxes) > 0 and anchors.shape[0] > 0:
+            anchor_by_gt_overlap = iou3d_nms_utils.boxes_iou3d_gpu(anchors[:, 0:7], gt_boxes[:, 0:7])
+            gt_to_anchor_max = anchor_by_gt_overlap.max(dim=0)[0]
+            anchor_to_gt_argmax = anchor_by_gt_overlap.argmax(dim=1)
+            anchor_to_gt_max = anchor_by_gt_overlap[
+                torch.arange(num_anchors, device=anchors.device), anchor_to_gt_argmax]
+
+            pos_inds = anchor_to_gt_max >= matched_threshold
+            gt_inds_over_thresh = anchor_to_gt_argmax[pos_inds]
+            labels[pos_inds] = gt_classes[gt_inds_over_thresh]
+            ious[:len(anchor_to_gt_max)] = anchor_to_gt_max
+
+        return ious, labels, gt_to_anchor_max
+
+    def _get_gt_pls(self, batch_dict, ulb_inds):
+        pl_boxes = []
+        pl_rect_scores = []
+        pl_weights = []
+        masks = []
+        pl_sem_logits = []
+        pl_conf_scores = []
+        pl_sem_scores = []
+        for i in ulb_inds:
+            pboxes = batch_dict['gt_boxes'][i]
+            pboxes = pboxes[pboxes[:, -1] != 0]
+            pl_boxes.append(pboxes)
+            sem_scores = torch.zeros((pboxes.shape[0], 3), device=pboxes.device).scatter_(1, pboxes[:, -1].long().view(-1, 1) - 1, 1)
+            sem_logits = torch.zeros((pboxes.shape[0], 3), device=pboxes.device).scatter_(1, pboxes[:, -1].long().view(-1, 1) - 1, 1)
+            pl_sem_logits.append(sem_logits)
+            pl_rect_scores.append(sem_scores)
+            pl_weights.append(torch.ones((pboxes.shape[0], 1), device=pboxes.device))
+            pl_conf_scores.append(torch.zeros((pboxes.shape[0], 1), device=pboxes.device))
+            pl_sem_scores.append(torch.zeros((pboxes.shape[0], 1), device=pboxes.device))
+            masks.append(torch.ones((pboxes.shape[0],), dtype=torch.bool, device=pboxes.device))
+        return pl_boxes, pl_conf_scores, pl_sem_scores, pl_sem_logits, pl_rect_scores, masks
+
+    def _calc_true_ious(self, pls: [torch.Tensor], batch_gts: torch.Tensor):
+        batch_ious = []
+        for batch_idx, sample_pls in enumerate(pls):
+            ious = torch.zeros((sample_pls.shape[0],), dtype=torch.float, device=sample_pls.device)
+            gts = batch_gts[batch_idx]
+            mask_gt = torch.logical_not(torch.all(gts == 0, dim=-1))
+            mask_pl = torch.logical_not(torch.all(sample_pls == 0, dim=-1))
+
+            valid_gts = gts[mask_gt]
+            valid_pls = sample_pls[mask_pl]
+
+            if len(valid_gts) > 0 and len(valid_pls) > 0:
+                valid_gts_labels = valid_gts[:, -1].long() - 1
+                valid_pls_labels = valid_pls[:, -1].long() - 1
+                matched_threshold = torch.tensor(np.array([0.7, 0.5, 0.5]), dtype=torch.float, device=valid_pls_labels.device)[valid_pls_labels]
+                valid_pls_iou_wrt_gt, assigned_label, gt_to_pls_max_iou = self.get_max_iou(valid_pls[:, 0:7],
+                                                                                           valid_gts[:, 0:7],
+                                                                                           valid_gts_labels,
+                                                                                           matched_threshold=matched_threshold)
+                ious[mask_pl] = valid_pls_iou_wrt_gt
+            batch_ious.append(ious)
+
+        return batch_ious
+
+    def _arr2dict(self, array):
+        return {cls: array[cind] for cind, cls in enumerate(self.class_names)}
+
     def _get_proto_contrastive_loss(self, batch_dict, bank, ulb_inds):
         gt_boxes = batch_dict['gt_boxes']
         B, N = gt_boxes.shape[:2]
         sa_pl_feats = self.pv_rcnn.roi_head.pool_features(batch_dict, use_gtboxes=True).view(B * N, -1)
-        pl_labels = batch_dict['gt_boxes'][..., -1].view(-1).long() - 1
+        pl_labels = batch_dict['gt_boxes'][..., 7].view(-1).long() - 1
         proto_cont_loss = bank.get_proto_contrastive_loss(sa_pl_feats, pl_labels)
         if proto_cont_loss is None:
             return
@@ -354,183 +437,103 @@ class PVRCNN_SSL(Detector3DTemplate):
         box_labels = box_labels.cpu().numpy()
         V.draw_scenes(points=points, gt_boxes=boxes, gt_labels=box_labels)
 
-    def dump_statistics(self, batch_dict, unlabeled_inds):
-        # Store different types of scores over all itrs and epochs and dump them in a pickle for offline modeling
-        # TODO (shashank) : Can be optimized later to save computational time, currently takes about 0.002sec
-        batch_roi_labels = self.pv_rcnn.roi_head.forward_ret_dict['roi_labels'][unlabeled_inds]
-        batch_roi_labels = [roi_labels.clone().detach() for roi_labels in batch_roi_labels]
+    def _update_thresh_alg(self, pl_conf_scores, pl_sem_logits, pl_rect_scores, batch_dict_ema, pls_teacher_wa, lbl_inds):
+        thresh_inputs = dict()
+        pl_scores_lbl = [pls_teacher_wa[i]['pred_scores'] for i in lbl_inds]
+        pl_sem_logits_lbl = [pls_teacher_wa[i]['pred_sem_logits'] for i in lbl_inds]
+        conf_scores_wa_lbl, sem_scores_wa_lbl = self._get_thresh_alg_inputs(pl_scores_lbl, pl_sem_logits_lbl)
+        conf_scores_wa_ulb, sem_scores_wa_ulb = self._get_thresh_alg_inputs(pl_conf_scores, pl_sem_logits)
+        thresh_inputs['conf_scores_wa'] = torch.cat([conf_scores_wa_lbl, conf_scores_wa_ulb])
+        thresh_inputs['sem_scores_wa'] = torch.cat([sem_scores_wa_lbl, sem_scores_wa_ulb])
+        thresh_inputs['gt_labels_wa'] = self.pad_tensor(batch_dict_ema['gt_boxes'][..., 7:8], max_len=100).detach().clone()
+        thresh_inputs['gts_wa'] = self.pad_tensor(batch_dict_ema['gt_boxes'], max_len=100).detach().clone()
+        pls_ws = [torch.cat([pl['pred_boxes'], pl['pred_labels'].view(-1, 1)], dim=-1) for pl in pls_teacher_wa]
+        thresh_inputs['pls_wa'] = torch.cat([self.pad_tensor(pl.unsqueeze(0), max_len=100) for pl in pls_ws]).detach().clone()
+        # TODO: Note that the following sem_scores rect are not filtered (since adamatch is dependent on them)
+        ulb_rect_scores = torch.cat([self.pad_tensor(scores.unsqueeze(0), max_len=100) for scores in pl_rect_scores]).detach().clone()
+        lb_rect_scores = torch.ones_like(ulb_rect_scores)
+        thresh_inputs['scores_rect'] = torch.cat([lb_rect_scores, ulb_rect_scores])
+        self.thresh_alg.update(**thresh_inputs)
 
-        batch_rois = self.pv_rcnn.roi_head.forward_ret_dict['rois'][unlabeled_inds]
-        batch_rois = [rois.clone().detach() for rois in batch_rois]
+    @staticmethod
+    def _update_pl_metrics(pl_boxes, pl_scores, pl_weights, masks, gts):
+        metrics_input = dict()
+        metrics_input['rois'] = [pbox[mask] for pbox, mask in zip(pl_boxes, masks)]
+        metrics_input['roi_scores'] = [score[mask] for score, mask in zip(pl_scores, masks)]
+        metrics_input['ground_truths'] = [gtb for gtb in gts]
+        metrics_input['roi_weights'] = [weight[mask] for weight, mask in zip(pl_weights, masks)]
+        metrics_registry.get('pl_metrics').update(**metrics_input)
 
-        batch_ori_gt_boxes = self.pv_rcnn.roi_head.forward_ret_dict['ori_unlabeled_boxes']
-        batch_ori_gt_boxes = [ori_gt_boxes.clone().detach() for ori_gt_boxes in batch_ori_gt_boxes]
+    def _filter_pls(self, pls_dict, batch_dict_ema, ulb_inds):
+        pl_boxes = []
+        pl_scores = []
+        pl_sem_scores = []
+        pl_sem_logits = []
+        pl_rect_scores = []
+        pl_weights = []
+        masks = []
 
-        for i in range(len(batch_rois)):
-            valid_rois_mask = torch.logical_not(torch.all(batch_rois[i] == 0, dim=-1))
-            valid_rois = batch_rois[i][valid_rois_mask]
-            valid_roi_labels = batch_roi_labels[i][valid_rois_mask]
-            valid_roi_labels -= 1  # Starting class indices from zero
+        def _fill_with_zeros():
+            pl_boxes.append(labels.new_zeros((1, 8)).float())
+            pl_scores.append(labels.new_zeros((1,)).float())
+            pl_sem_scores.append(labels.new_zeros((1,)).float())
+            pl_sem_logits.append(labels.new_zeros((1, 3)).float())
+            pl_rect_scores.append(labels.new_zeros((1, 3)).float())
+            pl_weights.append(labels.new_ones((1,)))
+            masks.append(labels.new_ones((1,), dtype=torch.bool))
 
-            valid_gt_boxes_mask = torch.logical_not(torch.all(batch_ori_gt_boxes[i] == 0, dim=-1))
-            valid_gt_boxes = batch_ori_gt_boxes[i][valid_gt_boxes_mask]
-            valid_gt_boxes[:, -1] -= 1  # Starting class indices from zero
+        for ind in ulb_inds:
+            # scores = pls_dict[ind]['pred_scores']  # Using gt scores for now
+            boxs = pls_dict[ind]['pred_boxes']
+            labels = pls_dict[ind]['pred_labels']
+            sem_scores = pls_dict[ind]['pred_sem_scores']
+            sem_logits = pls_dict[ind]['pred_sem_logits']
 
-            num_gts = valid_gt_boxes_mask.sum()
-            num_preds = valid_rois_mask.sum()
-
-            cur_unlabeled_ind = unlabeled_inds[i]
-            if num_gts > 0 and num_preds > 0:
-                # Find IoU between Student's ROI v/s Original GTs
-                overlap = iou3d_nms_utils.boxes_iou3d_gpu(valid_rois[:, 0:7], valid_gt_boxes[:, 0:7])
-                preds_iou_max, assigned_gt_inds = overlap.max(dim=1)
-                self.val_dict['iou_roi_gt'].extend(preds_iou_max.tolist())
-
-                cur_iou_roi_pl = self.pv_rcnn.roi_head.forward_ret_dict['gt_iou_of_rois'][cur_unlabeled_ind]
-                self.val_dict['iou_roi_pl'].extend(cur_iou_roi_pl.tolist())
-
-                cur_pred_score = torch.sigmoid(batch_dict['batch_cls_preds'][cur_unlabeled_ind]).squeeze()
-                self.val_dict['pred_scores'].extend(cur_pred_score.tolist())
-
-                if 'rcnn_cls_score_teacher' in self.pv_rcnn.roi_head.forward_ret_dict:
-                    cur_teacher_pred_score = self.pv_rcnn.roi_head.forward_ret_dict['rcnn_cls_score_teacher'][
-                        cur_unlabeled_ind]
-                    self.val_dict['teacher_pred_scores'].extend(cur_teacher_pred_score.tolist())
-
-                    cur_weight = self.pv_rcnn.roi_head.forward_ret_dict['rcnn_cls_weights'][cur_unlabeled_ind]
-                    self.val_dict['weights'].extend(cur_weight.tolist())
-
-                cur_roi_score = torch.sigmoid(self.pv_rcnn.roi_head.forward_ret_dict['roi_scores'][cur_unlabeled_ind])
-                self.val_dict['roi_scores'].extend(cur_roi_score.tolist())
-
-                cur_pcv_score = self.pv_rcnn.roi_head.forward_ret_dict['pcv_scores'][cur_unlabeled_ind]
-                self.val_dict['pcv_scores'].extend(cur_pcv_score.tolist())
-
-                cur_num_points_roi = self.pv_rcnn.roi_head.forward_ret_dict['num_points_in_roi'][cur_unlabeled_ind]
-                self.val_dict['num_points_in_roi'].extend(cur_num_points_roi.tolist())
-
-                cur_roi_label = self.pv_rcnn.roi_head.forward_ret_dict['roi_labels'][cur_unlabeled_ind].squeeze()
-                self.val_dict['class_labels'].extend(cur_roi_label.tolist())
-
-                cur_iteration = torch.ones_like(preds_iou_max) * (batch_dict['cur_iteration'])
-                self.val_dict['iteration'].extend(cur_iteration.tolist())
-
-        # replace old pickle data (if exists) with updated one
-        output_dir = os.path.split(os.path.abspath(batch_dict['ckpt_save_dir']))[0]
-        file_path = os.path.join(output_dir, 'scores.pkl')
-        pickle.dump(self.val_dict, open(file_path, 'wb'))
-
-    # def update_metrics(self, input_dict, pred_dict, unlabeled_inds, labeled_inds):
-    #     """
-    #     Recording PL vs GT statistics BEFORE filtering
-    #     """
-    #     if 'pl_gt_metrics_before_filtering' in self.model_cfg.ROI_HEAD.METRICS_PRED_TYPES:
-    #         pseudo_boxes, pseudo_labels, pseudo_scores, pseudo_sem_scores, _, _ = self._unpack_predictions(
-    #             pred_dict, unlabeled_inds)
-    #         pseudo_boxes = [torch.cat([pseudo_box, pseudo_label.view(-1, 1).float()], dim=1) \
-    #                         for (pseudo_box, pseudo_label) in zip(pseudo_boxes, pseudo_labels)]
-    #
-    #         # Making consistent # of pseudo boxes in each batch
-    #         # NOTE: Need to store them in batch_dict in a new key, which can be removed later
-    #         input_dict['pseudo_boxes_prefilter'] = torch.zeros_like(input_dict['gt_boxes'])
-    #         self._fill_with_pseudo_labels(input_dict, pseudo_boxes, unlabeled_inds, labeled_inds,
-    #                                       key='pseudo_boxes_prefilter')
-    #
-    #         # apply student's augs on teacher's pseudo-boxes (w/o filtered)
-    #         batch_dict = self.apply_augmentation(input_dict, input_dict, unlabeled_inds, key='pseudo_boxes_prefilter')
-    #
-    #         tag = f'pl_gt_metrics_before_filtering'
-    #         metrics = metrics_registry.get(tag)
-    #
-    #         preds_prefilter = [batch_dict['pseudo_boxes_prefilter'][uind] for uind in unlabeled_inds]
-    #         gts_prefilter = [batch_dict['gt_boxes'][uind] for uind in unlabeled_inds]
-    #         metric_inputs = {'preds': preds_prefilter, 'pred_scores': pseudo_scores, 'roi_scores': pseudo_sem_scores,
-    #                          'ground_truths': gts_prefilter}
-    #         metrics.update(**metric_inputs)
-    #         batch_dict.pop('pseudo_boxes_prefilter')
-
-    # TODO(farzad) refactor and remove this!
-    def _unpack_predictions(self, pred_dicts, unlabeled_inds):
-        pseudo_boxes = []
-        pseudo_scores = []
-        pseudo_sem_scores = []
-        pseudo_labels = []
-        pseudo_boxes_var = []
-        pseudo_scores_var = []
-        for ind in unlabeled_inds:
-            pseudo_score = pred_dicts[ind]['pred_scores']
-            pseudo_box = pred_dicts[ind]['pred_boxes']
-            pseudo_label = pred_dicts[ind]['pred_labels']
-            pseudo_sem_score = pred_dicts[ind]['pred_sem_scores']
-            # TODO(farzad) REFACTOR LATER!
-            pseudo_box_var = -1 * torch.ones_like(pseudo_box)
-            if "pred_boxes_var" in pred_dicts[ind].keys():
-                pseudo_box_var = pred_dicts[ind]['pred_boxes_var']
-            pseudo_score_var = -1 * torch.ones_like(pseudo_score)
-            if "pred_scores_var" in pred_dicts[ind].keys():
-                pseudo_score_var = pred_dicts[ind]['pred_scores_var']
-            if len(pseudo_label) == 0:
-                pseudo_boxes.append(pseudo_label.new_zeros((1, 7)).float())
-                pseudo_boxes_var.append(pseudo_label.new_zeros((1, 7)).float())
-                pseudo_sem_scores.append(pseudo_label.new_zeros((1,)).float())
-                pseudo_scores.append(pseudo_label.new_zeros((1,)).float())
-                pseudo_scores_var.append(pseudo_label.new_zeros((1,)).float())
-                pseudo_labels.append(pseudo_label.new_zeros((1,)).float())
+            if len(labels) == 0:
+                _fill_with_zeros()
                 continue
+            else:
+                if self.thresh_alg:
+                    # Uncomment the following two lines to use the true ious as conf scores for the adaptive thresholding
+                    pl_bboxes = torch.cat([boxs, labels.view(-1, 1).float()], dim=1)
+                    scores = self._calc_true_ious([pl_bboxes], [batch_dict_ema['gt_boxes'][ind]])[0]
+                    mask, rect_scores, weights = self.thresh_alg.get_mask(scores, sem_logits)
+                else:  # 3dioumatch baseline
+                    conf_thresh = torch.tensor(self.thresh, device=labels.device).expand_as(
+                        sem_logits).gather(dim=1, index=(labels - 1).unsqueeze(-1)).squeeze()
+                    sem_thresh = torch.tensor(self.sem_thresh, device=labels.device).unsqueeze(0).expand_as(
+                        sem_logits).gather(dim=1, index=(labels - 1).unsqueeze(-1)).squeeze()
+                    mask_conf = scores > conf_thresh
+                    mask_sem = sem_scores > sem_thresh
+                    mask = mask_conf & mask_sem
+                    rect_scores = torch.sigmoid(sem_logits)  # in the baseline we don't rectify the scores
+                    weights = torch.ones_like(scores)
+                if mask.sum() == 0:
+                    _fill_with_zeros()
+                    continue
 
-            pseudo_boxes.append(pseudo_box)
-            pseudo_boxes_var.append(pseudo_box_var)
-            pseudo_sem_scores.append(pseudo_sem_score)
-            pseudo_scores.append(pseudo_score)
-            pseudo_scores_var.append(pseudo_score_var)
-            pseudo_labels.append(pseudo_label)
+                pl_boxes.append(torch.cat([boxs, labels.view(-1, 1).float()], dim=1))
+                pl_scores.append(scores)
+                pl_sem_scores.append(sem_scores)
+                pl_sem_logits.append(sem_logits)
+                pl_rect_scores.append(rect_scores)
+                pl_weights.append(weights)
+                masks.append(mask)
 
-        return pseudo_boxes, pseudo_labels, pseudo_scores, pseudo_sem_scores, pseudo_boxes_var, pseudo_scores_var
+        return pl_boxes, pl_scores, pl_sem_scores, pl_sem_logits, pl_rect_scores, masks, pl_weights
 
-    # TODO(farzad) refactor and remove this!
-    def _filter_pseudo_labels(self, pred_dicts, unlabeled_inds):
-        pseudo_boxes = []
-        pseudo_scores = []
-        pseudo_sem_scores = []
-        for pseudo_box, pseudo_label, pseudo_score, pseudo_sem_score, pseudo_box_var, pseudo_score_var in zip(
-                *self._unpack_predictions(pred_dicts, unlabeled_inds)):
-
-            if pseudo_label[0] == 0:
-                pseudo_boxes.append(torch.cat([pseudo_box, pseudo_label.view(-1, 1).float()], dim=1))
-                pseudo_sem_scores.append(pseudo_sem_score)
-                pseudo_scores.append(pseudo_score)
-                continue
-
-            pl_thresh = self.thresh
-            if self.model_cfg.ROI_HEAD.ADAPTIVE_THRESH_CONFIG.get('ENABLE', False):
-                thresh_reg = self.thresh_registry.get(tag='pl_adaptive_thresh')
-                if thresh_reg.relative_ema_threshold is not None:
-                   pl_thresh = [thresh_reg.relative_ema_threshold.item()] * len(self.thresh)
-
-            conf_thresh = torch.tensor(pl_thresh, device=pseudo_label.device).unsqueeze(
-                0).repeat(len(pseudo_label), 1).gather(dim=1, index=(pseudo_label - 1).unsqueeze(-1))
-
-            sem_conf_thresh = torch.tensor(self.sem_thresh, device=pseudo_label.device).unsqueeze(
-                0).repeat(len(pseudo_label), 1).gather(dim=1, index=(pseudo_label - 1).unsqueeze(-1))
-
-            valid_inds = pseudo_score > conf_thresh.squeeze()
-
-            valid_inds = valid_inds & (pseudo_sem_score > sem_conf_thresh.squeeze())
-
-            pseudo_sem_score = pseudo_sem_score[valid_inds]
-            pseudo_box = pseudo_box[valid_inds]
-            pseudo_label = pseudo_label[valid_inds]
-            pseudo_score = pseudo_score[valid_inds]
-
-            pseudo_boxes.append(torch.cat([pseudo_box, pseudo_label.view(-1, 1).float()], dim=1))
-            pseudo_sem_scores.append(pseudo_sem_score)
-            pseudo_scores.append(pseudo_score)
-
-        return pseudo_boxes, pseudo_scores, pseudo_sem_scores
-
-    def _fill_with_pseudo_labels(self, batch_dict, pseudo_boxes, unlabeled_inds, labeled_inds, key=None):
+    @staticmethod
+    def _fill_with_pls(batch_dict, pseudo_boxes, masks, ulb_inds, lb_inds, key=None):
         key = 'gt_boxes' if key is None else key
-        max_box_num = batch_dict['gt_boxes'].shape[1]
+        max_box_num = batch_dict[key].shape[1]
+        pseudo_boxes = [pboxes[mask] for pboxes, mask in zip(pseudo_boxes, masks)]
+
+        # # Expand the gt_boxes to have the same shape as the pseudo_boxes
+        # gt_scores = torch.zeros((batch_dict['gt_boxes'].shape[0], max_box_num, 1), device=batch_dict['gt_boxes'].device)
+        # batch_dict['gt_boxes'] = torch.cat([batch_dict['gt_boxes'], gt_scores], dim=-1)
+        # # Make sure that scores of labeled boxes are always 1, except for the padding rows which should remain zero.
+        # valid_inds_lbl = torch.logical_not(torch.eq(batch_dict['gt_boxes'][labeled_inds], 0).all(dim=-1)).nonzero().long()
+        # batch_dict['gt_boxes'][valid_inds_lbl[:, 0], valid_inds_lbl[:, 1], 8] = 1
 
         # Ignore the count of pseudo boxes if filled with default values(zeros) when no preds are made
         max_pseudo_box_num = max(
@@ -540,25 +543,24 @@ class PVRCNN_SSL(Detector3DTemplate):
             for i, pseudo_box in enumerate(pseudo_boxes):
                 diff = max_box_num - pseudo_box.shape[0]
                 if diff > 0:
-                    pseudo_box = torch.cat([pseudo_box, torch.zeros((diff, 8), device=pseudo_box.device)], dim=0)
-                batch_dict[key][unlabeled_inds[i]] = pseudo_box
+                    pseudo_box = torch.cat([pseudo_box, torch.zeros((diff, pseudo_box.shape[-1]), device=pseudo_box.device)], dim=0)
+                batch_dict[key][ulb_inds[i]] = pseudo_box
         else:
             ori_boxes = batch_dict['gt_boxes']
             ori_ins_ids = batch_dict['instance_idx']
-            new_boxes = torch.zeros((ori_boxes.shape[0], max_pseudo_box_num, ori_boxes.shape[2]),
-                                    device=ori_boxes.device)
+            new_boxes = torch.zeros((ori_boxes.shape[0], max_pseudo_box_num, ori_boxes.shape[-1]), device=ori_boxes.device)
             new_ins_idx = torch.full((ori_boxes.shape[0], max_pseudo_box_num), fill_value=-1, device=ori_boxes.device)
-            for idx in labeled_inds:
+            for idx in lb_inds:
                 diff = max_pseudo_box_num - ori_boxes[idx].shape[0]
-                new_box = torch.cat([ori_boxes[idx], torch.zeros((diff, 8), device=ori_boxes[idx].device)], dim=0)
+                new_box = torch.cat([ori_boxes[idx], torch.zeros((diff, ori_boxes.shape[-1]), device=ori_boxes[idx].device)], dim=0)
                 new_boxes[idx] = new_box
                 new_ins_idx[idx] = torch.cat([ori_ins_ids[idx], -torch.ones((diff,), device=ori_boxes[idx].device)], dim=0)
             for i, pseudo_box in enumerate(pseudo_boxes):
 
                 diff = max_pseudo_box_num - pseudo_box.shape[0]
                 if diff > 0:
-                    pseudo_box = torch.cat([pseudo_box, torch.zeros((diff, 8), device=pseudo_box.device)], dim=0)
-                new_boxes[unlabeled_inds[i]] = pseudo_box
+                    pseudo_box = torch.cat([pseudo_box, torch.zeros((diff, pseudo_box.shape[-1]), device=pseudo_box.device)], dim=0)
+                new_boxes[ulb_inds[i]] = pseudo_box
             batch_dict[key] = new_boxes
             batch_dict['instance_idx'] = new_ins_idx
 
@@ -605,7 +607,6 @@ class PVRCNN_SSL(Detector3DTemplate):
         # Use the true average until the exponential average is more correct
         alpha = min(1 - 1 / (self.global_step + 1), alpha)
         for ema_param, param in zip(self.pv_rcnn_ema.parameters(), self.pv_rcnn.parameters()):
-            # TODO(farzad) check this
             ema_param.data.mul_(alpha).add_((1 - alpha) * param.data)
         self.accumulated_itr = 0
 
@@ -643,15 +644,3 @@ class PVRCNN_SSL(Detector3DTemplate):
                 logger.info('Not updated weight %s: %s' % (key, str(state_dict[key].shape)))
 
         logger.info('==> Done (loaded %d/%d)' % (len(update_model_state), len(self.state_dict())))
-
-    def update_adaptive_thresholding_metrics(self, pred_dicts, unlabeled_inds, tag = 'pl_adaptive_thresh'):
-        metrics_input = defaultdict(list)
-        for ind in unlabeled_inds:
-            pseudo_score = pred_dicts[ind]['pred_scores']
-            pseudo_label = pred_dicts[ind]['pred_labels']
-            pseudo_sem_score = pred_dicts[ind]['pred_sem_scores']
-            if len(pseudo_label):
-                metrics_input['pred_labels'].append(pseudo_label)
-                metrics_input['pseudo_score'].append(pseudo_score)
-                metrics_input['pseudo_sem_score'].append(pseudo_sem_score)
-        self.thresh_registry.get(tag).update(**metrics_input)
