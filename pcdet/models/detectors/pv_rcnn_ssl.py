@@ -13,7 +13,7 @@ from pcdet.utils import common_utils
 from pcdet.utils.stats_utils import metrics_registry
 from pcdet.utils.prototype_utils import feature_bank_registry
 from collections import defaultdict
-from ssod import AdaptiveThresholding
+from pcdet.ssod import AdaptiveThresholding
 #from visual_utils import open3d_vis_utils as V
 
 
@@ -483,7 +483,8 @@ class PVRCNN_SSL(Detector3DTemplate):
             masks.append(labels.new_ones((1,), dtype=torch.bool))
 
         for ind in ulb_inds:
-            # scores = pls_dict[ind]['pred_scores']  # Using gt scores for now
+            #TODO: uncomment in baseline
+            scores = pls_dict[ind]['pred_scores']  # Using gt scores for now
             boxs = pls_dict[ind]['pred_boxes']
             labels = pls_dict[ind]['pred_labels']
             sem_scores = pls_dict[ind]['pred_sem_scores']
