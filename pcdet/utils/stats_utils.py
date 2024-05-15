@@ -208,7 +208,10 @@ class PredQualityMetrics(Metric):
         accumulated_metrics = {}
         for mname in self.states_name:
             mstate = getattr(self, mname)
-            accumulated_metrics[mname] = torch.cat(mstate, dim=0) if len(mstate) > 0 else []
+            try:
+                accumulated_metrics[mname] = torch.cat(mstate, dim=0) if len(mstate) > 0 else []
+            except:
+                accumulated_metrics[mname] = torch.cat((mstate,), dim=0) if len(mstate) > 0 else []
         return accumulated_metrics
 
     # @staticmethod
@@ -238,7 +241,7 @@ class PredQualityMetrics(Metric):
         weights = accumulated_metrics["roi_weights"].view(-1)
 
         # Multiclass classification average precision score based on different scores.
-        y_labels = torch.where(assigned_labels == -1, 3, assigned_labels)
+         y_labels = torch.where(assigned_labels == -1, 3, assigned_labels)
         # one_hot_labels = argmax_scores.new_zeros(len(y_labels), 4, dtype=torch.long, device=scores.device)
         # one_hot_labels.scatter_(-1, y_labels.unsqueeze(dim=-1).long(), 1.0).cpu().numpy()
 
@@ -252,7 +255,7 @@ class PredQualityMetrics(Metric):
         classwise_metrics['mean_p_model'] = _arr2dict(mean_p_model.cpu().numpy())
         label_hist = torch.bincount(argmax_scores, minlength=3)
         classwise_metrics['label_hist'] = _arr2dict(label_hist.cpu().numpy(), ignore_zeros=True)
-        precision = precision_score(y_labels, pred_labels, sample_weight=weights.cpu().numpy(), average=None, labels=range(3), zero_division=np.nan)
+        precision = precision_score(y_labels, pred_labels, sample_weight=weights.cpu().numpy(), average=None, labels=range(3), zero_division="warn")
         classwise_metrics['avg_precision_sem_score'] = _arr2dict(precision[:3], ignore_nan=True)
 
         # sim_scores = accumulated_metrics["roi_sim_scores"]
