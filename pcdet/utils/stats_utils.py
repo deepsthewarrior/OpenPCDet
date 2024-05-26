@@ -212,7 +212,7 @@ class PredQualityMetrics(Metric):
                 accumulated_metrics[mname] = torch.cat(mstate, dim=0) if len(mstate) > 0 else []
             except:
                 accumulated_metrics[mname] = torch.cat((mstate,), dim=0) if len(mstate) > 0 else []        
-            return accumulated_metrics
+        return accumulated_metrics
 
     # @staticmethod
     # def draw_sim_matrix_figure(sim_matrix, lbls):
