@@ -209,7 +209,7 @@ class PVRCNN_SSL(Detector3DTemplate):
         # TODO(farzad): Check if commenting the following line and apply_augmentation is equal to a fully supervised setting
         self._fill_with_pls(batch_dict, pl_boxes, masks, ulb_inds, lbl_inds)
 
-        pl_cls_count_post_filter = torch.bincount(batch_dict['gt_boxes'][ulb_inds][...,7].view(-1).int().detach(), minlength=4)[1:]
+        pl_cls_count_post_filter = torch.bincount(batch_dict['gt_boxes_copy'][ulb_inds][...,7].view(-1).int().detach(), minlength=4)[1:]
         gt_cls_count = torch.bincount(batch_dict['ori_unlabeled_boxes'][...,-1].view(-1).int().detach(), minlength=4)[1:]
 
         pl_count_dict = {'avg_num_gts_per_sample': self._arr2dict(gt_cls_count / len(ulb_inds)),  # backward compatibility. Added to stats_utils. Will be removed later.
@@ -218,7 +218,7 @@ class PVRCNN_SSL(Detector3DTemplate):
                          'avg_num_pls_post_filter_per_sample': self._arr2dict(pl_cls_count_post_filter / len(ulb_inds))}
 
         # apply student's augs on teacher's pseudo-labels (filtered) only (not points)
-        batch_dict = self.apply_augmentation(batch_dict, batch_dict, ulb_inds, key='gt_boxes')
+        batch_dict = self.apply_augmentation(batch_dict, batch_dict, ulb_inds, key='gt_boxes_copy')
 
         for cur_module in self.pv_rcnn.module_list:
             batch_dict = cur_module(batch_dict)
@@ -525,10 +525,14 @@ class PVRCNN_SSL(Detector3DTemplate):
 
     @staticmethod
     def _fill_with_pls(batch_dict, pseudo_boxes, masks, ulb_inds, lb_inds, key=None):
-        key = 'gt_boxes' if key is None else key
+        # batch_dict['gt_boxes_copy'] == batch_dict['gt_boxes'].clone().detach()
+        batch_dict.update({
+            'gt_boxes_copy':  batch_dict['gt_boxes'].clone().detach()
+                        })
+        key = 'gt_boxes_copy' if key is None else key
         max_box_num = batch_dict[key].shape[1]
         pseudo_boxes = [pboxes[mask] for pboxes, mask in zip(pseudo_boxes, masks)]
-
+        
         # # Expand the gt_boxes to have the same shape as the pseudo_boxes
         # gt_scores = torch.zeros((batch_dict['gt_boxes'].shape[0], max_box_num, 1), device=batch_dict['gt_boxes'].device)
         # batch_dict['gt_boxes'] = torch.cat([batch_dict['gt_boxes'], gt_scores], dim=-1)
@@ -618,7 +622,7 @@ class PVRCNN_SSL(Detector3DTemplate):
         logger.info('==> Loading parameters from checkpoint %s to %s' % (filename, 'CPU' if to_cpu else 'GPU'))
         loc_type = torch.device('cpu') if to_cpu else None
         checkpoint = torch.load(filename, map_location=loc_type)
-        model_state_disk = checkpoint['model_state']
+        model_state_disk = checkpoint #['model_state']
 
         if 'version' in checkpoint:
             logger.info('==> Checkpoint trained from version: %s' % checkpoint['version'])

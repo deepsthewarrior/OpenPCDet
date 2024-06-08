@@ -166,7 +166,7 @@ MODEL:
         ENABLE_SOFT_TEACHER: False
         ENABLE_ULB_CLS_DIST_LOSS: False
         SHARED_FC: [256, 256]
-        CLS_FC: [256, 256]
+        CLS_FC: []
         REG_FC: [256, 256]
         DP_RATIO: 0.3
 
@@ -216,7 +216,7 @@ MODEL:
 
         LOSS_CONFIG:
             UL_RCNN_CLS_WEIGHT_TYPE: 'rev_uc-bg'
-            CLS_LOSS: UnbiasedCrossEntropy
+            CLS_LOSS: UnbiasedCrossEntropy #BinaryCrossEntropy #
             REG_LOSS: smooth-l1
             CORNER_LOSS_REGULARIZATION: True
             LOSS_WEIGHTS: {

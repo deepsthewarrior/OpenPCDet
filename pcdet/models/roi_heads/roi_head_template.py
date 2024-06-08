@@ -367,7 +367,7 @@ class RoIHeadTemplate(nn.Module):
             # ulb_rcnn_cls_dist = ulb_sum_cls_labels / torch.clamp(ulb_label_hist, min=1.0)
             # self._ema_update_p('mean_p_cls', ulb_rcnn_cls_dist)
 
-            ulb_cls_dist = ulb_sum_cls_labels / ulb_sum_cls_labels.sum()
+            ulb_cls_dist = ulb_sum_cls_labels / (ulb_sum_cls_labels.sum() + 1e-10)
             self._ema_update_p('ulb_cls_dist', ulb_cls_dist)
             # self.target_dist = self.target_dist.to(ulb_cls_dist.device)
             # divergence_offsets = self.target_dist * torch.log(ulb_cls_dist / self.target_dist)
