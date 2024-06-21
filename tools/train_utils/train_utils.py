@@ -6,6 +6,35 @@ import tqdm
 import time
 from torch.nn.utils import clip_grad_norm_
 from pcdet.utils import common_utils, commu_utils
+from matplotlib import pyplot as plt
+
+
+def log_tb_dict(tb_log, tb_dict, accumulated_iter):
+    for key, val in tb_dict.items():
+        subkeys = key.split("/")
+        cat, key = (subkeys[0] + "/", subkeys[1]) if len(subkeys) > 1 else ('train/', key)
+        if key in ['bs']:
+            cat = 'meta_data/'
+        if "pr_curve" in key and isinstance(val, dict):
+            for sub_key, sub_val in val.items():
+                tb_log.add_pr_curve(cat + key + "_" + sub_key, sub_val['labels'], sub_val['predictions'], accumulated_iter)
+        elif isinstance(val, dict):
+            if isinstance(list(val.values())[0], plt.Figure):# dict of figures
+                for kkey, vval in val.items():
+                    if isinstance(vval, plt.Figure):
+                        tb_log.add_figure(cat + key +  "/" + kkey, vval, accumulated_iter)
+            else:
+                try: # needs revision
+                    tb_log.add_scalars(cat + key, val, accumulated_iter)
+                except:
+                    for kkey, vval in val.items():
+                        tb_log.add_scalars(cat + key +  "/" + kkey, vval, accumulated_iter)
+
+        elif isinstance(val, plt.Figure):
+            tb_log.add_figure(cat + key, val, accumulated_iter)
+            plt.close(val)
+        else:
+            tb_log.add_scalar(cat + key, val, accumulated_iter)
 
 
 def train_one_epoch(model, optimizer, train_loader, model_func, lr_scheduler, accumulated_iter, optim_cfg,
@@ -44,9 +73,9 @@ def train_one_epoch(model, optimizer, train_loader, model_func, lr_scheduler, ac
 
         model.train()
         optimizer.zero_grad()
-        for name, param in model.named_parameters():
-            if param.grad is None:
-                print(f'{name} has no grad')
+        # for name, param in model.named_parameters():
+        #     if param.grad is None:
+        #         print(f'{name} has no grad')
         loss, tb_dict, disp_dict = model_func(model, batch)
 
         forward_timer = time.time()
@@ -81,9 +110,10 @@ def train_one_epoch(model, optimizer, train_loader, model_func, lr_scheduler, ac
             if tb_log is not None:
                 tb_log.add_scalar('train/loss', loss, accumulated_iter)
                 tb_log.add_scalar('meta_data/learning_rate', cur_lr, accumulated_iter)
-                for key, val in tb_dict.items():
-                    # print(key, val)
-                    tb_log.add_scalar('train/' + key, val, accumulated_iter)
+                log_tb_dict(tb_log, tb_dict, accumulated_iter)
+                # for key, val in tb_dict.items():
+                #     # print(key, val)
+                #     tb_log.add_scalar('train/' + key, val, accumulated_iter)
     if rank == 0:
         pbar.close()
     return accumulated_iter

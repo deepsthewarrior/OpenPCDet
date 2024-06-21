@@ -1,9 +1,20 @@
+import torch
 import torch.nn as nn
+import torch.nn.functional
 from ...ops.pointnet2.pointnet2_stack import pointnet2_modules as pointnet2_stack_modules
 from ...utils import common_utils
 from .roi_head_template import RoIHeadTemplate
 from pcdet.utils.prototype_utils import feature_bank_registry
+import numpy as np
+from sklearn.metrics import precision_score
 
+
+def _arr2dict(array, ignore_zeros=False, ignore_nan=False):
+    def should_include(value):
+        return not ((ignore_zeros and value == 0) or (ignore_nan and np.isnan(value)))
+
+    classes = ['Bg', 'Fg'] if array.shape[-1] == 2 else ['Car', 'Pedestrian', 'Cyclist']
+    return {cls: array[cind] for cind, cls in enumerate(classes) if should_include(array[cind])}
 
 class PVRCNNHead(RoIHeadTemplate):
     def __init__(self, input_channels, model_cfg, num_class=1,
@@ -33,20 +44,6 @@ class PVRCNNHead(RoIHeadTemplate):
 
         self.shared_fc_layer = nn.Sequential(*shared_fc_list)
 
-        GRID_SIZE = self.model_cfg.ROI_GRID_POOL.GRID_SIZE
-        pre_channel = GRID_SIZE * GRID_SIZE * GRID_SIZE * num_c_out
-        projected_fc_list = []
-        for k in range(0, self.model_cfg.SHARED_FC.__len__()):
-            projected_fc_list.extend([
-                nn.Conv1d(pre_channel, self.model_cfg.SHARED_FC[k], kernel_size=1, bias=False),
-                nn.BatchNorm1d(self.model_cfg.SHARED_FC[k]),
-                nn.ReLU()
-            ])
-            pre_channel = self.model_cfg.SHARED_FC[k]
-
-            if k != self.model_cfg.SHARED_FC.__len__() - 1 and self.model_cfg.DP_RATIO > 0:
-                projected_fc_list.append(nn.Dropout(self.model_cfg.DP_RATIO))        
-        self.projected_layer = nn.Sequential(*projected_fc_list)
         self.cls_layers = self.make_fc_layers(
             input_channels=pre_channel, output_channels=self.num_class, fc_list=self.model_cfg.CLS_FC
         )
@@ -55,9 +52,35 @@ class PVRCNNHead(RoIHeadTemplate):
             output_channels=self.box_coder.code_size * self.num_class,
             fc_list=self.model_cfg.REG_FC
         )
-        self.init_weights(weight_init='xavier')
+        self.sem_cls_layers = self.make_fc_layers(
+            input_channels=pre_channel, output_channels=3, fc_list=self.model_cfg.CLS_FC
+        )
 
         self.print_loss_when_eval = False
+
+        GRID_SIZE = self.model_cfg.ROI_GRID_POOL.GRID_SIZE
+        pre_channel = GRID_SIZE * GRID_SIZE * GRID_SIZE * num_c_out
+
+        self.stg2_projector = None  # Initialize projector as None
+        if self.training:  # Projection head created if training mode only
+            stg2_projector_list = []
+            for k in range(0, self.model_cfg.STG2_PROJ_FC.__len__()):
+                stg2_projector_list.append(
+                    nn.Conv1d(pre_channel, self.model_cfg.STG2_PROJ_FC[k], kernel_size=1, bias=True))
+                if self.model_cfg.STG2_PROJ_FC_CFGS.BATCH_NORM:
+                    stg2_projector_list.append(nn.BatchNorm1d(self.model_cfg.STG2_PROJ_FC[k]))
+                if self.model_cfg.STG2_PROJ_FC_CFGS.ACTIVATION == 'ReLU':
+                    stg2_projector_list.append(nn.ReLU())
+                elif self.model_cfg.STG2_PROJ_FC_CFGS.ACTIVATION == 'Linear':
+                    pass          
+                pre_channel = self.model_cfg.STG2_PROJ_FC[k]
+
+                if k != self.model_cfg.STG2_PROJ_FC.__len__() - 1 and self.model_cfg.STG2_PROJ_FC_CFGS.DP_RATIO > 0:
+                    stg2_projector_list.append(nn.Dropout(self.model_cfg.DP_RATIO))
+
+            self.stg2_projector = nn.Sequential(*stg2_projector_list)
+            
+        self.init_weights(weight_init='xavier')
 
     def init_weights(self, weight_init='xavier'):
         if weight_init == 'kaiming':
@@ -79,7 +102,7 @@ class PVRCNNHead(RoIHeadTemplate):
                     nn.init.constant_(m.bias, 0)
         nn.init.normal_(self.reg_layers[-1].weight, mean=0, std=0.001)
 
-    def roi_grid_pool(self, batch_dict, use_gtboxes=False):
+    def roi_grid_pool(self, batch_dict, use_gtboxes=False, use_ori_gtboxes=False):
         """
         Args:
             batch_dict:
@@ -93,7 +116,12 @@ class PVRCNNHead(RoIHeadTemplate):
 
         """
         batch_size = batch_dict['batch_size']
-        rois = batch_dict['gt_boxes'][..., 0:7] if use_gtboxes else batch_dict['rois']
+        if use_gtboxes:
+            rois = batch_dict['gt_boxes'][..., 0:7] 
+        elif use_ori_gtboxes:
+            rois = batch_dict['ori_gt_boxes'][..., 0:7].clone()
+        else:
+            rois = batch_dict['rois']
         point_coords = batch_dict["point_coords"]
         point_features = batch_dict["point_features"]
         point_cls_scores = batch_dict["point_cls_scores"]
@@ -150,50 +178,88 @@ class PVRCNNHead(RoIHeadTemplate):
                           - (local_roi_size.unsqueeze(dim=1) / 2)  # (B, 6x6x6, 3)
         return roi_grid_points
 
-    def pool_features(self, batch_dict, use_gtboxes=False):
+    def pool_features(self, batch_dict, use_gtboxes=False, shared = False, projector=False):
         pooled_features = self.roi_grid_pool(batch_dict, use_gtboxes=use_gtboxes)  # (BxN, 6x6x6, C)
         grid_size = self.model_cfg.ROI_GRID_POOL.GRID_SIZE
         batch_size_rcnn = pooled_features.shape[0]
         pooled_features = pooled_features.permute(0, 2, 1). \
             contiguous().view(batch_size_rcnn, -1, grid_size, grid_size, grid_size)  # (BxN, C, 6, 6, 6)
-
+        if projector==True:
+            projection_gts = self.stg2_projector(pooled_features.view(batch_size_rcnn, -1, 1))
+        if shared==True:
+            shared_gts = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
+            return shared_gts, projection_gts
         return pooled_features
 
-    def forward(self, batch_dict, disable_gt_roi_when_pseudo_labeling=False):
+    def evaluate_prototype_rcnn_sem_precision(self, prototypes, prototype_labels, tb_dict):
+        tb_dict = {} if tb_dict is None else tb_dict
+        prototype_labels = prototype_labels - 1
+        prototypes = prototypes.unsqueeze(-1)
+        with torch.no_grad():
+            prototype_preds = self.sem_cls_layers(prototypes)
+        prototype_preds = prototype_preds.squeeze(-1)
+        precision = precision_score(prototype_labels.view(-1).cpu().numpy(), prototype_preds.max(dim=-1)[1].view(-1).cpu().numpy(), average=None, labels=range(3), zero_division=np.nan)
+        precision_tb_dict = {'rcnn_sem_cls_precision': _arr2dict(precision)}
+        tb_dict.update(precision_tb_dict)
+        return tb_dict
+
+
+    def forward(self, batch_dict, test_only=False):
         """
         :param input_data: input dict
         :return:
         """
-        # use test-time nms for pseudo label generation
 
-        targets_dict = self.proposal_layer(
-            batch_dict, nms_config=self.model_cfg.NMS_CONFIG['TRAIN' if self.training and not disable_gt_roi_when_pseudo_labeling else 'TEST']
-        )
+        nms_config = self.model_cfg.NMS_CONFIG['TRAIN' if self.training and not test_only else 'TEST']
+        # proposal_layer doesn't continue if the rois are already in the batch_dict.
+        # However, for labeled data proposal layer should continue!
+        targets_dict = self.proposal_layer(batch_dict, nms_config=nms_config)
         # should not use gt_roi for pseudo label generation
-        if (self.training or self.print_loss_when_eval) and not disable_gt_roi_when_pseudo_labeling:
+        if (self.training or self.print_loss_when_eval) and not test_only:
             targets_dict = self.assign_targets(batch_dict)
             batch_dict['rois'] = targets_dict['rois']
             batch_dict['roi_scores'] = targets_dict['roi_scores']
             batch_dict['roi_labels'] = targets_dict['roi_labels']
+            batch_dict['rcnn_cls_labels'] = targets_dict['rcnn_cls_labels']
+            (batch_dict['rcnn_cls_labels'] == -1).any().item() and print('rcnn_cls_labels has -1')
+            batch_dict['gt_iou_of_rois'] = targets_dict['gt_iou_of_rois']
+            # Temporarily add infos to targets_dict for metrics
+            # targets_dict['unlabeled_inds'] = batch_dict['unlabeled_inds']
+            # targets_dict['ori_unlabeled_boxes'] = batch_dict['ori_unlabeled_boxes']
+            targets_dict['points'] = batch_dict['points']
 
+        '''Pooling block using GTs'''
+        if self.training:
+            shared_pooled_gts, proj_pooled_gts = self.pool_features(batch_dict, use_gtboxes=True, shared=True, projector=True)
+            batch_dict['shared_features_gt'] = shared_pooled_gts
+            batch_dict['projected_features_gt'] = proj_pooled_gts
+            rcnn_sem_cls = self.sem_cls_layers(proj_pooled_gts).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C) #pass projections to obtain rcnn_sem_cls
 
-        pooled_features = self.pool_features(batch_dict)
+        '''Pooling block using RoIs'''
+        pooled_features = self.pool_features(batch_dict,use_gtboxes=False)
         batch_size_rcnn = pooled_features.shape[0]
         shared_features = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
-        projected_features = self.projected_layer(pooled_features.view(batch_size_rcnn, -1, 1)).detach()
+        batch_dict['shared_features'] = shared_features
         rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
         rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)
+        
+        if self.training:
+            with torch.no_grad(): # Generate RCNN conf_score for teacher GTs ; append labeled bank
+                a = self.cls_layers(proj_pooled_gts).transpose(1, 2).contiguous().squeeze(dim=1)
+                b = self.reg_layers(proj_pooled_gts).transpose(1, 2).contiguous().squeeze(dim=1)
+                batch_gt_cls_preds, batch_gt_reg_preds = self.generate_predicted_boxes(
+                            batch_size=batch_dict['batch_size'], rois=batch_dict['gt_boxes'], cls_preds=a, box_preds=b)
+                B,N = batch_gt_cls_preds.size()[:2]
+                batch_size = batch_dict['batch_size']
+                gt_rcnn_conf_preds = []
+                for index in range(batch_size):
+                    batch_mask = index
+                    cls_preds = batch_gt_cls_preds[batch_mask]
+                    gt_rcnn_conf_preds.append(torch.sigmoid(cls_preds))
+                gt_rcnn_conf_preds = torch.cat(gt_rcnn_conf_preds, dim=0)   
+                batch_dict['gt_conf_scores'] = gt_rcnn_conf_preds.view(B,N,-1)
 
-        if (self.training or self.print_loss_when_eval) and not disable_gt_roi_when_pseudo_labeling:
-            # RoI-level similarity.
-            # calculate cosine similarity between unlabeled augmented RoI features and labeled augmented prototypes.
-            # roi_features = pooled_features.clone().detach().view(batch_size_rcnn, -1)
-            projected_features = projected_features.view(batch_size_rcnn, -1)
-            roi_scores_shape = batch_dict['roi_scores'].shape  # (B, N)
-            bank = feature_bank_registry.get('gt_aug_lbl_prototypes')
-            sim_scores = bank.get_sim_scores(projected_features)
-            targets_dict['roi_sim_scores'] = sim_scores.view(*roi_scores_shape, -1)
-            targets_dict['projected_features'] = projected_features.view(*roi_scores_shape, -1)
+
         if not self.training or self.predict_boxes_when_training:
             batch_cls_preds, batch_box_preds = self.generate_predicted_boxes(
                 batch_size=batch_dict['batch_size'], rois=batch_dict['rois'], cls_preds=rcnn_cls, box_preds=rcnn_reg
@@ -201,6 +267,7 @@ class PVRCNNHead(RoIHeadTemplate):
             # note that the rpn batch_cls_preds and batch_box_preds are being overridden here by rcnn preds
             batch_dict['batch_cls_preds'] = batch_cls_preds
             batch_dict['batch_box_preds'] = batch_box_preds
+            batch_dict['batch_sem_cls_preds'] = rcnn_sem_cls.view(batch_dict['batch_size'], -1, 3)
             batch_dict['cls_preds_normalized'] = False
             # Temporarily add infos to targets_dict for metrics
             targets_dict['batch_box_preds'] = batch_box_preds
@@ -208,6 +275,8 @@ class PVRCNNHead(RoIHeadTemplate):
         if self.training or self.print_loss_when_eval:
             targets_dict['rcnn_cls'] = rcnn_cls
             targets_dict['rcnn_reg'] = rcnn_reg
+            targets_dict['rcnn_sem_cls'] = rcnn_sem_cls.view(batch_dict['batch_size'], -1, 3)
+            targets_dict['gt_boxes'] = batch_dict['gt_boxes']
             self.forward_ret_dict = targets_dict
 
         return batch_dict
