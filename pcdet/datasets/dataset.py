@@ -8,7 +8,7 @@ from ..utils import common_utils
 from .augmentor.data_augmentor import DataAugmentor
 from .processor.data_processor import DataProcessor
 from .processor.point_feature_encoder import PointFeatureEncoder
-
+from pcdet.datasets.augmentor.augmentor_utils import *
 
 class DatasetTemplate(torch_data.Dataset):
     def __init__(self, dataset_cfg=None, class_names=None, training=True, root_path=None, logger=None):
@@ -131,17 +131,53 @@ class DatasetTemplate(torch_data.Dataset):
                 }
             )
 
+            points_ema = data_dict['points'].copy()
+            gt_boxes_ema = data_dict['gt_boxes'].copy()
+            gt_boxes_ema, points_ema, _ = global_scaling(gt_boxes_ema, points_ema, [0, 2],
+                                                         scale_=1/data_dict['scale'])
+            gt_boxes_ema, points_ema, _ = global_rotation(gt_boxes_ema, points_ema, [-1, 1],
+                                                          rot_angle_=-data_dict['rot_angle'])
+            gt_boxes_ema, points_ema, _ = random_flip_along_x(gt_boxes_ema, points_ema, enable_=data_dict['flip_x'])
+            gt_boxes_ema, points_ema, _ = random_flip_along_y(gt_boxes_ema, points_ema, enable_=data_dict['flip_y'])
+            data_dict['points_ema'] = points_ema
+            data_dict['gt_boxes_ema'] = gt_boxes_ema
+
+
         if data_dict.get('gt_boxes', None) is not None:
             selected = common_utils.keep_arrays_by_name(data_dict['gt_names'], self.class_names)
             data_dict['gt_boxes'] = data_dict['gt_boxes'][selected]
+            data_dict['gt_boxes_ema'] = data_dict['gt_boxes_ema'][selected]
             data_dict['gt_names'] = data_dict['gt_names'][selected]
             data_dict['instance_idx'] = data_dict['instance_idx'][selected]
             gt_classes = np.array([self.class_names.index(n) + 1 for n in data_dict['gt_names']], dtype=np.int32)
             gt_boxes = np.concatenate((data_dict['gt_boxes'], gt_classes.reshape(-1, 1).astype(np.float32)), axis=1)
             data_dict['gt_boxes'] = gt_boxes
-
+            if self.training:
+                gt_boxes_ema = np.concatenate((data_dict['gt_boxes_ema'], gt_classes.reshape(-1, 1).astype(np.float32)), axis=1)
+                data_dict['gt_boxes_ema'] = gt_boxes_ema
+                points = data_dict['points'].copy()
+                gt_boxes = data_dict['gt_boxes'].copy()
+                data_dict['points'] = data_dict['points_ema']
+                data_dict['gt_boxes'] = data_dict['gt_boxes_ema']                
             if data_dict.get('gt_boxes2d', None) is not None:
                 data_dict['gt_boxes2d'] = data_dict['gt_boxes2d'][selected]
+
+        if self.training:
+            data_dict['points_ema'] = data_dict['points']
+            data_dict['gt_boxes_ema'] = data_dict['gt_boxes']
+            # data_dict['voxels_ema'] = data_dict['voxels']
+            # data_dict['voxel_coords_ema'] = data_dict['voxel_coords']
+            # data_dict['voxel_num_points_ema'] = data_dict['voxel_num_points']
+
+            data_dict['points'] = points
+            data_dict['gt_boxes'] = gt_boxes
+            # data_dict.pop('voxels', None)
+            # data_dict.pop('voxel_coords', None)
+            # data_dict.pop('voxel_num_points', None)
+            data_dict = self.point_feature_encoder.forward(data_dict)
+            data_dict = self.data_processor.forward(
+                data_dict=data_dict
+            )
 
         if data_dict.get('points', None) is not None:
             data_dict = self.point_feature_encoder.forward(data_dict)

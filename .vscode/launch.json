@@ -23,7 +23,7 @@
                 	// "5",
                 	"--fix_random_seed",
                 	"--extra_tag",
-                	"pretrain_instance_id_rcnn_sem_cls_precision2", 
+                	"dataset_ema", 
                 	// "--thresh",
 					// "0.0,0.25,0.25", 
                 	// "--sem_thresh", 

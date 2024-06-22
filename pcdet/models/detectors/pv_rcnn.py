@@ -19,6 +19,7 @@ class PVRCNN(Detector3DTemplate):
         }
         feature_bank_registry.register('gt_aug_lbl_prototypes',**bank_configs)
         self.model_cfg = model_cfg
+
     @staticmethod
     def _clone_gt_boxes_and_feats(batch_dict):
         return {
@@ -28,7 +29,7 @@ class PVRCNN(Detector3DTemplate):
             "point_features": batch_dict['point_features'].clone().detach(),
             "point_cls_scores": batch_dict['point_cls_scores'].clone().detach()
         }        
-    GENERATE  AUGMENTED BATCH DICT ON THE FLY TO TEST SUPCON
+
     def _prep_wa_bank_inputs(self, batch_dict_ema, inds, bank, iteration, num_points_threshold=20):
         projections_gt = batch_dict_ema['projected_features_gt']
         projections_gt = projections_gt.view(*batch_dict_ema['gt_boxes'].shape[:2], -1)
@@ -61,11 +62,24 @@ class PVRCNN(Detector3DTemplate):
             bank_inputs['conf_scores'].append(gt_conf_preds[nonzero_mask][valid_gts_mask])
         return bank_inputs    
 
-    
-    def forward(self, batch_dict):
-        for cur_module in self.module_list:
-            batch_dict = cur_module(batch_dict)
+    @staticmethod
+    def _split_batch(batch_dict, tag='ema'):
+        assert tag in ['ema'], f'{tag} not in list [ema]'
+        batch_dict_out = {}
+        keys = list(batch_dict.keys())
+        for k in keys:
+            if f'{k}_{tag}' in keys:
+                continue
+            if k.endswith(f'_{tag}'):
+                batch_dict_out[k[:-(len(tag)+1)]] = batch_dict[k]
+                batch_dict.pop(k)
+            if k in ['batch_size']:
+                batch_dict_out[k] = batch_dict[k]
+        return batch_dict_out
 
+
+    def forward(self, batch_dict):
+        batch_dict_ema = self._split_batch(batch_dict, tag='ema')
         if self.training:
             loss, tb_dict, disp_dict = self.get_training_loss(batch_dict)
             bank = feature_bank_registry.get('gt_aug_lbl_prototypes')
@@ -104,8 +118,8 @@ class PVRCNN(Detector3DTemplate):
                 tb_dict['instloss_cyc'] = supcon_classwise_loss['instloss_cyc']
                 tb_dict['instloss_all'] = supcon_classwise_loss['instloss_all']
 
-        tb_dict_ = self._prep_tb_dict(tb_dict, lbl_inds, ulb_inds, reduce_loss_fn)
-        tb_dict_.update(**pl_count_dict)
+        # tb_dict_ = self._prep_tb_dict(tb_dict, lbl_inds, ulb_inds, reduce_loss_fn)
+        # tb_dict_.update(**pl_count_dict)
         #tb_dict['mcont_loss'] = mcont_loss
         # if protocon_loss is not None:
         #     protocon_loss *= self.model_cfg.ROI_HEAD.LOSS_CONFIG.LOSS_WEIGHTS.protocon_weight
