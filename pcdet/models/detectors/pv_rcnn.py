@@ -80,8 +80,14 @@ class PVRCNN(Detector3DTemplate):
 
     def forward(self, batch_dict):
         batch_dict_ema = self._split_batch(batch_dict, tag='ema')
+        batch_dict_ema['batch_size'] = batch_dict['batch_size']
+        for cur_module in self.module_list:
+            batch_dict = cur_module(batch_dict)
+        with torch.no_grad():
+            for cur_module in self.module_list:
+                batch_dict_ema = cur_module(batch_dict_ema)
         if self.training:
-            loss, tb_dict, disp_dict = self.get_training_loss(batch_dict)
+            loss, tb_dict, disp_dict = self.get_training_loss(batch_dict, batch_dict_ema)
             bank = feature_bank_registry.get('gt_aug_lbl_prototypes')
             wa_gt_lbl_inputs = self._prep_wa_bank_inputs(batch_dict, range(len(batch_dict['gt_boxes'])), bank, batch_dict['cur_iteration'], bank.num_points_thresh)
             bank.update(**wa_gt_lbl_inputs, iteration=batch_dict['cur_iteration'])
@@ -98,7 +104,7 @@ class PVRCNN(Detector3DTemplate):
             pred_dicts, recall_dicts = self.post_processing(batch_dict)
             return pred_dicts, recall_dicts, {}
 
-    def get_training_loss(self,batch_dict):
+    def get_training_loss(self,batch_dict, batch_dict_ema):
         disp_dict = {}
         loss_rpn, tb_dict = self.dense_head.get_loss()
         loss_point, tb_dict = self.point_head.get_loss(tb_dict)
@@ -106,17 +112,16 @@ class PVRCNN(Detector3DTemplate):
         #mcont_loss_dict = self._get_multi_cont_loss_lb_instances(batch_dict)
         #mcont_loss = mcont_loss_dict['total_loss'] * self.model_cfg.ROI_HEAD.LOSS_CONFIG.LOSS_WEIGHTS.mcont_weight
         loss = loss_rpn + loss_point + loss_rcnn #+ mcont_loss
-        if self.model_cfg['ROI_HEAD'].get('ENABLE_INSTANCE_SUP_LOSS', False):
-            lbl_inst_cont_loss, supcon_classwise_loss = self._get_instance_contrastive_loss(tb_dict,batch_dict,batch_dict_ema,lbl_inds,ulb_inds)
-            if lbl_inst_cont_loss is not None:
-                if dist.is_initialized():
-                    loss+= (lbl_inst_cont_loss/2)
-                else:
-                    loss = lbl_inst_cont_loss
-                tb_dict['instloss_car'] = supcon_classwise_loss['instloss_car']
-                tb_dict['instloss_ped'] = supcon_classwise_loss['instloss_ped']
-                tb_dict['instloss_cyc'] = supcon_classwise_loss['instloss_cyc']
-                tb_dict['instloss_all'] = supcon_classwise_loss['instloss_all']
+        lbl_inst_cont_loss, supcon_classwise_loss = self._get_instance_contrastive_loss(tb_dict,batch_dict,batch_dict_ema)
+        if lbl_inst_cont_loss is not None:
+            if dist.is_initialized():
+                loss+= (lbl_inst_cont_loss/2)
+            else:
+                loss += lbl_inst_cont_loss
+            tb_dict['instloss_car'] = supcon_classwise_loss['instloss_car']
+            tb_dict['instloss_ped'] = supcon_classwise_loss['instloss_ped']
+            tb_dict['instloss_cyc'] = supcon_classwise_loss['instloss_cyc']
+            tb_dict['instloss_all'] = supcon_classwise_loss['instloss_all']
 
         # tb_dict_ = self._prep_tb_dict(tb_dict, lbl_inds, ulb_inds, reduce_loss_fn)
         # tb_dict_.update(**pl_count_dict)
@@ -144,17 +149,17 @@ class PVRCNN(Detector3DTemplate):
             return
         return proto_cont_loss.view(B, N).mean()
 
-    def _sort_instance_pairs(self, batch_dict, batch_dict_wa, indices):
+    def _sort_instance_pairs(self, batch_dict, batch_dict_wa):
         
         embed_size = batch_dict['shared_features_gt'].squeeze().shape[-1]
-        shared_ft_sa = batch_dict['shared_features_gt'].view(batch_dict['batch_size'],-1,embed_size)         # shared_ft_sa = batch_dict['projected_features_gt'].view(batch_dict['batch_size'],-1,embed_size)[indices]
-        shared_ft_sa = shared_ft_sa[indices].view(-1,256)
-        shared_ft_wa = batch_dict_wa['shared_features_gt'].view(batch_dict['batch_size'],-1,embed_size)         # shared_ft_wa = batch_dict_wa['projected_features_gt'].view(batch_dict['batch_size'],-1,embed_size)[indices]
-        shared_ft_wa = shared_ft_wa[indices].view(-1,256)
-        labels_sa = batch_dict['gt_boxes'][indices][:,:,-1].view(-1)
-        labels_wa = batch_dict_wa['gt_boxes'][indices][:,:,-1].view(-1)
-        instance_idx_sa = batch_dict['instance_idx'][indices].view(-1)
-        instance_idx_wa = batch_dict_wa['instance_idx'][indices].view(-1)
+        shared_ft_sa = batch_dict['shared_features_gt'].view(batch_dict['batch_size'],-1,embed_size)         # shared_ft_sa = batch_dict['projected_features_gt'].view(batch_dict['batch_size'],-1,embed_size)
+        shared_ft_sa = shared_ft_sa.view(-1,256)
+        shared_ft_wa = batch_dict_wa['shared_features_gt'].view(batch_dict['batch_size'],-1,embed_size)         # shared_ft_wa = batch_dict_wa['projected_features_gt'].view(batch_dict['batch_size'],-1,embed_size)
+        shared_ft_wa = shared_ft_wa.view(-1,256)
+        labels_sa = batch_dict['gt_boxes'][:,:,-1].view(-1)
+        labels_wa = batch_dict_wa['gt_boxes'][:,:,-1].view(-1)
+        instance_idx_sa = batch_dict['instance_idx'].view(-1)
+        instance_idx_wa = batch_dict_wa['instance_idx'].view(-1)
         nonzero_mask_sa = torch.logical_not(torch.eq(instance_idx_sa, 0))
         nonzero_mask_wa = torch.logical_not(torch.eq(instance_idx_wa, 0))
 
@@ -195,7 +200,7 @@ class PVRCNN(Detector3DTemplate):
         aligned_sa_info = torch.cat([shared_ft_sa_common, labels_sa_common.unsqueeze(-1)], dim=-1)
         return aligned_wa_info, aligned_sa_info
 
-    def _get_instance_contrastive_loss(self, tb_dict, batch_dict, batch_dict_wa, lbl_inds, temperature=1.0, base_temperature=1.0):
+    def _get_instance_contrastive_loss(self, tb_dict, batch_dict, batch_dict_wa, temperature=1.0, base_temperature=1.0):
         '''
         Args:
             features: hidden vector of shape [bsz, n_views, ...].
@@ -207,7 +212,7 @@ class PVRCNN(Detector3DTemplate):
         # stop_epoch = self.model_cfg['ROI_HEAD'].get('INSTANCE_CONTRASTIVE_LOSS_STOP_EPOCH', 60)
         # if not start_epoch<=batch_dict['cur_epoch']<stop_epoch:
         #     return None, None
-        aligned_wa_info, aligned_sa_info = self._sort_instance_pairs(batch_dict, batch_dict_wa, lbl_inds)
+        aligned_wa_info, aligned_sa_info = self._sort_instance_pairs(batch_dict, batch_dict_wa)
 
         gathered_sa_tensor = self.gather_tensors(aligned_sa_info)
         gathered_sa_labels = gathered_sa_tensor[:,-1].long()

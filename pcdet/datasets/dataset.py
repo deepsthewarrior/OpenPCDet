@@ -157,27 +157,11 @@ class DatasetTemplate(torch_data.Dataset):
                 data_dict['gt_boxes_ema'] = gt_boxes_ema
                 points = data_dict['points'].copy()
                 gt_boxes = data_dict['gt_boxes'].copy()
+                instance_idx = data_dict['instance_idx'].copy()
                 data_dict['points'] = data_dict['points_ema']
                 data_dict['gt_boxes'] = data_dict['gt_boxes_ema']                
             if data_dict.get('gt_boxes2d', None) is not None:
                 data_dict['gt_boxes2d'] = data_dict['gt_boxes2d'][selected]
-
-        if self.training:
-            data_dict['points_ema'] = data_dict['points']
-            data_dict['gt_boxes_ema'] = data_dict['gt_boxes']
-            # data_dict['voxels_ema'] = data_dict['voxels']
-            # data_dict['voxel_coords_ema'] = data_dict['voxel_coords']
-            # data_dict['voxel_num_points_ema'] = data_dict['voxel_num_points']
-
-            data_dict['points'] = points
-            data_dict['gt_boxes'] = gt_boxes
-            # data_dict.pop('voxels', None)
-            # data_dict.pop('voxel_coords', None)
-            # data_dict.pop('voxel_num_points', None)
-            data_dict = self.point_feature_encoder.forward(data_dict)
-            data_dict = self.data_processor.forward(
-                data_dict=data_dict
-            )
 
         if data_dict.get('points', None) is not None:
             data_dict = self.point_feature_encoder.forward(data_dict)
@@ -185,6 +169,26 @@ class DatasetTemplate(torch_data.Dataset):
         data_dict = self.data_processor.forward(
             data_dict=data_dict
         )
+
+        if self.training: # this is for the ema 
+            data_dict['points_ema'] = data_dict['points']
+            data_dict['gt_boxes_ema'] = data_dict['gt_boxes']
+            data_dict['voxels_ema'] = data_dict['voxels']
+            data_dict['voxel_coords_ema'] = data_dict['voxel_coords']
+            data_dict['voxel_num_points_ema'] = data_dict['voxel_num_points']
+            data_dict['instance_idx_ema'] = data_dict['instance_idx']
+
+            data_dict['points'] = points
+            data_dict['gt_boxes'] = gt_boxes
+            data_dict['instance_idx'] = instance_idx
+            data_dict.pop('voxels', None)
+            data_dict.pop('voxel_coords', None)
+            data_dict.pop('voxel_num_points', None)
+            data_dict = self.point_feature_encoder.forward(data_dict)
+            data_dict = self.data_processor.forward(
+                data_dict=data_dict
+            )
+
 
         if self.training and len(data_dict['gt_boxes']) == 0:
             new_index = np.random.randint(self.__len__())
