@@ -229,26 +229,26 @@ class RoIHeadTemplate(nn.Module):
 
         return rcnn_loss_reg, tb_dict
 
-    def get_box_sem_cls_layer_loss(self, forward_ret_dict):
-        batch_size = forward_ret_dict['rcnn_sem_cls'].shape[0]
-        gt_boxes = forward_ret_dict['gt_boxes']
-        nonzero_mask = torch.logical_not(torch.eq(gt_boxes, 0).all(dim=-1))
-        sem_cls_unmasked = forward_ret_dict['gt_boxes'][nonzero_mask]
-        sem_cls_preds = forward_ret_dict['rcnn_sem_cls'][nonzero_mask]
-        # sem_cls_targets = forward_ret_dict['roi_labels'] - 1
-        sem_cls_targets = sem_cls_unmasked[:, -1].long() - 1
-        sem_cls_preds = sem_cls_preds.view(-1, 3)
-        sem_cls_targets = sem_cls_targets.view(-1)
-        batch_loss_cls = F.cross_entropy(sem_cls_preds, sem_cls_targets, reduction='mean')
-        loss_sem_cls = batch_loss_cls
-        precision = precision_score(sem_cls_targets.view(-1).cpu().numpy(), sem_cls_preds.max(dim=-1)[1].view(-1).cpu().numpy(), average=None, labels=range(3), zero_division=np.nan)
-        # target_precision = precision_score(sem_cls_targets_gt.cpu().numpy(), sem_cls_targets.view(-1).cpu().numpy(), average=None, labels=range(3), zero_division=np.nan)
-        tb_dict = {
-            'loss_sem_cls': loss_sem_cls,
-            'rcnn_sem_cls_precision': _arr2dict(precision),
-            # 'rcnn_sem_cls_target_precision': _arr2dict(target_precision),
-        }
-        return loss_sem_cls, tb_dict
+    # def get_box_sem_cls_layer_loss(self, forward_ret_dict):
+    #     batch_size = forward_ret_dict['rcnn_sem_cls'].shape[0]
+    #     gt_boxes = forward_ret_dict['gt_boxes']
+    #     nonzero_mask = torch.logical_not(torch.eq(gt_boxes, 0).all(dim=-1))
+    #     sem_cls_unmasked = forward_ret_dict['gt_boxes'][nonzero_mask]
+    #     sem_cls_preds = forward_ret_dict['rcnn_sem_cls'][nonzero_mask]
+    #     # sem_cls_targets = forward_ret_dict['roi_labels'] - 1
+    #     sem_cls_targets = sem_cls_unmasked[:, -1].long() - 1
+    #     sem_cls_preds = sem_cls_preds.view(-1, 3)
+    #     sem_cls_targets = sem_cls_targets.view(-1)
+    #     batch_loss_cls = F.cross_entropy(sem_cls_preds, sem_cls_targets, reduction='mean')
+    #     loss_sem_cls = batch_loss_cls
+    #     precision = precision_score(sem_cls_targets.view(-1).cpu().numpy(), sem_cls_preds.max(dim=-1)[1].view(-1).cpu().numpy(), average=None, labels=range(3), zero_division=np.nan)
+    #     # target_precision = precision_score(sem_cls_targets_gt.cpu().numpy(), sem_cls_targets.view(-1).cpu().numpy(), average=None, labels=range(3), zero_division=np.nan)
+    #     tb_dict = {
+    #         'loss_sem_cls': loss_sem_cls,
+    #         'rcnn_sem_cls_precision': _arr2dict(precision),
+    #         # 'rcnn_sem_cls_target_precision': _arr2dict(target_precision),
+    #     }
+    #     return loss_sem_cls, tb_dict
 
     def get_box_cls_layer_loss(self, forward_ret_dict, scalar=True):
         loss_cfgs = self.model_cfg.LOSS_CONFIG
@@ -298,16 +298,16 @@ class RoIHeadTemplate(nn.Module):
         tb_dict.update(cls_tb_dict)
 
         rcnn_loss_reg, reg_tb_dict = self.get_box_reg_layer_loss(self.forward_ret_dict, scalar=scalar)
-        rcnn_loss_sem_cls, sem_cls_tb_dict = self.get_box_sem_cls_layer_loss(self.forward_ret_dict)
+        # rcnn_loss_sem_cls, sem_cls_tb_dict = self.get_box_sem_cls_layer_loss(self.forward_ret_dict)
         #rcnn_loss += rcnn_loss_reg  #if scalar is False, rcnn_loss_cls is (rcnn_loss_cls + rcnn_loss_reg)
-        rcnn_loss = rcnn_loss_cls + rcnn_loss_reg + rcnn_loss_sem_cls
+        rcnn_loss = rcnn_loss_cls + rcnn_loss_reg #+ rcnn_loss_sem_cls
         tb_dict.update(reg_tb_dict)
-        tb_dict.update(sem_cls_tb_dict)
+        # tb_dict.update(sem_cls_tb_dict)
         tb_dict['rcnn_loss'] = rcnn_loss.item() if scalar else rcnn_loss
         if scalar:
             return rcnn_loss, tb_dict
         else:
-            return rcnn_loss_cls, rcnn_loss_reg,rcnn_loss_sem_cls, tb_dict
+            return rcnn_loss_cls, rcnn_loss_reg, tb_dict #return rcnn_loss_cls, rcnn_loss_reg,rcnn_loss_sem_cls, tb_dict
 
     def generate_predicted_boxes(self, batch_size, rois, cls_preds, box_preds):
         """

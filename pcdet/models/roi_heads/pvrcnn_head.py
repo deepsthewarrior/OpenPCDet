@@ -233,7 +233,7 @@ class PVRCNNHead(RoIHeadTemplate):
             shared_pooled_gts, proj_pooled_gts = self.pool_features(batch_dict, use_gtboxes=True, shared=True, projector=True)
             batch_dict['shared_features_gt'] = shared_pooled_gts
             batch_dict['projected_features_gt'] = proj_pooled_gts
-            rcnn_sem_cls = self.sem_cls_layers(proj_pooled_gts).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C) #pass projections to obtain rcnn_sem_cls
+            # rcnn_sem_cls = self.sem_cls_layers(proj_pooled_gts).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C) #pass projections to obtain rcnn_sem_cls
 
         '''Pooling block using RoIs'''
         pooled_features = self.pool_features(batch_dict,use_gtboxes=False)
@@ -267,7 +267,7 @@ class PVRCNNHead(RoIHeadTemplate):
             # note that the rpn batch_cls_preds and batch_box_preds are being overridden here by rcnn preds
             batch_dict['batch_cls_preds'] = batch_cls_preds
             batch_dict['batch_box_preds'] = batch_box_preds
-            batch_dict['batch_sem_cls_preds'] = rcnn_sem_cls.view(batch_dict['batch_size'], -1, 3)
+            # batch_dict['batch_sem_cls_preds'] = rcnn_sem_cls.view(batch_dict['batch_size'], -1, 3)
             batch_dict['cls_preds_normalized'] = False
             # Temporarily add infos to targets_dict for metrics
             targets_dict['batch_box_preds'] = batch_box_preds
@@ -275,7 +275,7 @@ class PVRCNNHead(RoIHeadTemplate):
         if self.training or self.print_loss_when_eval:
             targets_dict['rcnn_cls'] = rcnn_cls
             targets_dict['rcnn_reg'] = rcnn_reg
-            targets_dict['rcnn_sem_cls'] = rcnn_sem_cls.view(batch_dict['batch_size'], -1, 3)
+            # targets_dict['rcnn_sem_cls'] = rcnn_sem_cls.view(batch_dict['batch_size'], -1, 3)
             targets_dict['gt_boxes'] = batch_dict['gt_boxes']
             self.forward_ret_dict = targets_dict
 

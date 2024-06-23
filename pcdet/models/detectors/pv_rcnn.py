@@ -109,29 +109,18 @@ class PVRCNN(Detector3DTemplate):
         loss_rpn, tb_dict = self.dense_head.get_loss()
         loss_point, tb_dict = self.point_head.get_loss(tb_dict)
         loss_rcnn, tb_dict = self.roi_head.get_loss(tb_dict)
-        #mcont_loss_dict = self._get_multi_cont_loss_lb_instances(batch_dict)
-        #mcont_loss = mcont_loss_dict['total_loss'] * self.model_cfg.ROI_HEAD.LOSS_CONFIG.LOSS_WEIGHTS.mcont_weight
-        loss = loss_rpn + loss_point + loss_rcnn #+ mcont_loss
-        lbl_inst_cont_loss, supcon_classwise_loss = self._get_instance_contrastive_loss(tb_dict,batch_dict,batch_dict_ema)
-        if lbl_inst_cont_loss is not None:
-            if dist.is_initialized():
-                loss+= (lbl_inst_cont_loss/2)
-            else:
-                loss += lbl_inst_cont_loss
-            tb_dict['instloss_car'] = supcon_classwise_loss['instloss_car']
-            tb_dict['instloss_ped'] = supcon_classwise_loss['instloss_ped']
-            tb_dict['instloss_cyc'] = supcon_classwise_loss['instloss_cyc']
-            tb_dict['instloss_all'] = supcon_classwise_loss['instloss_all']
+        loss = loss_rpn + loss_point + loss_rcnn
+        # lbl_inst_cont_loss, supcon_classwise_loss = self._get_instance_contrastive_loss(tb_dict,batch_dict,batch_dict_ema)
+        # if lbl_inst_cont_loss is not None:
+        #     if dist.is_initialized():
+        #         loss+= (lbl_inst_cont_loss/2)
+        #     else:
+        #         loss += lbl_inst_cont_loss
+        #     tb_dict['instloss_car'] = supcon_classwise_loss['instloss_car']
+        #     tb_dict['instloss_ped'] = supcon_classwise_loss['instloss_ped']
+        #     tb_dict['instloss_cyc'] = supcon_classwise_loss['instloss_cyc']
+        #     tb_dict['instloss_all'] = supcon_classwise_loss['instloss_all']
 
-        # tb_dict_ = self._prep_tb_dict(tb_dict, lbl_inds, ulb_inds, reduce_loss_fn)
-        # tb_dict_.update(**pl_count_dict)
-        #tb_dict['mcont_loss'] = mcont_loss
-        # if protocon_loss is not None:
-        #     protocon_loss *= self.model_cfg.ROI_HEAD.LOSS_CONFIG.LOSS_WEIGHTS.protocon_weight
-        #     loss += protocon_loss
-        # else:
-        #     protocon_loss = torch.zeros(1, device=loss.device)
-        #     tb_dict['protocon_loss'] = protocon_loss
         return loss, tb_dict, disp_dict
     
     def _get_proto_contrastive_loss(self, batch_dict, bank):
@@ -151,10 +140,10 @@ class PVRCNN(Detector3DTemplate):
 
     def _sort_instance_pairs(self, batch_dict, batch_dict_wa):
         
-        embed_size = batch_dict['shared_features_gt'].squeeze().shape[-1]
-        shared_ft_sa = batch_dict['shared_features_gt'].view(batch_dict['batch_size'],-1,embed_size)         # shared_ft_sa = batch_dict['projected_features_gt'].view(batch_dict['batch_size'],-1,embed_size)
+        embed_size = batch_dict['projected_features_gt'].squeeze().shape[-1]
+        shared_ft_sa = batch_dict['projected_features_gt'].view(batch_dict['batch_size'],-1,embed_size)         # shared_ft_sa = batch_dict['projected_features_gt'].view(batch_dict['batch_size'],-1,embed_size)
         shared_ft_sa = shared_ft_sa.view(-1,256)
-        shared_ft_wa = batch_dict_wa['shared_features_gt'].view(batch_dict['batch_size'],-1,embed_size)         # shared_ft_wa = batch_dict_wa['projected_features_gt'].view(batch_dict['batch_size'],-1,embed_size)
+        shared_ft_wa = batch_dict_wa['projected_features_gt'].view(batch_dict['batch_size'],-1,embed_size)         # shared_ft_wa = batch_dict_wa['projected_features_gt'].view(batch_dict['batch_size'],-1,embed_size)
         shared_ft_wa = shared_ft_wa.view(-1,256)
         labels_sa = batch_dict['gt_boxes'][:,:,-1].view(-1)
         labels_wa = batch_dict_wa['gt_boxes'][:,:,-1].view(-1)
@@ -261,10 +250,10 @@ class PVRCNN(Detector3DTemplate):
         if instance_loss is None:
             return
 
-        instloss_car = instance_loss[labels==1].mean() * self.model_cfg['ROI_HEAD']['INSTANCE_CONTRASTIVE_LOSS_WEIGHT']
-        instloss_ped = instance_loss[labels==2].mean() * self.model_cfg['ROI_HEAD']['INSTANCE_CONTRASTIVE_LOSS_WEIGHT']
-        instloss_cyc = instance_loss[labels==3].mean() * self.model_cfg['ROI_HEAD']['INSTANCE_CONTRASTIVE_LOSS_WEIGHT']
-        instloss_all = instance_loss.mean() * self.model_cfg['ROI_HEAD']['INSTANCE_CONTRASTIVE_LOSS_WEIGHT']
+        instloss_car = instance_loss[labels==1].mean() * 0.2
+        instloss_ped = instance_loss[labels==2].mean() * 0.2
+        instloss_cyc = instance_loss[labels==3].mean() * 0.2
+        instloss_all = instance_loss.mean() * 0.2
 
         supcon_classwise_loss= {
                         'instloss_car': instloss_car.item() ,

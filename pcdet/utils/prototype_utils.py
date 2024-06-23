@@ -145,21 +145,23 @@ class FeatureBank(Metric):
         self.classwise_prototypes = self.momentum * self.classwise_prototypes + (1 - self.momentum) * classwise_prototypes
 
 
-    def get_proto_contrastive_loss(self, feats, labels):
-        """
-        :param feats: pseudo-box features of the strongly augmented unlabeled samples (N, C)
-        :param labels: pseudo-labels of the strongly augmented unlabeled samples (N,)
-        :return:
-        """
-        if not self.initialized:
-            return None
-        sim_scores = F.normalize(feats) @ F.normalize(self.classwise_prototypes).t()
-        log_probs = F.log_softmax(sim_scores / self.temperature, dim=-1)
-        return -log_probs[torch.arange(len(labels)), labels]
+    # def get_proto_contrastive_loss(self, feats, labels):
+    #     """
+    #     :param feats: pseudo-box features of the strongly augmented unlabeled samples (N, C)
+    #     :param labels: pseudo-labels of the strongly augmented unlabeled samples (N,)
+    #     :return:
+    #     """
+    #     if not self.initialized:
+    #         return None
+    #     sim_scores = F.normalize(feats) @ F.normalize(self.classwise_prototypes).t()
+    #     log_probs = F.log_softmax(sim_scores / self.temperature, dim=-1)
+    #     return -log_probs[torch.arange(len(labels)), labels]
 
     def is_initialized(self):
         return self.initialized 
-
+    
+    def get_computed_dict(self):
+        return self.prototypes, self.proto_labels, self.num_updates
 
 class FeatureBankRegistry(object):
     def __init__(self, **kwargs):
