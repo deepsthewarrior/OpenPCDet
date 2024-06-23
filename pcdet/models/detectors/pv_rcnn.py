@@ -83,19 +83,19 @@ class PVRCNN(Detector3DTemplate):
         batch_dict_ema['batch_size'] = batch_dict['batch_size']
         for cur_module in self.module_list:
             batch_dict = cur_module(batch_dict)
-        with torch.no_grad():
-            for cur_module in self.module_list:
-                batch_dict_ema = cur_module(batch_dict_ema)
+        # with torch.no_grad():
+        #     for cur_module in self.module_list:
+        #         batch_dict_ema = cur_module(batch_dict_ema)
         if self.training:
             loss, tb_dict, disp_dict = self.get_training_loss(batch_dict, batch_dict_ema)
             bank = feature_bank_registry.get('gt_aug_lbl_prototypes')
             wa_gt_lbl_inputs = self._prep_wa_bank_inputs(batch_dict, range(len(batch_dict['gt_boxes'])), bank, batch_dict['cur_iteration'], bank.num_points_thresh)
             bank.update(**wa_gt_lbl_inputs, iteration=batch_dict['cur_iteration'])
             feature_bank_registry.get('gt_aug_lbl_prototypes').compute()
-            prototype_id_features, prototype_id_labels, num_updates = bank.get_computed_dict()
-            if feature_bank_registry._banks['gt_aug_lbl_prototypes']._computed is not None:
-                prototype_id_features, prototype_id_labels, num_updates = feature_bank_registry._banks['gt_aug_lbl_prototypes']._computed[0], feature_bank_registry._banks['gt_aug_lbl_prototypes']._computed[1], feature_bank_registry._banks['gt_aug_lbl_prototypes']._computed[2]
-                tb_dict = self.module_list[7].evaluate_prototype_rcnn_sem_precision(prototype_id_features, prototype_id_labels, tb_dict)
+            # prototype_id_features, prototype_id_labels, num_updates = bank.get_computed_dict()
+            # if feature_bank_registry._banks['gt_aug_lbl_prototypes']._computed is not None:
+            #     prototype_id_features, prototype_id_labels, num_updates = feature_bank_registry._banks['gt_aug_lbl_prototypes']._computed[0], feature_bank_registry._banks['gt_aug_lbl_prototypes']._computed[1], feature_bank_registry._banks['gt_aug_lbl_prototypes']._computed[2]
+            #     tb_dict = self.module_list[7].evaluate_prototype_rcnn_sem_precision(prototype_id_features, prototype_id_labels, tb_dict)
             ret_dict = {
                 'loss': loss
             }
@@ -110,7 +110,7 @@ class PVRCNN(Detector3DTemplate):
         loss_point, tb_dict = self.point_head.get_loss(tb_dict)
         loss_rcnn, tb_dict = self.roi_head.get_loss(tb_dict)
         loss = loss_rpn + loss_point + loss_rcnn
-        # lbl_inst_cont_loss, supcon_classwise_loss = self._get_instance_contrastive_loss(tb_dict,batch_dict,batch_dict_ema)
+        # lbl_inst_cont_loss, supcon_classwise_loss = self._get_instance_contrastive_loss(tb_dict, batch_dict, batch_dict_ema)
         # if lbl_inst_cont_loss is not None:
         #     if dist.is_initialized():
         #         loss+= (lbl_inst_cont_loss/2)
@@ -122,21 +122,6 @@ class PVRCNN(Detector3DTemplate):
         #     tb_dict['instloss_all'] = supcon_classwise_loss['instloss_all']
 
         return loss, tb_dict, disp_dict
-    
-    def _get_proto_contrastive_loss(self, batch_dict, bank):
-        gt_boxes = batch_dict['gt_boxes']
-        B, N = gt_boxes.shape[:2]
-        sa_pl_pool_feats = self.roi_head.pool_features(batch_dict, use_gtboxes=True).view(B * N, -1, 1)
-        sa_pl_feats = self.roi_head.projected_layer(sa_pl_pool_feats).view(B * N, -1)
-        pl_labels = batch_dict['gt_boxes'][..., -1].view(-1).long() - 1
-        proto_cont_loss = bank.get_proto_contrastive_loss(sa_pl_feats, pl_labels)
-        if proto_cont_loss is None:
-            return
-        nonzero_mask = torch.logical_not(torch.eq(gt_boxes, 0).all(dim=-1))
-        if nonzero_mask.sum() == 0:
-            print(f"No pl instances predicted for strongly augmented frame(s) {batch_dict['frame_id']}")
-            return
-        return proto_cont_loss.view(B, N).mean()
 
     def _sort_instance_pairs(self, batch_dict, batch_dict_wa):
         
@@ -259,7 +244,7 @@ class PVRCNN(Detector3DTemplate):
                         'instloss_car': instloss_car.item() ,
                         'instloss_ped': instloss_ped.item() ,
                         'instloss_cyc': instloss_cyc.item() ,
-                        'instloss_all': instance_loss.mean().item(),
+                        'instloss_all': instloss_all.item()
                 }
 
         return instloss_all, supcon_classwise_loss

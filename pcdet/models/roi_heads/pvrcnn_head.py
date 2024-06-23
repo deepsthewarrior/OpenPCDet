@@ -52,9 +52,9 @@ class PVRCNNHead(RoIHeadTemplate):
             output_channels=self.box_coder.code_size * self.num_class,
             fc_list=self.model_cfg.REG_FC
         )
-        self.sem_cls_layers = self.make_fc_layers(
-            input_channels=pre_channel, output_channels=3, fc_list=self.model_cfg.CLS_FC
-        )
+        # self.sem_cls_layers = self.make_fc_layers(
+        #     input_channels=pre_channel, output_channels=3, fc_list=self.model_cfg.CLS_FC
+        # )
 
         self.print_loss_when_eval = False
 
@@ -191,17 +191,17 @@ class PVRCNNHead(RoIHeadTemplate):
             return shared_gts, projection_gts
         return pooled_features
 
-    def evaluate_prototype_rcnn_sem_precision(self, prototypes, prototype_labels, tb_dict):
-        tb_dict = {} if tb_dict is None else tb_dict
-        prototype_labels = prototype_labels - 1
-        prototypes = prototypes.unsqueeze(-1)
-        with torch.no_grad():
-            prototype_preds = self.sem_cls_layers(prototypes)
-        prototype_preds = prototype_preds.squeeze(-1)
-        precision = precision_score(prototype_labels.view(-1).cpu().numpy(), prototype_preds.max(dim=-1)[1].view(-1).cpu().numpy(), average=None, labels=range(3), zero_division=np.nan)
-        precision_tb_dict = {'rcnn_sem_cls_precision': _arr2dict(precision)}
-        tb_dict.update(precision_tb_dict)
-        return tb_dict
+    # def evaluate_prototype_rcnn_sem_precision(self, prototypes, prototype_labels, tb_dict):
+    #     tb_dict = {} if tb_dict is None else tb_dict
+    #     prototype_labels = prototype_labels - 1
+    #     prototypes = prototypes.unsqueeze(-1)
+    #     with torch.no_grad():
+    #         prototype_preds = self.sem_cls_layers(prototypes)
+    #     prototype_preds = prototype_preds.squeeze(-1)
+    #     precision = precision_score(prototype_labels.view(-1).cpu().numpy(), prototype_preds.max(dim=-1)[1].view(-1).cpu().numpy(), average=None, labels=range(3), zero_division=np.nan)
+    #     precision_tb_dict = {'rcnn_sem_cls_precision': _arr2dict(precision)}
+    #     tb_dict.update(precision_tb_dict)
+    #     return tb_dict
 
 
     def forward(self, batch_dict, test_only=False):
