@@ -272,11 +272,10 @@ class PVRCNNHead(RoIHeadTemplate):
             # Temporarily add infos to targets_dict for metrics
             targets_dict['batch_box_preds'] = batch_box_preds
 
-        if self.training or self.print_loss_when_eval:
+        if (self.training or self.print_loss_when_eval) and not test_only:
             targets_dict['rcnn_cls'] = rcnn_cls
             targets_dict['rcnn_reg'] = rcnn_reg
             # targets_dict['rcnn_sem_cls'] = rcnn_sem_cls.view(batch_dict['batch_size'], -1, 3)
-            targets_dict['gt_boxes'] = batch_dict['gt_boxes']
             self.forward_ret_dict = targets_dict
 
         return batch_dict

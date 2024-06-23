@@ -32,7 +32,7 @@ class FeatureBank(Metric):
         self.bank_size = kwargs.get('BANK_SIZE')  # e.g., num. of classes or labeled instances
         self.momentum = kwargs.get('MOMENTUM')
         self.direct_update = kwargs.get('DIRECT_UPDATE')
-        self.reset_state_interval = 37 #kwargs.get('RESET_STATE_INTERVAL')  # reset the state when N unique samples are seen
+        self.reset_state_interval = 1 #kwargs.get('RESET_STATE_INTERVAL')  # reset the state when N unique samples are seen
         self.num_points_thresh = kwargs.get('FILTER_MIN_POINTS_IN_GT', 0)
 
         self.initialized = False
