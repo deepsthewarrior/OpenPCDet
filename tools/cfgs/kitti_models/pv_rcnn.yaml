@@ -168,6 +168,8 @@ MODEL:
         CLS_FC: [256, 256]
         REG_FC: [256, 256]
         DP_RATIO: 0.3
+        ENABLE_LPCONT: False
+        ENABLE_SUPCON : False
 
         NMS_CONFIG:
             TRAIN:

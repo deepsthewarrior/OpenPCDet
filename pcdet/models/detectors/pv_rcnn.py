@@ -8,6 +8,7 @@ import numpy as np
 import torch.distributed as dist
 from pcdet.datasets.augmentor import augmentor_utils
 import copy
+from matplotlib import pyplot as plt
 
 class PVRCNN(Detector3DTemplate):
     def __init__(self, model_cfg, num_class, dataset):
@@ -86,7 +87,7 @@ class PVRCNN(Detector3DTemplate):
             batch_dict = cur_module(batch_dict)
         if self.training:
             loss, tb_dict, disp_dict = self.get_training_loss()
-            ##Now pass with second view to compute projected_features_augmented
+            #Now pass with second view to compute projected_features_augmented
             with torch.no_grad():
                 for cur_module in self.module_list:
                     try: # disallow saving view2 predictions @ anchor_head, point_head, roi_head
@@ -97,17 +98,44 @@ class PVRCNN(Detector3DTemplate):
                 for key in list(batch_dict_ema.keys()):
                     if key not in exclude_keys:
                         batch_dict_ema.pop(key)
-            lbl_inst_cont_loss, supcon_classwise_loss = self._get_instance_contrastive_loss(tb_dict, batch_dict, batch_dict_ema)
-            if lbl_inst_cont_loss is not None:
-                if dist.is_initialized():
-                    loss+= (lbl_inst_cont_loss/2)
-                else:
-                    loss += lbl_inst_cont_loss
-                tb_dict['instloss_car'] = supcon_classwise_loss['instloss_car']
-                tb_dict['instloss_ped'] = supcon_classwise_loss['instloss_ped']
-                tb_dict['instloss_cyc'] = supcon_classwise_loss['instloss_cyc']
-                tb_dict['instloss_all'] = supcon_classwise_loss['instloss_all']
+            if self.model_cfg.ROI_HEAD.get('ENABLE_SUPCON', False):
+                lbl_inst_cont_loss, supcon_classwise_loss = self._get_instance_contrastive_loss(tb_dict, batch_dict, batch_dict_ema)
+                if lbl_inst_cont_loss is not None:
+                    if dist.is_initialized():
+                        loss+= (lbl_inst_cont_loss/2)
+                    else:
+                        loss += lbl_inst_cont_loss
+                    tb_dict['instloss_car'] = supcon_classwise_loss['instloss_car']
+                    tb_dict['instloss_ped'] = supcon_classwise_loss['instloss_ped']
+                    tb_dict['instloss_cyc'] = supcon_classwise_loss['instloss_cyc']
+                    tb_dict['instloss_all'] = supcon_classwise_loss['instloss_all']
 
+            if self.model_cfg.ROI_HEAD.get('ENABLE_LPCONT', False):
+                lpcont_loss_pretrain, lpcont_matrix = self.get_lpcont_loss_pretrain(batch_dict, batch_dict_ema)
+                if lpcont_loss_pretrain is not None:
+                    if dist.is_initialized():
+                        loss+= (lpcont_loss_pretrain/2)
+                    else:
+                        loss += lpcont_loss_pretrain
+                    tb_dict['lpcont_loss_pretrain'] = lpcont_loss_pretrain
+                    sim_matrix, labels, pseudo_labels = lpcont_matrix
+                    sim_matrix = sim_matrix.detach().cpu().numpy()
+                    labels = labels.cpu().numpy()
+                    pseudo_labels = pseudo_labels.cpu().numpy()
+                    fig, ax = plt.subplots(figsize=(max(8, len(pseudo_labels) * 0.2), max(8, len(labels) * 0.2))) 
+                    ax.imshow(sim_matrix, interpolation='nearest', cmap=plt.cm.Blues) #(sim_matrix, interpolation='nearest', cmap=plt.cm.Blues,vmin=0, vmax=1)
+                    ax.set_title(" LPCont Similarity matrix")
+                    fig.colorbar(ax.imshow(sim_matrix, interpolation='nearest', cmap=plt.cm.Blues))
+                    x_tick_marks = np.arange(len(pseudo_labels))
+                    ax.set_xticks(x_tick_marks)
+                    ax.set_xticklabels(pseudo_labels, rotation=45)
+                    y_tick_marks = np.arange(len(labels))   
+                    ax.set_yticks(y_tick_marks)
+                    ax.set_yticklabels(labels)
+                    ax.set_ylabel('Labeled features')
+                    ax.set_xlabel('Pseudo features')
+                    fig.tight_layout()
+                    tb_dict['sim_matrix'] = fig
             # bank = feature_bank_registry.get('gt_aug_lbl_prototypes')
             # wa_gt_lbl_inputs = self._prep_wa_bank_inputs(batch_dict, range(len(batch_dict['gt_boxes'])), bank, batch_dict['cur_iteration'], bank.num_points_thresh)
             # bank.update(**wa_gt_lbl_inputs, iteration=batch_dict['cur_iteration'])
@@ -299,32 +327,47 @@ class PVRCNN(Detector3DTemplate):
             return gathered_tensor
 
 
-    # def get_lpcont_loss_pls(self, pseudo_positives, pseudo_positive_labels, topk_list, pseudo_conf_scores = None, CLIP_CE=False):
+    def get_lpcont_loss_pretrain(self, batch_dict, batch_dict_wa, CLIP_CE=False):
     #     """
     #     param pseudo_positives: Pseudo positive student features(Mk, Channel=256)
     #     param topk_labels: Labels for pseudo positive student features
     #     return:
     #     """
+        print("lpcont loss!")
+        contrastive_loss = torch.tensor(0.0, device = batch_dict['projected_features_gt'].device)
+        print(batch_dict.keys())
+        print(batch_dict_wa.keys())
+        aligned_wa_info, aligned_sa_info = self._sort_instance_pairs(batch_dict, batch_dict_wa)
+        gathered_sa_tensor = self.gather_tensors(aligned_sa_info)
+        gathered_sa_labels = gathered_sa_tensor[:,-1].long()
+        non_zero_mask = gathered_sa_labels != 0
+        gathered_sa_feats = gathered_sa_tensor[:,:-1][non_zero_mask]
+        gathered_labels_sa = gathered_sa_labels[non_zero_mask]
 
-    #     label_mask = sorted_labels.unsqueeze(1)== sorted_pls.unsqueeze(0)
-    #     positive_mask = label_mask
-    #     negative_mask = ~label_mask           
-    #     ## Product of conf_scores and pseudo_conf_scores as weights for negative_mask
-    #     # confidence_weights = sorted_conf_scores.unsqueeze(1) * sorted_pseudo_conf_scores.unsqueeze(0)
+        gathered_wa_tensor = self.gather_tensors(aligned_wa_info)
+        gathered_wa_labels = gathered_wa_tensor[:,-1].long()
+        non_zero_mask2 = gathered_wa_labels != 0
+        gathered_wa_feats = gathered_wa_tensor[:,:-1][non_zero_mask2]
+        gathered_labels_wa = gathered_wa_labels[non_zero_mask2]
+        label_mask = gathered_labels_sa.unsqueeze(1)== gathered_labels_wa.unsqueeze(0)
+        positive_mask = label_mask
+        negative_mask = ~label_mask           
+        ## Product of conf_scores and pseudo_conf_scores as weights for negative_mask
+        # confidence_weights = sorted_conf_scores.unsqueeze(1) * sorted_pseudo_conf_scores.unsqueeze(0)
 
-    #     norm_sorted_prototypes = F.normalize(sorted_prototypes, dim=-1)
-    #     norm_pseudo_topk_features = F.normalize(sorted_pseudo_positives, dim=-1)
-    #     sim_matrix = norm_sorted_prototypes @ norm_pseudo_topk_features.t()
-    #     temperature = nn.Parameter(torch.tensor(1.0),requires_grad=False)
-    #     exp_sim_pos_matrix = torch.exp(sim_matrix * positive_mask /temperature)
-    #     # sim_pos_matrix_row = exp_sim_pos_matrix.clone()
-    #     positive_sum = torch.log(exp_sim_pos_matrix).sum() # Sum of log(exp(positives))
-    #     # number_negative_pairs = negative_mask.sum(dim=0, keepdims=True) # Number of negative pairs for each positive
-    #     negative_sum = (torch.exp(sim_matrix) * negative_mask).sum(dim=0, keepdims=True) #/((unique_labels.size(0)-1) * counts.min())
-    #     pairwise_negatives_sum =  torch.log(negative_sum).sum()
-    #     unscaled_contrastive_loss = ((positive_sum - pairwise_negatives_sum)) 
-    #     contrastive_loss = contrastive_loss +  -1 * (unscaled_contrastive_loss / (sorted_prototypes.size(0) * norm_pseudo_topk_features.size(0) * 3))            
-        
-    #     return contrastive_loss, (sim_matrix, sorted_labels, sorted_pls)
+        norm_sorted_prototypes = F.normalize(gathered_sa_feats, dim=-1)
+        norm_pseudo_topk_features = F.normalize(gathered_wa_feats, dim=-1)
+        sim_matrix = norm_sorted_prototypes @ norm_pseudo_topk_features.t()
+        temperature = 1.0
+        exp_sim_pos_matrix = torch.exp(sim_matrix * positive_mask /temperature)
+        # sim_pos_matrix_row = exp_sim_pos_matrix.clone()
+        positive_sum = torch.log(exp_sim_pos_matrix).sum() # Sum of log(exp(positives))
+        # number_negative_pairs = negative_mask.sum(dim=0, keepdims=True) # Number of negative pairs for each positive
+        negative_sum = (torch.exp(sim_matrix) * negative_mask).sum(dim=0, keepdims=True) #/((unique_labels.size(0)-1) * counts.min())
+        pairwise_negatives_sum =  torch.log(negative_sum).sum()
+        unscaled_contrastive_loss = ((positive_sum - pairwise_negatives_sum)) 
+        contrastive_loss = contrastive_loss +  -1 * (unscaled_contrastive_loss / (norm_sorted_prototypes.size(0) * norm_pseudo_topk_features.size(0) * 3))            
+        contrastive_loss = contrastive_loss * 0.2
+        return contrastive_loss, (sim_matrix, gathered_labels_sa, gathered_labels_wa)
 
 

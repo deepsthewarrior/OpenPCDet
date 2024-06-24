@@ -44,8 +44,9 @@ class KittiDataset(DatasetTemplate):
 
         if self.training:
             temp = []
-            for i in self.sample_index_list:
+            for idx, i in enumerate(self.sample_index_list):
                 temp.append(self.kitti_infos[int(i)])
+                # temp[idx]['frame_id'] = temp[idx]['point_cloud']['lidar_idx']
             self.kitti_infos = temp
             assert len(self.kitti_infos) == len(self.sample_id_list)
 
@@ -63,6 +64,8 @@ class KittiDataset(DatasetTemplate):
                 continue
             with open(info_path, 'rb') as f:
                 infos = pickle.load(f)
+                # for idx,i in enumerate(infos):
+                #     infos[idx]['frame_id'] = infos[idx]['point_cloud']['lidar_idx']
                 kitti_infos.extend(infos)
 
         self.kitti_infos.extend(kitti_infos)
@@ -378,6 +381,10 @@ class KittiDataset(DatasetTemplate):
         from .kitti_object_eval_python import eval as kitti_eval
 
         eval_det_annos = copy.deepcopy(det_annos)
+        # eval_gt_annos = []
+        # for idx, info in enumerate(self.kitti_infos):
+        #     info['frame_id'] = info['point_cloud']['lidar_idx']
+        #     eval_gt_annos.append(info['annos'])
         eval_gt_annos = [copy.deepcopy(info['annos']) for info in self.kitti_infos]
         ap_result_str, ap_dict = kitti_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names)
 

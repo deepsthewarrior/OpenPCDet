@@ -146,7 +146,8 @@ class DatasetTemplate(torch_data.Dataset):
         if data_dict.get('gt_boxes', None) is not None:
             selected = common_utils.keep_arrays_by_name(data_dict['gt_names'], self.class_names)
             data_dict['gt_boxes'] = data_dict['gt_boxes'][selected]
-            data_dict['gt_boxes_ema'] = data_dict['gt_boxes_ema'][selected]
+            if self.training:
+                data_dict['gt_boxes_ema'] = data_dict['gt_boxes_ema'][selected]
             data_dict['gt_names'] = data_dict['gt_names'][selected]
             data_dict['instance_idx'] = data_dict['instance_idx'][selected]
             gt_classes = np.array([self.class_names.index(n) + 1 for n in data_dict['gt_names']], dtype=np.int32)
